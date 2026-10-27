@@ -33,6 +33,10 @@ type Config struct {
 	DependencyTrackURL string
 	// DependencyTrackAPIKey authenticates to Dependency-Track (PATCHLINE_DT_API_KEY).
 	DependencyTrackAPIKey string
+	// DependencyTrackReconcileDelay is how long to wait after BOM_PROCESSED
+	// before reading a project's findings and resolving the ones that
+	// disappeared (PATCHLINE_DT_RECONCILE_DELAY).
+	DependencyTrackReconcileDelay time.Duration
 	// DependencyTrackUIURL is the browser URL of the Dependency-Track
 	// frontend, used for links in messages (PATCHLINE_DT_UI_URL).
 	DependencyTrackUIURL string
@@ -63,7 +67,8 @@ func Default() Config {
 		LogFormat:       "text",
 		ShutdownTimeout: 10 * time.Second,
 
-		NotifyMinSeverity: "medium",
+		NotifyMinSeverity:             "medium",
+		DependencyTrackReconcileDelay: 2 * time.Minute,
 	}
 }
 
@@ -108,6 +113,13 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	cfg.DependencyTrackURL, _ = lookup("PATCHLINE_DT_URL")
 	cfg.DependencyTrackAPIKey, _ = lookup("PATCHLINE_DT_API_KEY")
 	cfg.DependencyTrackUIURL, _ = lookup("PATCHLINE_DT_UI_URL")
+	if v, ok := lookup("PATCHLINE_DT_RECONCILE_DELAY"); ok && v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return Config{}, fmt.Errorf("PATCHLINE_DT_RECONCILE_DELAY: want a positive duration such as 2m, got %q", v)
+		}
+		cfg.DependencyTrackReconcileDelay = d
+	}
 	cfg.SlackBotToken, _ = lookup("PATCHLINE_SLACK_BOT_TOKEN")
 	cfg.SlackDefaultChannel, _ = lookup("PATCHLINE_SLACK_DEFAULT_CHANNEL")
 	if v, ok := lookup("PATCHLINE_NOTIFY_MIN_SEVERITY"); ok && v != "" {

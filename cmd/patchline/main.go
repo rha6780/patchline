@@ -80,7 +80,7 @@ func run() error {
 
 	st := store.New(db)
 
-	proc := &intake.Processor{Store: st, Inventory: inv, Logger: logger}
+	proc := &intake.Processor{Store: st, Inventory: inv, Logger: logger, ReconcileDelay: cfg.DependencyTrackReconcileDelay}
 	if cfg.DependencyTrackEnabled() {
 		proc.DT = dependencytrack.NewClient(cfg.DependencyTrackURL, cfg.DependencyTrackAPIKey, nil)
 	} else {

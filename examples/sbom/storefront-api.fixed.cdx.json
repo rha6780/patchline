@@ -1,0 +1,49 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:8b1f7c9e-2d4a-4e6b-9c3f-5a7d1e2b4c6f",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "bom-ref": "storefront-api",
+      "name": "storefront-api",
+      "version": "main"
+    },
+    "properties": [
+      {
+        "name": "patchline:git:commit",
+        "value": "3f2a9c1e0b7d4a6f8e5c2b1a0d9e8f7c6b5a4d3e"
+      },
+      {
+        "name": "patchline:git:ref",
+        "value": "refs/heads/main"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.17.1",
+      "group": "org.apache.logging.log4j",
+      "name": "log4j-core",
+      "version": "2.17.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.17.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.4",
+      "group": "com.fasterxml.jackson.core",
+      "name": "jackson-databind",
+      "version": "2.15.4",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/lodash@4.17.21",
+      "name": "lodash",
+      "version": "4.17.21",
+      "purl": "pkg:npm/lodash@4.17.21"
+    }
+  ]
+}

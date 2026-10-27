@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
@@ -141,24 +142,74 @@ func TestNewVulnerableDependency(t *testing.T) {
 	}
 }
 
-func TestBOMProcessedFetchesFindings(t *testing.T) {
+// enqueueBOM stores a BOM_PROCESSED delivery under a unique key.
+func enqueueBOM(t *testing.T, st *store.Store, key string) {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("..", "source", "dependencytrack", "testdata", "bom_processed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.InsertInbox(context.Background(), SourceDependencyTrack, "BOM_PROCESSED", key, body); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// drain processes until nothing is due (reconciliations are separate items).
+func drain(t *testing.T, p *Processor) {
+	t.Helper()
+	for i := 0; i < 5; i++ {
+		n, err := p.ProcessPending(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n == 0 {
+			return
+		}
+	}
+}
+
+func TestBOMProcessedReconciles(t *testing.T) {
 	ctx := context.Background()
-	dt := &fakeDT{sightings: []dependencytrack.Sighting{{
+	express := dependencytrack.Sighting{
 		Component:     dependencytrack.Component{UUID: "c1", Name: "express", Version: "4.17.1", PURL: "pkg:npm/express@4.17.1"},
 		Vulnerability: dependencytrack.Vulnerability{UUID: "v1", VulnID: "CVE-2024-29041", Severity: "MEDIUM"},
-	}}}
+	}
+	dt := &fakeDT{sightings: []dependencytrack.Sighting{express}}
 	p, st := setup(t, dt)
-	enqueue(t, st, "bom_processed.json")
+	p.ReconcileDelay = time.Nanosecond
 
+	enqueueBOM(t, st, "bom-1")
 	if _, err := p.ProcessPending(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if dt.calls != 0 {
+		t.Fatal("findings must not be read before the reconcile delay")
+	}
+	drain(t, p)
 	if dt.calls != 1 {
 		t.Fatalf("DT calls = %d, want 1", dt.calls)
 	}
 	list, _ := st.ListFindings(ctx, store.FindingFilter{})
-	if len(list) != 1 || list[0].Service != "storefront" || list[0].ComponentRef != "pkg:npm/express@4.17.1" {
-		t.Fatalf("findings = %+v", list)
+	if len(list) != 1 || list[0].Service != "storefront" || list[0].State != "new" {
+		t.Fatalf("after first BOM: %+v", list)
+	}
+
+	// The fix lands: the next BOM no longer has the vulnerable component.
+	dt.sightings = nil
+	enqueueBOM(t, st, "bom-2")
+	drain(t, p)
+	list, _ = st.ListFindings(ctx, store.FindingFilter{})
+	if list[0].State != "resolved" || list[0].ResolvedAt == nil {
+		t.Fatalf("after fix: %+v", list[0])
+	}
+
+	// A later BOM brings it back: regression.
+	dt.sightings = []dependencytrack.Sighting{express}
+	enqueueBOM(t, st, "bom-3")
+	drain(t, p)
+	list, _ = st.ListFindings(ctx, store.FindingFilter{})
+	if len(list) != 1 || list[0].State != "reopened" {
+		t.Fatalf("after regression: %+v", list)
 	}
 }
 
@@ -166,24 +217,26 @@ func TestBOMProcessedWithoutDTIsSkipped(t *testing.T) {
 	ctx := context.Background()
 	p, st := setup(t, nil)
 	enqueue(t, st, "bom_processed.json")
-	if _, err := p.ProcessPending(ctx); err != nil {
-		t.Fatal(err)
-	}
+	drain(t, p)
 	if pending, _ := st.PendingInbox(ctx, 5, 10); len(pending) != 0 {
 		t.Fatal("skipped item should be marked done, not retried")
 	}
+	if list, _ := st.ListFindings(ctx, store.FindingFilter{}); len(list) != 0 {
+		t.Fatal("no findings expected")
+	}
 }
 
-func TestFailureIsRetriedLater(t *testing.T) {
+func TestReconcileFailureIsRetriedLater(t *testing.T) {
 	ctx := context.Background()
 	dt := &fakeDT{err: errors.New("dependency-track down")}
 	p, st := setup(t, dt)
-	enqueue(t, st, "bom_processed.json")
-
-	if _, err := p.ProcessPending(ctx); err != nil {
-		t.Fatal(err)
+	p.ReconcileDelay = time.Nanosecond
+	enqueueBOM(t, st, "bom-1")
+	drain(t, p)
+	if dt.calls != 1 {
+		t.Fatalf("DT calls = %d, want 1", dt.calls)
 	}
-	// Backoff keeps it out of the next immediate pass.
+	// Backoff keeps the failed reconciliation out of the next pass.
 	if n, _ := p.ProcessPending(ctx); n != 0 {
 		t.Fatalf("processed %d right after failure, want 0", n)
 	}

@@ -76,3 +76,18 @@ change is added to its thread.
 Findings appear once Dependency-Track has analyzed the BOM. If the mirror
 is still downloading on first start, upload the SBOM again later — Patchline
 de-duplicates.
+
+## 7. Fix it and watch it resolve
+
+`storefront-api.fixed.cdx.json` has the patched versions and a different commit:
+
+```sh
+curl -sS -X POST http://localhost:18081/api/v1/bom \
+  -H "X-Api-Key: $PATCHLINE_DT_API_KEY" \
+  -F autoCreate=true -F projectName=storefront-api -F projectVersion=main \
+  -F bom=@examples/sbom/storefront-api.fixed.cdx.json
+```
+
+About two minutes later (`PATCHLINE_DT_RECONCILE_DELAY`) the findings become
+*resolved*, the messages are updated, and the thread names commit `3f2a9c1e0b7d`.
+Upload the first SBOM again to see them *reopened*.

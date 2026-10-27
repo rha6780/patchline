@@ -35,6 +35,7 @@ func TestFromLookupOverrides(t *testing.T) {
 		"PATCHLINE_DT_URL":                "http://dt:8080",
 		"PATCHLINE_DT_API_KEY":            "key",
 		"PATCHLINE_DT_UI_URL":             "http://localhost:18082",
+		"PATCHLINE_DT_RECONCILE_DELAY":    "30s",
 		"PATCHLINE_SLACK_BOT_TOKEN":       "xoxb-1",
 		"PATCHLINE_SLACK_DEFAULT_CHANNEL": "#security",
 		"PATCHLINE_NOTIFY_MIN_SEVERITY":   "HIGH",
@@ -49,11 +50,12 @@ func TestFromLookupOverrides(t *testing.T) {
 		LogFormat:       "json",
 		ShutdownTimeout: 3 * time.Second,
 
-		InventoryPath:         "/etc/patchline/inventory",
-		WebhookToken:          "tok",
-		DependencyTrackURL:    "http://dt:8080",
-		DependencyTrackAPIKey: "key",
-		DependencyTrackUIURL:  "http://localhost:18082",
+		InventoryPath:                 "/etc/patchline/inventory",
+		WebhookToken:                  "tok",
+		DependencyTrackURL:            "http://dt:8080",
+		DependencyTrackAPIKey:         "key",
+		DependencyTrackUIURL:          "http://localhost:18082",
+		DependencyTrackReconcileDelay: 30 * time.Second,
 
 		SlackBotToken:       "xoxb-1",
 		SlackDefaultChannel: "#security",
@@ -70,6 +72,7 @@ func TestFromLookupInvalid(t *testing.T) {
 		{"PATCHLINE_LOG_FORMAT": "xml"},
 		{"PATCHLINE_SHUTDOWN_TIMEOUT": "soon"},
 		{"PATCHLINE_NOTIFY_MIN_SEVERITY": "urgent"},
+		{"PATCHLINE_DT_RECONCILE_DELAY": "-1m"},
 	} {
 		if _, err := FromLookup(lookupFrom(tc)); err == nil {
 			t.Errorf("%v: expected error", tc)

@@ -4,7 +4,7 @@
 
 [English](README.md) | 한국어
 
-> ⚠️ **상태: 초기 개발 중(M2).** Dependency-Track에서 Finding을 수집하고 Finding마다 Slack 메시지 하나로 상태를 갱신합니다. 해결 판정은 다음 단계입니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
+> ⚠️ **상태: 초기 개발 중(M3).** Dependency-Track에서 Finding을 수집하고, Finding마다 Slack 메시지 하나로 상태를 갱신하며, 새 BOM에서 사라지면 해결로 판정합니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
 
 Patchline은 [Dependency-Track](https://dependencytrack.org/) 위에서 조치 루프를 닫아 줍니다. Finding을 서비스·담당자와 연결하고, Renovate PR과 배포를 해결 근거로 추적하며, 수정이 배포될 때까지 Slack 메시지 하나를 계속 갱신합니다.
 
@@ -87,7 +87,7 @@ UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-T
 | ✅ **M0** 뼈대 | 모듈 구조, 설정, SQLite + 마이그레이션, `/healthz`, Compose 데모(DT + Patchline) |
 | ✅ **M1** 수집 | DT Webhook → Inbox → 인벤토리와 연결된 Finding 생성 |
 | ✅ **M2** 알림 | Slack 최초 알림, 메시지 갱신, 스레드 이력, Console Sink |
-| **M3** 해결 판정 | 재스캔 diff → 해결·재발, Commit SHA 기록 |
+| ✅ **M3** 해결 판정 | 재스캔 diff → 해결·재발, Commit SHA 기록 |
 | **M4** PR 연결 | Gitea Webhook, Renovate PR ↔ Finding, "이 PR로 고쳐지는가" 판정 |
 | **M5** UI | Overview, Finding 타임라인 |
 | 이후 | SLA 재알림, 예외 만료, `prod` 배포 근거, Gitea 이슈 Sink, OpenCVE 수집원 |
@@ -160,6 +160,7 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 | `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
 | `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키 |
 | `PATCHLINE_DT_UI_URL` | — | 메시지에 넣을 Dependency-Track UI 주소 |
+| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack Bot 토큰(`chat:write`, `chat:write.public`). 비우면 stdout으로 출력 |
 | `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | `slack_channel`이 없는 서비스와 미등록 프로젝트용 채널 |
 | `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | 알림을 보낼 최소 심각도 |
@@ -171,10 +172,28 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 
 1. Webhook 핸들러는 payload를 검증해 Inbox 테이블에 저장하고(내용 해시로 중복 제거) `202`를 반환합니다.
 2. 백그라운드 처리기가 Inbox를 처리하고, 실패하면 backoff(30초 → 30분, 최대 5회)로 재시도합니다.
-3. `NEW_VULNERABILITY`, `NEW_VULNERABLE_DEPENDENCY`는 Finding을 직접 담고 있고, `BOM_PROCESSED`를 받으면 해당 프로젝트의 현재 Finding을 Dependency-Track API로 조회합니다.
+3. `NEW_VULNERABILITY`, `NEW_VULNERABLE_DEPENDENCY`는 Finding을 직접 담고 있고, `BOM_PROCESSED`를 받으면 해당 프로젝트의 비교 작업을 예약합니다(아래 참고).
 4. Dependency-Track 프로젝트 **이름**은 인벤토리에서 서비스로 연결되고, **버전**은 환경(`main`, `prod`)이 됩니다. 인벤토리에 없는 프로젝트는 *미등록*으로 저장됩니다.
 5. Finding 단위는 서비스 × 환경 × 구성요소 × 취약점입니다. 대표 ID는 CVE를 우선하고, GHSA·OSV ID는 별칭으로 보관합니다.
 6. `PROJECT_AUDIT_CHANGE`(Dependency-Track의 분석 판정)를 받으면 Finding 상태가 바뀝니다. `IN_TRIAGE`·`EXPLOITABLE` → 조치중, `NOT_AFFECTED`·`FALSE_POSITIVE` → 해당 없음, Suppress → 위험 수용, `RESOLVED` → 검증대기(이후 재스캔으로 확인)입니다.
+
+### 해결 판정 방식
+
+Finding은 누군가 닫아서가 아니라 증거로 해결됩니다.
+
+1. `BOM_PROCESSED`를 받으면 BOM의 커밋과 ref를 기록하고, `PATCHLINE_DT_RECONCILE_DELAY` 뒤에 비교 작업을 예약합니다. (Dependency-Track 4.x는 새 구성요소 분석이 끝나기 전에 `BOM_PROCESSED`를 보내기 때문에, 바로 조회하면 결과가 불완전합니다.)
+2. 비교 작업은 Dependency-Track API로 프로젝트의 현재 Finding을 조회합니다. 그 프로젝트의 Finding 중 더 이상 보고되지 않는 것은 커밋, ref, BOM serial을 근거로 **해결** 처리합니다.
+3. 해결된 Finding이 다시 보고되면(이후 BOM 또는 `NEW_VULNERABILITY` 알림) **재발**로 바뀝니다.
+4. Dependency-Track 프로젝트 버전마다 따로 비교하므로 `main`과 `prod`는 각각 해결됩니다.
+5. 판정으로 닫힌 Finding(해당 없음, 위험 수용)은 그대로 둡니다.
+
+커밋을 남기려면 업로드하기 전에 BOM의 `metadata`에 아래 속성을 추가하세요.
+
+```sh
+jq --arg c "$GITHUB_SHA" --arg r "$GITHUB_REF" \
+  '.metadata.properties += [{"name":"patchline:git:commit","value":$c},{"name":"patchline:git:ref","value":$r}]' \
+  bom.json > bom.patchline.json
+```
 
 ### 알림 동작 방식
 

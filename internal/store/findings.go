@@ -28,6 +28,7 @@ type Finding struct {
 	State            string   `json:"state"`
 	DueAt            *string  `json:"due_at,omitempty"`
 	FirstSeenAt      string   `json:"first_seen_at"`
+	ResolvedAt       *string  `json:"resolved_at,omitempty"`
 	UpdatedAt        string   `json:"updated_at"`
 	DTProjectUUID    string   `json:"dt_project_uuid,omitempty"`
 }
@@ -53,14 +54,32 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 		}
 	}()
 
-	var prevSeverity string
+	var prevSeverity, prevState string
 	err = tx.QueryRowContext(ctx, `
-		SELECT id, severity FROM findings
+		SELECT id, severity, state FROM findings
 		WHERE service = ? AND environment = ? AND component_purl = ? AND vuln_id = ?`,
-		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id, &prevSeverity)
+		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id, &prevSeverity, &prevState)
 
 	switch {
 	case err == nil:
+		if finding.State(prevState) == finding.StateResolved {
+			// A resolved finding seen again is a regression.
+			ev, mErr := json.Marshal(map[string]any{"reason": ReasonSeenAgain, "observation": evidence})
+			if mErr != nil {
+				err = mErr
+				return 0, false, err
+			}
+			if _, err = tx.ExecContext(ctx,
+				`UPDATE findings SET state = ?, resolved_at = NULL WHERE id = ?`, finding.StateReopened, id); err != nil {
+				return 0, false, err
+			}
+			if _, err = tx.ExecContext(ctx, `
+				INSERT INTO finding_events (finding_id, kind, from_state, to_state, evidence, occurred_at)
+				VALUES (?, ?, ?, ?, ?, ?)`,
+				id, finding.EventStateChanged, finding.StateResolved, finding.StateReopened, string(ev), now); err != nil {
+				return 0, false, err
+			}
+		}
 		if prevSeverity != obs.Severity {
 			ev, mErr := json.Marshal(map[string]any{"from": prevSeverity, "to": obs.Severity, "observation": evidence})
 			if mErr != nil {
@@ -202,6 +221,82 @@ func (s *Store) ApplyState(ctx context.Context, key DTKey, to finding.State, evi
 	return changed, nil
 }
 
+// Reasons recorded in state_changed evidence.
+const (
+	ReasonSeenAgain          = "seen_again"
+	ReasonAbsentFromSnapshot = "absent_from_latest_bom"
+)
+
+// ResolveMissing resolves the findings of a Dependency-Track project that
+// are not in keep (the ids present in the project's latest findings), when
+// the lifecycle allows it. Closed findings (not affected, risk accepted)
+// are left alone. It returns the ids it resolved.
+func (s *Store) ResolveMissing(ctx context.Context, dtProjectUUID string, keep []int64, evidence map[string]any) (resolved []int64, err error) {
+	ev, err := json.Marshal(map[string]any{"reason": ReasonAbsentFromSnapshot, "snapshot": evidence})
+	if err != nil {
+		return nil, err
+	}
+	keepSet := make(map[int64]bool, len(keep))
+	for _, id := range keep {
+		keepSet[id] = true
+	}
+	now := formatTime(s.now())
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, state FROM findings WHERE dt_project_uuid = ?`, dtProjectUUID)
+	if err != nil {
+		return nil, err
+	}
+	type row struct {
+		id    int64
+		state finding.State
+	}
+	var candidates []row
+	for rows.Next() {
+		var r row
+		if err = rows.Scan(&r.id, &r.state); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if !keepSet[r.id] && finding.CanTransition(r.state, finding.StateResolved) {
+			candidates = append(candidates, r)
+		}
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, r := range candidates {
+		if _, err = tx.ExecContext(ctx,
+			`UPDATE findings SET state = ?, resolved_at = ?, updated_at = ? WHERE id = ?`,
+			finding.StateResolved, now, now, r.id); err != nil {
+			return nil, err
+		}
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO finding_events (finding_id, kind, from_state, to_state, evidence, occurred_at)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			r.id, finding.EventStateChanged, r.state, finding.StateResolved, string(ev), now); err != nil {
+			return nil, err
+		}
+		resolved = append(resolved, r.id)
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return resolved, nil
+}
+
 // FindingFilter narrows ListFindings. Empty fields match everything.
 type FindingFilter struct {
 	Service     string
@@ -253,19 +348,20 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 
 const findingColumns = `SELECT id, service, registered, repository, environment, component_purl,
 	component_name, component_version, vuln_id, aliases, severity, title,
-	state, due_at, first_seen_at, updated_at, dt_project_uuid`
+	state, due_at, first_seen_at, resolved_at, updated_at, dt_project_uuid`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanFinding(sc scanner) (Finding, error) {
 	var (
-		r       Finding
-		aliases string
-		due     sql.NullString
+		r        Finding
+		aliases  string
+		due      sql.NullString
+		resolved sql.NullString
 	)
 	if err := sc.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
 		&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
-		&r.State, &due, &r.FirstSeenAt, &r.UpdatedAt, &r.DTProjectUUID); err != nil {
+		&r.State, &due, &r.FirstSeenAt, &resolved, &r.UpdatedAt, &r.DTProjectUUID); err != nil {
 		return Finding{}, err
 	}
 	if err := json.Unmarshal([]byte(aliases), &r.Aliases); err != nil {
@@ -273,6 +369,9 @@ func scanFinding(sc scanner) (Finding, error) {
 	}
 	if due.Valid {
 		r.DueAt = &due.String
+	}
+	if resolved.Valid {
+		r.ResolvedAt = &resolved.String
 	}
 	return r, nil
 }
@@ -331,6 +430,10 @@ type SourceProject struct {
 	Version    string
 	Service    string
 	Registered bool
+	// Evidence from the latest BOM; empty values keep what is stored.
+	Commit    string
+	Ref       string
+	BOMSerial string
 }
 
 // TouchSourceProject records that a source project was seen, and when bom
@@ -342,14 +445,19 @@ func (s *Store) TouchSourceProject(ctx context.Context, p SourceProject, bom boo
 		bomAt = sql.NullString{String: now, Valid: true}
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO source_projects (source, project_id, name, version, service, registered, last_bom_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO source_projects (source, project_id, name, version, service, registered, last_bom_at,
+		                             last_commit, last_ref, last_bom_serial, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (source, project_id) DO UPDATE SET
 			name = excluded.name, version = excluded.version, service = excluded.service,
 			registered = excluded.registered,
 			last_bom_at = COALESCE(excluded.last_bom_at, source_projects.last_bom_at),
+			last_commit = CASE WHEN excluded.last_commit != '' THEN excluded.last_commit ELSE source_projects.last_commit END,
+			last_ref = CASE WHEN excluded.last_ref != '' THEN excluded.last_ref ELSE source_projects.last_ref END,
+			last_bom_serial = CASE WHEN excluded.last_bom_serial != '' THEN excluded.last_bom_serial ELSE source_projects.last_bom_serial END,
 			updated_at = excluded.updated_at`,
-		p.Source, p.ProjectID, p.Name, p.Version, p.Service, p.Registered, bomAt, now)
+		p.Source, p.ProjectID, p.Name, p.Version, p.Service, p.Registered, bomAt,
+		p.Commit, p.Ref, p.BOMSerial, now)
 	return err
 }
 

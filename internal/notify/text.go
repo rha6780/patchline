@@ -89,6 +89,14 @@ func EventText(e store.FindingEvent) string {
 			to = StateLabel(*e.ToState)
 		}
 		text := fmt.Sprintf("State: %s → %s", from, to)
+		switch str("reason") {
+		case "absent_from_latest_bom":
+			snap, _ := ev["snapshot"].(map[string]any)
+			return text + " — no longer reported for the latest BOM" + commitSuffix(snap)
+		case "seen_again":
+			obs, _ := ev["observation"].(map[string]any)
+			return text + " — reported again after it was resolved" + commitSuffix(obs)
+		}
 		if a := str("analysis_state"); a != "" {
 			text += fmt.Sprintf(" (Dependency-Track analysis: %s", a)
 			if s, _ := ev["suppressed"].(bool); s {
@@ -103,4 +111,24 @@ func EventText(e store.FindingEvent) string {
 		return ""
 	}
 	return "Event: " + e.Kind
+}
+
+// commitSuffix renders " (commit `abc` on `ref`)" from evidence, or "".
+func commitSuffix(m map[string]any) string {
+	c, _ := m["commit"].(string)
+	if c == "" {
+		return ""
+	}
+	out := " (commit `" + shortSHA(c) + "`"
+	if r, _ := m["ref"].(string); r != "" {
+		out += " on `" + r + "`"
+	}
+	return out + ")"
+}
+
+func shortSHA(s string) string {
+	if len(s) > 12 {
+		return s[:12]
+	}
+	return s
 }

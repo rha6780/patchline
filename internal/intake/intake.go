@@ -7,6 +7,7 @@ package intake
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -25,6 +26,10 @@ const SourceDependencyTrack = "dependencytrack"
 // DefaultEnvironment is used when a Dependency-Track project has no version.
 const DefaultEnvironment = "default"
 
+// EventReconcile is the inbox event type of a scheduled reconciliation: read
+// a project's current findings and resolve the ones that disappeared.
+const EventReconcile = "patchline.reconcile"
+
 // FindingsFetcher reads the current findings of a project.
 type FindingsFetcher interface {
 	ProjectSightings(ctx context.Context, p dependencytrack.Project) ([]dependencytrack.Sighting, error)
@@ -38,6 +43,8 @@ type Store interface {
 	UpsertFinding(ctx context.Context, obs finding.Observation, evidence map[string]any) (int64, bool, error)
 	TouchSourceProject(ctx context.Context, p store.SourceProject, bom bool) error
 	ApplyState(ctx context.Context, key store.DTKey, to finding.State, evidence map[string]any) (int, error)
+	InsertInboxAt(ctx context.Context, source, eventType, dedupKey string, payload []byte, notBefore time.Time) (int64, bool, error)
+	ResolveMissing(ctx context.Context, dtProjectUUID string, keep []int64, evidence map[string]any) ([]int64, error)
 }
 
 // Processor drains the webhook inbox.
@@ -51,6 +58,13 @@ type Processor struct {
 	// OnChange is called after an item created or changed findings
 	// (for example to wake the notifier). Optional.
 	OnChange func()
+
+	// ReconcileDelay is how long to wait after BOM_PROCESSED before reading
+	// the project's findings, so Dependency-Track can finish analyzing the
+	// new components (default 2m).
+	ReconcileDelay time.Duration
+	// Now returns the current time (default time.Now).
+	Now func() time.Time
 
 	PollInterval time.Duration // default 5s
 	MaxAttempts  int           // default 5
@@ -80,6 +94,12 @@ func (p *Processor) defaults() {
 	}
 	if p.OnChange == nil {
 		p.OnChange = func() {}
+	}
+	if p.ReconcileDelay == 0 {
+		p.ReconcileDelay = 2 * time.Minute
+	}
+	if p.Now == nil {
+		p.Now = time.Now
 	}
 	p.wake = make(chan struct{}, 1)
 }
@@ -169,6 +189,9 @@ func (p *Processor) handle(ctx context.Context, it store.InboxItem) (note string
 }
 
 func (p *Processor) handleDependencyTrack(ctx context.Context, it store.InboxItem) (string, error) {
+	if it.EventType == EventReconcile {
+		return p.reconcile(ctx, it)
+	}
 	n, err := dependencytrack.ParseNotification(it.Payload)
 	if err != nil {
 		return "", err
@@ -180,7 +203,7 @@ func (p *Processor) handleDependencyTrack(ctx context.Context, it store.InboxIte
 		if err != nil {
 			return "", err
 		}
-		created, err := p.record(ctx, it, n.Group, sightings, false)
+		_, created, err := p.record(ctx, it, n.Group, sightings, false, nil)
 		if err != nil {
 			return "", err
 		}
@@ -194,25 +217,26 @@ func (p *Processor) handleDependencyTrack(ctx context.Context, it store.InboxIte
 		if err != nil {
 			return "", err
 		}
-		if err := p.touch(ctx, project, true); err != nil {
+		bom := n.SubjectBOM()
+		if err := p.touch(ctx, project, &bom); err != nil {
 			return "", err
 		}
 		if p.DT == nil {
-			p.Logger.Warn("BOM_PROCESSED received but PATCHLINE_DT_URL is not set; findings were not fetched",
+			p.Logger.Warn("BOM_PROCESSED received but the Dependency-Track API is not configured; findings were not reconciled",
 				"project", project.Name, "version", project.Version)
 			return "skipped: Dependency-Track API not configured", nil
 		}
-		sightings, err := p.DT.ProjectSightings(ctx, project)
+		payload, err := json.Marshal(reconcileRequest{Project: project, BOM: bom, InboxID: it.ID, NotifiedAt: n.Timestamp})
 		if err != nil {
 			return "", err
 		}
-		created, err := p.record(ctx, it, n.Group, sightings, true)
-		if err != nil {
+		due := p.Now().Add(p.ReconcileDelay)
+		if _, _, err := p.Store.InsertInboxAt(ctx, SourceDependencyTrack, EventReconcile,
+			fmt.Sprintf("reconcile:%d", it.ID), payload, due); err != nil {
 			return "", err
 		}
-		p.OnChange()
-		p.Logger.Info("dependency-track BOM processed", "id", it.ID, "project", project.Name,
-			"version", project.Version, "findings", len(sightings), "new_findings", created)
+		p.Logger.Info("dependency-track BOM processed; reconciliation scheduled", "id", it.ID,
+			"project", project.Name, "version", project.Version, "commit", bom.Commit, "due", due.Format(time.RFC3339))
 		return "", nil
 
 	case dependencytrack.GroupProjectAuditChange:
@@ -256,43 +280,108 @@ func (p *Processor) handleAuditChange(ctx context.Context, it store.InboxItem, n
 	return "", nil
 }
 
-// record upserts each sighting and returns how many new findings it created.
-func (p *Processor) record(ctx context.Context, it store.InboxItem, group string, sightings []dependencytrack.Sighting, touched bool) (int, error) {
+// record upserts each sighting. It returns the ids of the findings it saw
+// and how many were new.
+func (p *Processor) record(ctx context.Context, it store.InboxItem, group string, sightings []dependencytrack.Sighting, touched bool, extra map[string]any) (ids []int64, created int, err error) {
 	seen := map[string]bool{}
-	created := 0
 	for _, s := range sightings {
 		if !touched && !seen[s.Project.UUID] {
-			if err := p.touch(ctx, s.Project, false); err != nil {
-				return created, err
+			if err := p.touch(ctx, s.Project, nil); err != nil {
+				return ids, created, err
 			}
 			seen[s.Project.UUID] = true
 		}
 		obs := p.observe(s)
-		_, isNew, err := p.Store.UpsertFinding(ctx, obs, map[string]any{
+		evidence := map[string]any{
 			"source":             SourceDependencyTrack,
 			"notification_group": group,
 			"inbox_id":           it.ID,
 			"dt_project":         s.Project,
 			"dt_vuln_id":         s.Vulnerability.VulnID,
-		})
-		if err != nil {
-			return created, fmt.Errorf("upsert %s %s: %w", obs.ComponentRef, obs.VulnID, err)
 		}
+		for k, v := range extra {
+			evidence[k] = v
+		}
+		id, isNew, err := p.Store.UpsertFinding(ctx, obs, evidence)
+		if err != nil {
+			return ids, created, fmt.Errorf("upsert %s %s: %w", obs.ComponentRef, obs.VulnID, err)
+		}
+		ids = append(ids, id)
 		if isNew {
 			created++
 			p.Logger.Info("new finding", "service", obs.Service, "environment", obs.Environment,
 				"component", obs.ComponentRef, "vuln", obs.VulnID, "severity", obs.Severity, "registered", obs.Registered)
 		}
 	}
-	return created, nil
+	return ids, created, nil
 }
 
-func (p *Processor) touch(ctx context.Context, project dependencytrack.Project, bom bool) error {
+// reconcileRequest is the payload of a scheduled reconciliation.
+type reconcileRequest struct {
+	Project    dependencytrack.Project `json:"project"`
+	BOM        dependencytrack.BOMInfo `json:"bom"`
+	InboxID    int64                   `json:"bom_processed_inbox_id"`
+	NotifiedAt string                  `json:"notified_at,omitempty"`
+}
+
+// reconcile reads the project's current findings, records them, and
+// resolves the project's findings that are no longer reported.
+func (p *Processor) reconcile(ctx context.Context, it store.InboxItem) (string, error) {
+	var req reconcileRequest
+	if err := json.Unmarshal(it.Payload, &req); err != nil {
+		return "", fmt.Errorf("decode reconcile request: %w", err)
+	}
+	if p.DT == nil {
+		return "skipped: Dependency-Track API not configured", nil
+	}
+	sightings, err := p.DT.ProjectSightings(ctx, req.Project)
+	if err != nil {
+		return "", err
+	}
+	evidence := map[string]any{
+		"source":                 SourceDependencyTrack,
+		"dt_project":             req.Project,
+		"bom_processed_inbox_id": req.InboxID,
+		"bom_processed_at":       req.NotifiedAt,
+	}
+	bomEvidence := map[string]any{}
+	if req.BOM.Commit != "" {
+		bomEvidence["commit"] = req.BOM.Commit
+	}
+	if req.BOM.Ref != "" {
+		bomEvidence["ref"] = req.BOM.Ref
+	}
+	if req.BOM.Serial != "" {
+		bomEvidence["bom_serial"] = req.BOM.Serial
+	}
+	for k, v := range bomEvidence {
+		evidence[k] = v
+	}
+	ids, created, err := p.record(ctx, it, dependencytrack.GroupBOMProcessed, sightings, true, bomEvidence)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := p.Store.ResolveMissing(ctx, req.Project.UUID, ids, evidence)
+	if err != nil {
+		return "", err
+	}
+	p.OnChange()
+	p.Logger.Info("dependency-track project reconciled", "id", it.ID, "project", req.Project.Name,
+		"version", req.Project.Version, "findings", len(sightings), "new_findings", created,
+		"resolved", len(resolved), "commit", req.BOM.Commit)
+	return "", nil
+}
+
+func (p *Processor) touch(ctx context.Context, project dependencytrack.Project, bom *dependencytrack.BOMInfo) error {
 	service, _, registered := p.resolve(project)
-	return p.Store.TouchSourceProject(ctx, store.SourceProject{
+	sp := store.SourceProject{
 		Source: SourceDependencyTrack, ProjectID: project.UUID, Name: project.Name,
 		Version: project.Version, Service: service, Registered: registered,
-	}, bom)
+	}
+	if bom != nil {
+		sp.Commit, sp.Ref, sp.BOMSerial = bom.Commit, bom.Ref, bom.Serial
+	}
+	return p.Store.TouchSourceProject(ctx, sp, bom != nil)
 }
 
 func (p *Processor) resolve(project dependencytrack.Project) (service, repo string, registered bool) {

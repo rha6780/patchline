@@ -16,6 +16,28 @@ type InboxItem struct {
 	Attempts  int
 }
 
+// InsertInboxAt stores an internal work item that becomes due at notBefore
+// (for example a delayed reconciliation). De-duplication works as in
+// InsertInbox.
+func (s *Store) InsertInboxAt(ctx context.Context, source, eventType, dedupKey string, payload []byte, notBefore time.Time) (int64, bool, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO webhook_inbox (source, event_type, dedup_key, payload, received_at, next_attempt_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (source, dedup_key) DO NOTHING
+		RETURNING id`,
+		source, eventType, dedupKey, payload, formatTime(s.now()), formatTime(notBefore)).Scan(&id)
+	if err == nil {
+		return id, true, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, err
+	}
+	err = s.db.QueryRowContext(ctx,
+		`SELECT id FROM webhook_inbox WHERE source = ? AND dedup_key = ?`, source, dedupKey).Scan(&id)
+	return id, false, err
+}
+
 // InsertInbox stores a delivery. A delivery with the same (source,
 // dedupKey) is stored once; later copies return the existing id with
 // inserted=false.

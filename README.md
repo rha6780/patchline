@@ -4,7 +4,7 @@
 
 English | [한국어](README.ko.md)
 
-> ⚠️ **Status: early development (M2).** Findings are collected from Dependency-Track and kept up to date in one Slack message each; resolution tracking is next. APIs, config and data models will change.
+> ⚠️ **Status: early development (M3).** Findings are collected from Dependency-Track, kept up to date in one Slack message each, and resolved when a new BOM no longer contains them. APIs, config and data models will change.
 
 Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and deployments as evidence, and keeps a single Slack message up to date until the fix ships.
 
@@ -87,7 +87,7 @@ The UI is read-mostly. Configuration stays in Git, deep analysis stays in Depend
 | ✅ **M0** Skeleton | Module layout, config, SQLite + migrations, `/healthz`, Compose demo (DT + Patchline) |
 | ✅ **M1** Intake | DT webhooks → inbox → findings joined with the inventory |
 | ✅ **M2** Notify | Slack first message, in-place updates, thread history; console sink |
-| **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
+| ✅ **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
 | **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
 | **M5** UI | Overview and finding timeline |
 | Later | SLA reminders, exception expiry, `prod` deploy evidence, Gitea issue sink, OpenCVE source |
@@ -160,6 +160,7 @@ Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change 
 | `PATCHLINE_DT_URL` | — | Dependency-Track API server URL |
 | `PATCHLINE_DT_API_KEY` | — | API key with `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` |
 | `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages |
+| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | Wait after `BOM_PROCESSED` before comparing findings |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Unset = print to stdout |
 | `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | Channel for services without `slack_channel` and unregistered projects |
 | `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | Lowest severity that is posted |
@@ -171,10 +172,28 @@ Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change 
 
 1. The webhook handler validates the payload, stores it in an inbox table (de-duplicated by content hash) and returns `202`.
 2. A background processor handles inbox entries, retrying failures with backoff (30s → 30m, 5 attempts).
-3. `NEW_VULNERABILITY` and `NEW_VULNERABLE_DEPENDENCY` carry the findings directly; `BOM_PROCESSED` makes Patchline read the project's current findings from the Dependency-Track API.
+3. `NEW_VULNERABILITY` and `NEW_VULNERABLE_DEPENDENCY` carry the findings directly; `BOM_PROCESSED` schedules a reconciliation of the project (see below).
 4. Each Dependency-Track project **name** is resolved to a service through the inventory, and its **version** becomes the environment (`main`, `prod`). Projects not in the inventory are kept as *unregistered*.
 5. A finding is one service × environment × component × vulnerability. CVE ids are preferred over GHSA/OSV ids as the canonical id; the others are kept as aliases.
 6. `PROJECT_AUDIT_CHANGE` (an analysis decision in Dependency-Track) moves the finding's state: `IN_TRIAGE`/`EXPLOITABLE` → in progress, `NOT_AFFECTED`/`FALSE_POSITIVE` → not affected, suppressed → risk accepted, `RESOLVED` → awaiting verification (a rescan confirms it later).
+
+### How resolution works
+
+A finding is resolved by evidence, not by someone closing it.
+
+1. On `BOM_PROCESSED`, Patchline records the BOM's commit and ref and schedules a reconciliation after `PATCHLINE_DT_RECONCILE_DELAY`. (Dependency-Track 4.x sends `BOM_PROCESSED` before it has finished analyzing new components, so reading findings right away would be incomplete.)
+2. The reconciliation reads the project's current findings from the Dependency-Track API. Findings of that project that are no longer reported become **resolved**, with the commit, ref and BOM serial as evidence.
+3. A resolved finding that is reported again (by a later BOM or a `NEW_VULNERABILITY` notification) becomes **reopened**.
+4. Each Dependency-Track project version is reconciled separately, so `main` and `prod` resolve independently.
+5. Findings closed by a decision (not affected, risk accepted) are left as they are.
+
+To attach the commit, add these properties to the BOM's `metadata` before uploading it:
+
+```sh
+jq --arg c "$GITHUB_SHA" --arg r "$GITHUB_REF" \
+  '.metadata.properties += [{"name":"patchline:git:commit","value":$c},{"name":"patchline:git:ref","value":$r}]' \
+  bom.json > bom.patchline.json
+```
 
 ### How notifications work
 
