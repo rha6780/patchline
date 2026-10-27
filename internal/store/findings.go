@@ -306,18 +306,26 @@ type FindingFilter struct {
 	Service     string
 	Environment string
 	State       string
-	Limit       int
+	Severity    string
+	// Open limits the result to findings that still need action.
+	Open  bool
+	Limit int
 }
 
 // ListFindings returns findings, most severe and most recent first.
 func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, error) {
 	var where []string
 	var args []any
-	for col, v := range map[string]string{"service": f.Service, "environment": f.Environment, "state": f.State} {
-		if v != "" {
-			where = append(where, col+" = ?")
-			args = append(args, v)
+	for _, c := range []struct{ col, v string }{
+		{"service", f.Service}, {"environment", f.Environment}, {"state", f.State}, {"severity", f.Severity},
+	} {
+		if c.v != "" {
+			where = append(where, c.col+" = ?")
+			args = append(args, c.v)
 		}
+	}
+	if f.Open {
+		where = append(where, "state NOT IN ('resolved', 'not_affected', 'risk_accepted')")
 	}
 	q := findingColumns + ` FROM findings`
 	if len(where) > 0 {
@@ -328,8 +336,11 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 	           WHEN 'low' THEN 3 WHEN 'info' THEN 4 ELSE 5 END,
 	         first_seen_at DESC, id DESC`
 	limit := f.Limit
-	if limit <= 0 || limit > 1000 {
+	switch {
+	case limit <= 0:
 		limit = 200
+	case limit > 10000:
+		limit = 10000
 	}
 	q += fmt.Sprintf(" LIMIT %d", limit)
 

@@ -1,0 +1,38 @@
+{{define "content"}}
+<h1>Findings</h1>
+<form class="filters" method="get" action="/findings">
+  <label>Service <input name="service" value="{{.Filter.Service}}" placeholder="any"></label>
+  <label>Environment <input name="environment" value="{{.Filter.Environment}}" placeholder="any"></label>
+  <label>Severity
+    <select name="severity"><option value="">any</option>
+      {{range .Severities}}<option value="{{.}}" {{if eq . $.Filter.Severity}}selected{{end}}>{{.}}</option>{{end}}
+    </select></label>
+  <label>State
+    <select name="state"><option value="">any</option>
+      {{range .States}}<option value="{{.}}" {{if eq (print .) $.Filter.State}}selected{{end}}>{{stateLabel (print .)}}</option>{{end}}
+    </select></label>
+  <label class="check"><input type="checkbox" name="open" value="1" {{if .Filter.Open}}checked{{end}}> open only</label>
+  <button type="submit">Filter</button>
+  <a href="/findings">Reset</a>
+</form>
+{{if .Findings}}
+<div class="scroll">
+<table>
+  <thead><tr><th>Severity</th><th>Vulnerability</th><th>Component</th><th>Service / env</th><th>State</th><th>First seen</th></tr></thead>
+  <tbody>
+  {{range .Findings}}
+  <tr>
+    <td><span class="pill {{sevClass .Severity}}">{{.Severity}}</span></td>
+    <td><a href="/findings/{{.ID}}">{{.VulnID}}</a>{{if .Aliases}}<div class="meta">{{join .Aliases ", "}}</div>{{end}}</td>
+    <td><code>{{component .}}</code></td>
+    <td><a href="/services/{{pathEscape .Service}}">{{.Service}}</a> / {{.Environment}}{{if not .Registered}} <span class="tag warn">unregistered</span>{{end}}</td>
+    <td><span class="state {{stateClass .State}}">{{stateLabel .State}}</span></td>
+    <td class="nowrap">{{ts .FirstSeenAt}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+<p class="muted">{{len .Findings}} finding(s){{if eq (len .Findings) 500}}, showing the first 500{{end}}.</p>
+{{else}}<p class="empty">No findings match.</p>{{end}}
+{{end}}

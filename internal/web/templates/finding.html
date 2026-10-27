@@ -1,0 +1,45 @@
+{{define "content"}}
+{{$f := .F}}
+<p class="crumbs"><a href="/findings?open=1">Findings</a> / <a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / #{{$f.ID}}</p>
+<h1><span class="pill big {{sevClass $f.Severity}}">{{$f.Severity}}</span> {{$f.VulnID}}</h1>
+{{if $f.Title}}<p class="lead">{{$f.Title}}</p>{{end}}
+
+<dl class="facts">
+  <div><dt>State</dt><dd><span class="state {{stateClass $f.State}}">{{stateLabel $f.State}}</span></dd></div>
+  <div><dt>Service</dt><dd><a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / {{$f.Environment}}{{if not $f.Registered}} <span class="tag warn">not in inventory</span>{{end}}</dd></div>
+  <div><dt>Component</dt><dd><code>{{component $f}}</code><div class="meta">{{$f.ComponentRef}}</div></dd></div>
+  {{if $f.Repository}}<div><dt>Repository</dt><dd>{{$f.Repository}}</dd></div>{{end}}
+  <div><dt>Owners</dt><dd>{{if .Service}}{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}{{if .Service.SlackChannel}} · {{.Service.SlackChannel}}{{end}}{{else}}—{{end}}</dd></div>
+  {{if $f.Aliases}}<div><dt>Aliases</dt><dd>{{join $f.Aliases ", "}}</dd></div>{{end}}
+  <div><dt>First seen</dt><dd>{{ts $f.FirstSeenAt}}</dd></div>
+  {{if $f.ResolvedAt}}<div><dt>Resolved</dt><dd>{{ts (deref $f.ResolvedAt)}}</dd></div>{{end}}
+</dl>
+{{if .DTLink}}<p><a class="button" href="{{.DTLink}}">Open in Dependency-Track ↗</a> <span class="muted">to record an analysis decision</span></p>{{end}}
+
+{{if .PRs}}
+<h2>Fix pull requests</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Pull request</th><th>Change</th><th>Verdict</th><th>State</th></tr></thead>
+  <tbody>
+  {{range .PRs}}
+  <tr>
+    <td><a href="{{.URL}}">{{prRef .Repository .Number}}</a><div class="meta">{{.Title}}</div></td>
+    <td><code>{{.Package}}</code> {{if .FromVersion}}{{.FromVersion}} → {{end}}{{.ToVersion}}</td>
+    <td>{{verdict .Verdict}}{{if .VerdictDetail}}<div class="meta">{{.VerdictDetail}}</div>{{end}}</td>
+    <td>{{.State}}{{if .MergeSHA}}<div class="meta">commit <code>{{short .MergeSHA}}</code></div>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}
+
+<h2>Timeline</h2>
+<ol class="timeline">
+{{range .Timeline}}
+  <li class="ev-{{.Kind}}"><span class="icon" aria-hidden="true">{{.Icon}}</span>
+    <div><time>{{ts .At}}</time><p>{{rich .Text}}</p></div></li>
+{{end}}
+</ol>
+{{end}}

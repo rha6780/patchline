@@ -24,6 +24,7 @@ import (
 	"github.com/rha6780/patchline/internal/sink/slack"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
+	"github.com/rha6780/patchline/internal/web"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -112,6 +113,11 @@ func run() error {
 	go func() { defer workers.Done(); proc.Run(ctx) }()
 	go func() { defer workers.Done(); notifier.Run(ctx) }()
 
+	ui, err := web.New(web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger})
+	if err != nil {
+		return err
+	}
+
 	srv := &http.Server{
 		Addr: cfg.Addr,
 		Handler: server.New(server.Options{
@@ -121,6 +127,7 @@ func run() error {
 			Inventory:    inv,
 			WebhookToken: cfg.WebhookToken,
 			GiteaSecret:  cfg.GiteaWebhookSecret,
+			UI:           ui,
 			OnInbox:      proc.Wake,
 			Logger:       logger,
 		}),

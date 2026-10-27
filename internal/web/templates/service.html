@@ -1,0 +1,36 @@
+{{define "content"}}
+<p class="crumbs"><a href="/">Overview</a> / service</p>
+<h1>{{.Name}}{{if not .Registered}} <span class="tag warn">not in inventory</span>{{end}}</h1>
+{{if .Service}}
+<dl class="facts">
+  <div><dt>Owners</dt><dd>{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}</dd></div>
+  <div><dt>Slack</dt><dd>{{if .Service.SlackChannel}}{{.Service.SlackChannel}}{{else}}—{{end}}</dd></div>
+  <div><dt>Exposure</dt><dd>{{.Service.Exposure}}</dd></div>
+  <div><dt>Repositories</dt><dd>{{range .Service.Repositories}}<div>{{.Repo}} <span class="meta">→ {{join .Projects ", "}}</span></div>{{end}}</dd></div>
+</dl>
+{{else}}
+<p class="muted">This Dependency-Track project is not mapped to a service. Add it to the inventory to route its findings.</p>
+{{end}}
+
+<h2>Findings by environment</h2>
+<p class="muted">{{.Open}} open · {{if .Gaps}}<strong>{{.Gaps}}</strong> fixed in one environment but still open in another{{else}}no environment gaps{{end}}</p>
+{{if .Rows}}
+<div class="scroll">
+<table>
+  <thead><tr><th>Severity</th><th>Vulnerability</th><th>Component</th>{{range .Envs}}<th>{{.}}</th>{{end}}</tr></thead>
+  <tbody>
+  {{range $row := .Rows}}
+  <tr {{if $row.Gap}}class="gap"{{end}}>
+    <td><span class="pill {{sevClass $row.Severity}}">{{$row.Severity}}</span></td>
+    <td>{{$row.VulnID}}</td>
+    <td><code>{{$row.Component}}</code></td>
+    {{range $.Envs}}{{$c := cell $row.Cells .}}
+    <td>{{if $c}}<a class="state {{stateClass $c.State}}" href="/findings/{{$c.ID}}">{{stateLabel $c.State}}</a><div class="meta">{{$c.ComponentVersion}}</div>{{else}}<span class="muted">—</span>{{end}}</td>
+    {{end}}
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}<p class="empty">No findings for this service.</p>{{end}}
+{{end}}

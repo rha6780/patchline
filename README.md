@@ -4,7 +4,7 @@
 
 English | [한국어](README.ko.md)
 
-> ⚠️ **Status: early development (M4).** Findings are collected from Dependency-Track, linked to Renovate pull requests, kept up to date in one Slack message each, and resolved when a new BOM no longer contains them. APIs, config and data models will change.
+> ⚠️ **Status: early development.** The MVP loop works end to end — detection, Slack, Renovate PRs, rescan resolution and a web UI — but APIs, config and data models may still change before `v0.1.0`. APIs, config and data models will change.
 
 Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and deployments as evidence, and keeps a single Slack message up to date until the fix ships.
 
@@ -42,43 +42,32 @@ Deploy pipeline ── deploy webhook (SHA, digest) ─────────�
 
 OpenCVE can be added later as another source for host-installed infrastructure products.
 
-## Features (planned)
+## Features
 
-- **Git as the source of truth** — services, owners, channels and policies live in YAML and change through PRs
-- **Evidence-based resolution** — a finding is resolved only when a new SBOM no longer contains it; `main` and `prod` are tracked separately
-- **Renovate PR linking** — PR opened → *in progress*, merged → *awaiting verification*, and a check that the PR's target version actually fixes the issue
+- **Git as the source of truth** — services, owners, channels and repositories live in YAML
+- **Evidence-based resolution** — a finding is resolved only when a new BOM no longer contains it, with the commit as evidence; regressions reopen it; `main` and `prod` are tracked separately
+- **Renovate PR linking** — PR opened → *in progress*, merged → *awaiting verification*, with a check that the target version leaves the affected range
 - **One message per finding** — Slack messages are updated in place (`chat.update`) with history in the thread
-- **Policy as code** — severity and due dates from CVSS, CISA KEV, EPSS and service exposure
-- **Exceptions with expiry** — risk acceptance re-opens automatically when it expires
-- **Gitea / Forgejo first**
-- **Lightweight** — a single binary or container, SQLite by default, PostgreSQL optional
+- **Read-only web UI** — overview, per-service environment comparison, evidence timeline, integration health
+- **Gitea / Forgejo first** (GitHub webhooks work too)
+- **Lightweight** — a single binary or container with SQLite
+
+Planned: SLA due dates and reminders from CVSS, CISA KEV, EPSS and exposure; risk acceptances that expire; production deploy evidence; Gitea issue mirror; OpenCVE as a source; PostgreSQL.
 
 ### Finding states
 
 | State | Trigger |
 |---|---|
-| `needs_review` | Component version unknown or CPE match uncertain |
+| `needs_review` | Component version unknown or CPE match uncertain (reserved) |
 | `new` | New finding from Dependency-Track |
-| `in_progress` | Owner triage or a linked fix PR is opened |
-| `awaiting_verification` | Fix PR merged |
-| `resolved` | Finding gone from a new SBOM (`main`, then `prod`) |
-| `not_affected` | Analysis marked `NOT_AFFECTED` / `FALSE_POSITIVE` |
-| `risk_accepted` | Suppressed with an approver and an expiry date |
-| `reopened` | A resolved finding appears again |
+| `in_progress` | Analysis in triage / exploitable, or a fix PR is linked |
+| `awaiting_verification` | Fix PR merged, or analysis marked resolved |
+| `resolved` | No longer reported for the project's latest BOM |
+| `not_affected` | Analysis `NOT_AFFECTED` / `FALSE_POSITIVE` |
+| `risk_accepted` | Finding suppressed in Dependency-Track |
+| `reopened` | A resolved finding is reported again |
 
-Human decisions are entered in **one place** (Dependency-Track analysis, or Patchline UI calling the DT API). Gitea issues are a write-only mirror.
-
-### Web UI
-
-The UI is read-mostly. Configuration stays in Git, deep analysis stays in Dependency-Track.
-
-| Page | Shows |
-|---|---|
-| Overview | Service × severity matrix, overdue / due-soon findings, MTTR |
-| Service | Tech stack summary, `main` vs `prod` differences, open findings |
-| Finding timeline | Detected → notified → PR → merged → rescanned → deployed → resolved |
-| Integrations & health | Last SBOM per project, last Renovate run, unregistered repos, delivery failures |
-| Exceptions | Risk acceptances and not-affected decisions, upcoming expiries |
+Human decisions are made in **one place**: Dependency-Track analysis.
 
 ## Roadmap
 
@@ -89,7 +78,7 @@ The UI is read-mostly. Configuration stays in Git, deep analysis stays in Depend
 | ✅ **M2** Notify | Slack first message, in-place updates, thread history; console sink |
 | ✅ **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
 | ✅ **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
-| **M5** UI | Overview and finding timeline |
+| ✅ **M5** UI | Overview and finding timeline |
 | Later | SLA reminders, exception expiry, `prod` deploy evidence, Gitea issue sink, OpenCVE source |
 
 ## Tech stack
@@ -98,13 +87,14 @@ The UI is read-mostly. Configuration stays in Git, deep analysis stays in Depend
 |---|---|
 | Language | Go |
 | HTTP | `net/http` (Go 1.22+ routing) |
-| UI | `templ` + HTMX |
-| Database | SQLite (`ncruces/go-sqlite3`, pure Go) / PostgreSQL (`pgx`), `sqlc`, `goose` |
-| Scheduler | `gocron` |
-| Integrations | Gitea SDK, `slack-go/slack`, thin Dependency-Track client |
-| Identifiers | `packageurl-go`, ecosystem version comparators |
+| UI | `html/template`, server-rendered, no JavaScript |
+| Database | SQLite (`ncruces/go-sqlite3`, pure Go, no cgo), migrations with `goose` |
+| Configuration | environment variables, inventory in YAML (`go.yaml.in/yaml/v3`) |
+| Background work | in-process workers: inbox processor and notifier (no queue or Redis) |
+| Integrations | small standard-library HTTP clients for Dependency-Track and the Slack Web API |
+| Versions | built-in best-effort comparison across Maven, npm, PyPI and Go styles |
 | Logging | `log/slog` |
-| Release | GoReleaser |
+| Container | distroless, non-root |
 
 ## Repository layout
 
@@ -124,7 +114,7 @@ patchline/
 │   ├── store/              # persistence + migrations
 │   ├── version/            # best-effort cross-ecosystem version comparison
 │   ├── job/                # scheduled jobs (reminders, expiry, heartbeat)
-│   └── web/                # templ templates + static assets
+│   └── web/                # server-rendered pages + embedded CSS
 ├── examples/               # sample inventory, policy, SBOM
 ├── deploy/compose/         # docker compose demo
 └── docs/
@@ -139,6 +129,18 @@ make demo-up                      # Dependency-Track + Patchline via docker comp
 
 The demo walkthrough (API key, webhook, sample SBOM) is in [deploy/compose/README.md](deploy/compose/README.md).
 Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change them in `deploy/compose/.env`).
+
+### Web UI
+
+Open `http://localhost:8080/` (`:18080` in the demo). The UI has no login: put it behind your authenticating proxy.
+
+| Page | Path |
+|---|---|
+| Overview: open findings, service × severity, needs attention, recently resolved, MTTR | `/` |
+| Findings with filters | `/findings` |
+| Finding: facts, fix pull requests, evidence timeline | `/findings/{id}` |
+| Service: owners, repositories, findings per environment (highlights fixed-on-`main`-but-open-in-`prod`) | `/services/{name}` |
+| Integrations: Dependency-Track projects with last BOM and commit, inventory projects without a BOM, failed webhooks and notifications | `/integrations` |
 
 ### Endpoints
 

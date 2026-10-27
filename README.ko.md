@@ -4,7 +4,7 @@
 
 [English](README.md) | 한국어
 
-> ⚠️ **상태: 초기 개발 중(M4).** Dependency-Track에서 Finding을 수집해 Renovate PR과 연결하고, Finding마다 Slack 메시지 하나로 상태를 갱신하며, 새 BOM에서 사라지면 해결로 판정합니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
+> ⚠️ **상태: 초기 개발 중.** 탐지, Slack, Renovate PR, 재스캔 해결 판정, 웹 UI까지 MVP 흐름이 처음부터 끝까지 동작합니다. 다만 `v0.1.0` 전까지 API, 설정, 데이터 모델은 바뀔 수 있습니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
 
 Patchline은 [Dependency-Track](https://dependencytrack.org/) 위에서 조치 루프를 닫아 줍니다. Finding을 서비스·담당자와 연결하고, Renovate PR과 배포를 해결 근거로 추적하며, 수정이 배포될 때까지 Slack 메시지 하나를 계속 갱신합니다.
 
@@ -42,43 +42,32 @@ Renovate ── 보안 PR ── Gitea webhook ───────────
 
 호스트에 설치된 인프라 제품까지 보려면 나중에 OpenCVE를 수집원으로 추가할 수 있습니다.
 
-## 기능 (예정)
+## 기능
 
-- **Git이 원천** — 서비스, 담당자, 채널, 정책을 YAML로 관리하고 PR로 변경
-- **증거 기반 해결 판정** — 새 SBOM에서 Finding이 사라져야 해결로 처리. `main`과 `prod`를 따로 추적
-- **Renovate PR 연결** — PR 열림 → *조치중*, Merge → *검증대기*. PR의 목표 버전이 실제로 취약점을 고치는지도 확인
-- **Finding 1건 = 메시지 1개** — Slack 메시지를 `chat.update`로 갱신하고 이력은 스레드에 남김
-- **정책을 코드로** — CVSS, CISA KEV, EPSS, 서비스 노출도로 등급과 기한을 계산
-- **만료가 있는 예외** — 위험 수용이 만료되면 자동으로 다시 열림
-- **Gitea / Forgejo 우선 지원**
-- **가벼움** — 바이너리(또는 컨테이너) 1개, 기본 SQLite, 선택적으로 PostgreSQL
+- **Git이 원천** — 서비스, 담당자, 채널, 저장소를 YAML로 관리
+- **증거 기반 해결 판정** — 새 BOM에서 사라져야 해결로 처리하고 커밋을 근거로 남김. 다시 나타나면 재발. `main`과 `prod`를 따로 추적
+- **Renovate PR 연결** — PR 열림 → *조치중*, Merge → *검증대기*. 목표 버전이 취약 범위를 벗어나는지 확인
+- **Finding 1건 = 메시지 1개** — Slack 메시지를 `chat.update`로 수정하고 이력은 스레드에 남김
+- **조회용 웹 UI** — Overview, 서비스별 환경 비교, 근거 타임라인, 연동 상태
+- **Gitea / Forgejo 우선 지원**(GitHub Webhook도 동작)
+- **가벼움** — SQLite를 쓰는 바이너리(또는 컨테이너) 1개
+
+예정: CVSS·CISA KEV·EPSS·노출도 기반 SLA 기한과 재알림, 만료가 있는 위험 수용, 운영 배포 근거, Gitea 이슈 미러, OpenCVE 수집원, PostgreSQL.
 
 ### Finding 상태
 
 | 상태 | 전이 조건 |
 |---|---|
-| `needs_review` (확인 필요) | 구성요소 버전을 알 수 없거나 CPE 매칭이 불확실 |
+| `needs_review` (확인 필요) | 구성요소 버전을 알 수 없거나 CPE 매칭이 불확실(예약) |
 | `new` (신규) | Dependency-Track에서 새 Finding 발생 |
-| `in_progress` (조치중) | 담당자 판정 또는 연결된 수정 PR 열림 |
-| `awaiting_verification` (검증대기) | 수정 PR Merge |
-| `resolved` (해결) | 새 SBOM에서 Finding이 사라짐(`main` → `prod`) |
+| `in_progress` (조치중) | 분석이 In Triage·Exploitable이거나 수정 PR이 연결됨 |
+| `awaiting_verification` (검증대기) | 수정 PR Merge, 또는 분석이 Resolved |
+| `resolved` (해결) | 프로젝트의 최신 BOM에서 더 이상 보고되지 않음 |
 | `not_affected` (해당 없음) | 분석 결과 `NOT_AFFECTED` / `FALSE_POSITIVE` |
-| `risk_accepted` (위험 수용) | 승인자와 만료일을 지정해 Suppress |
-| `reopened` (재발) | 해결된 Finding이 다시 나타남 |
+| `risk_accepted` (위험 수용) | Dependency-Track에서 Suppress |
+| `reopened` (재발) | 해결된 Finding이 다시 보고됨 |
 
-사람의 판정은 **한 곳에서만** 받습니다(Dependency-Track Analysis, 또는 DT API를 호출하는 Patchline UI). Gitea 이슈는 쓰기 전용 미러입니다.
-
-### Web UI
-
-UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-Track에서 합니다.
-
-| 화면 | 보여주는 것 |
-|---|---|
-| Overview | 서비스 × 등급 매트릭스, 기한 초과·임박 건, MTTR |
-| Service | 기술 스택 요약, `main`과 `prod`의 차이, 열린 Finding |
-| Finding 타임라인 | 탐지 → 알림 → PR → Merge → 재스캔 → 배포 → 해결 |
-| Integrations & Health | 프로젝트별 마지막 SBOM, 마지막 Renovate 실행, 미등록 저장소, 발송 실패 |
-| Exceptions | 위험 수용·해당 없음 판정, 만료 임박 건 |
+사람의 판정은 **한 곳에서만** 받습니다. Dependency-Track 분석입니다.
 
 ## 로드맵
 
@@ -89,7 +78,7 @@ UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-T
 | ✅ **M2** 알림 | Slack 최초 알림, 메시지 갱신, 스레드 이력, Console Sink |
 | ✅ **M3** 해결 판정 | 재스캔 diff → 해결·재발, Commit SHA 기록 |
 | ✅ **M4** PR 연결 | Gitea Webhook, Renovate PR ↔ Finding, "이 PR로 고쳐지는가" 판정 |
-| **M5** UI | Overview, Finding 타임라인 |
+| ✅ **M5** UI | Overview, Finding 타임라인 |
 | 이후 | SLA 재알림, 예외 만료, `prod` 배포 근거, Gitea 이슈 Sink, OpenCVE 수집원 |
 
 ## 기술 스택
@@ -98,13 +87,14 @@ UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-T
 |---|---|
 | 언어 | Go |
 | HTTP | `net/http` (Go 1.22+ 라우팅) |
-| UI | `templ` + HTMX |
-| DB | SQLite(`ncruces/go-sqlite3`, 순수 Go) / PostgreSQL(`pgx`), `sqlc`, `goose` |
-| 스케줄러 | `gocron` |
-| 연동 | Gitea SDK, `slack-go/slack`, 얇은 Dependency-Track 클라이언트 |
-| 식별자 | `packageurl-go`, 생태계별 버전 비교 라이브러리 |
+| UI | `html/template` 서버 렌더링, JavaScript 없음 |
+| DB | SQLite(`ncruces/go-sqlite3`, 순수 Go, cgo 없음), 마이그레이션은 `goose` |
+| 설정 | 환경변수, 인벤토리는 YAML(`go.yaml.in/yaml/v3`) |
+| 백그라운드 작업 | 프로세스 내 워커: Inbox 처리기와 Notifier(큐·Redis 없음) |
+| 연동 | 표준 라이브러리 기반의 작은 HTTP 클라이언트(Dependency-Track, Slack Web API) |
+| 버전 비교 | Maven, npm, PyPI, Go 형식을 다루는 자체 best-effort 비교 |
 | 로깅 | `log/slog` |
-| 릴리스 | GoReleaser |
+| 컨테이너 | distroless, non-root |
 
 ## 레포 구조
 
@@ -124,7 +114,7 @@ patchline/
 │   ├── store/              # 저장소 + 마이그레이션
 │   ├── version/            # 생태계 공통 버전 비교(best-effort)
 │   ├── job/                # 스케줄 작업(재알림, 만료, heartbeat)
-│   └── web/                # templ 템플릿 + 정적 파일
+│   └── web/                # 서버 렌더링 화면 + 내장 CSS
 ├── examples/               # 샘플 인벤토리, 정책, SBOM
 ├── deploy/compose/         # docker compose 데모
 └── docs/
@@ -139,6 +129,18 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 
 데모 진행 순서(API 키, Webhook 설정, 샘플 SBOM 업로드)는 [deploy/compose/README.md](deploy/compose/README.md)에 있습니다.
 데모 포트는 Patchline `18080`, Dependency-Track API `18081`, UI `18082`입니다(`deploy/compose/.env`에서 변경).
+
+### 웹 UI
+
+`http://localhost:8080/`(데모는 `:18080`)으로 접속합니다. 자체 로그인이 없으므로 인증 프록시 뒤에 두세요.
+
+| 화면 | 경로 |
+|---|---|
+| Overview: 열린 Finding, 서비스 × 심각도, 조치 필요 건, 최근 해결, MTTR | `/` |
+| Finding 목록(필터) | `/findings` |
+| Finding 상세: 정보, 수정 PR, 근거 타임라인 | `/findings/{id}` |
+| 서비스: 담당자, 저장소, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조) | `/services/{name}` |
+| Integrations: DT 프로젝트별 마지막 BOM·커밋, BOM이 없는 인벤토리 프로젝트, 실패한 Webhook·알림 | `/integrations` |
 
 ### 엔드포인트
 

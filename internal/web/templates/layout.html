@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Patchline</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Patchline</a>
+  <nav>
+    <a href="/" {{if eq .Page "overview"}}aria-current="page"{{end}}>Overview</a>
+    <a href="/findings?open=1" {{if or (eq .Page "findings") (eq .Page "finding")}}aria-current="page"{{end}}>Findings</a>
+    <a href="/integrations" {{if eq .Page "integrations"}}aria-current="page"{{end}}>Integrations</a>
+    {{if .DTUIURL}}<a href="{{.DTUIURL}}" class="ext">Dependency-Track ↗</a>{{end}}
+  </nav>
+</header>
+<main>
+{{template "content" .}}
+</main>
+<footer>Patchline {{.Version}} · read-only view; decisions live in Dependency-Track, configuration in Git.</footer>
+</body>
+</html>

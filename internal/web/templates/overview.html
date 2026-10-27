@@ -1,0 +1,57 @@
+{{define "content"}}
+<h1>Overview</h1>
+<section class="tiles">
+  <a class="tile" href="/findings?open=1"><span class="label">Open findings</span><span class="value">{{.Open}}</span></a>
+  <div class="tile"><span class="label">Open critical + high</span><span class="value">{{.CritHigh}}</span></div>
+  <a class="tile" href="/findings?state=awaiting_verification"><span class="label">Awaiting verification</span><span class="value">{{.Awaiting}}</span></a>
+  <div class="tile"><span class="label">Resolved, last 30 days</span><span class="value">{{.Resolved30}}</span></div>
+  <div class="tile"><span class="label">Mean time to resolve</span><span class="value small">{{.MTTR}}</span></div>
+</section>
+
+<h2>Open findings by service</h2>
+{{if .Services}}
+<div class="scroll">
+<table>
+  <thead><tr><th>Service</th>{{range .Severities}}<th class="num">{{.}}</th>{{end}}<th class="num">Total</th></tr></thead>
+  <tbody>
+  {{range $row := .Services}}
+    <tr>
+      <td><a href="/services/{{pathEscape $row.Name}}">{{$row.Name}}</a>{{if not $row.Registered}} <span class="tag warn">not in inventory</span>{{end}}</td>
+      {{range $.Severities}}{{$n := count $row.Counts .}}<td class="num">{{if $n}}<a class="pill {{sevClass .}}" href="/findings?open=1&service={{query $row.Name}}&severity={{.}}">{{$n}}</a>{{else}}<span class="muted">·</span>{{end}}</td>{{end}}
+      <td class="num"><strong>{{$row.Open}}</strong></td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No open findings{{if .Total}} — everything tracked is closed{{else}} yet. Connect Dependency-Track to start{{end}}.</p>
+{{end}}
+
+<div class="cols">
+<section>
+  <h2>Needs attention</h2>
+  {{if .Attention}}
+  <ul class="list">
+  {{range .Attention}}
+    <li><span class="pill {{sevClass .Severity}}">{{.Severity}}</span>
+      <a href="/findings/{{.ID}}">{{.VulnID}}</a> <span class="muted">in</span> <code>{{component .}}</code>
+      <div class="meta">{{.Service}} / {{.Environment}} · {{stateLabel .State}} · since {{ts .FirstSeenAt}}</div></li>
+  {{end}}
+  </ul>
+  {{else}}<p class="empty">No open critical or high findings.</p>{{end}}
+</section>
+<section>
+  <h2>Recently resolved</h2>
+  {{if .Recent}}
+  <ul class="list">
+  {{range .Recent}}
+    <li><span class="pill {{sevClass .Severity}}">{{.Severity}}</span>
+      <a href="/findings/{{.ID}}">{{.VulnID}}</a> <span class="muted">in</span> <code>{{component .}}</code>
+      <div class="meta">{{.Service}} / {{.Environment}} · resolved {{ts (deref .ResolvedAt)}}</div></li>
+  {{end}}
+  </ul>
+  {{else}}<p class="empty">Nothing resolved yet.</p>{{end}}
+</section>
+</div>
+{{end}}

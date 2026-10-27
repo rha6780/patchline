@@ -54,6 +54,8 @@ type Options struct {
 	// Forgejo / GitHub; requests must carry a valid HMAC signature. When
 	// empty, the Gitea webhook falls back to WebhookToken.
 	GiteaSecret string
+	// UI, when set, serves every path not handled above (the web pages).
+	UI http.Handler
 	// OnInbox is called after a new delivery is stored (to wake the processor).
 	OnInbox func()
 	Logger  *slog.Logger
@@ -93,6 +95,9 @@ func New(o Options) http.Handler {
 		mux.HandleFunc("GET /api/v1/findings", h.listFindings)
 		mux.HandleFunc("GET /api/v1/findings/{id}/events", h.findingEvents)
 		mux.HandleFunc("GET /api/v1/findings/{id}/pull-requests", h.findingPullRequests)
+	}
+	if o.UI != nil {
+		mux.Handle("/", o.UI)
 	}
 	return mux
 }
