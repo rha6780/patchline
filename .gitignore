@@ -1,0 +1,22 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+
+# Local data
+*.db
+*.db-wal
+*.db-shm
+/data/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Tooling
+*_templ.txt
+coverage.out
+.idea/
+.vscode/
+.DS_Store
