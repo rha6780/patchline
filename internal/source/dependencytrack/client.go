@@ -71,3 +71,50 @@ func (c *Client) ProjectSightings(ctx context.Context, project Project) ([]Sight
 	}
 	return out, nil
 }
+
+// AffectedComponent is one affected package (or CPE) of a vulnerability,
+// with the affected versions as an exact version or a range.
+type AffectedComponent struct {
+	IdentityType          string `json:"identityType"` // PURL | CPE
+	Identity              string `json:"identity"`
+	VersionType           string `json:"versionType"` // EXACT | RANGE
+	Version               string `json:"version"`
+	VersionStartIncluding string `json:"versionStartIncluding"`
+	VersionStartExcluding string `json:"versionStartExcluding"`
+	VersionEndIncluding   string `json:"versionEndIncluding"`
+	VersionEndExcluding   string `json:"versionEndExcluding"`
+}
+
+// VulnerabilityDetail is the part of a vulnerability used to judge fixes.
+type VulnerabilityDetail struct {
+	VulnID             string              `json:"vulnId"`
+	Source             string              `json:"source"`
+	PatchedVersions    string              `json:"patchedVersions"`
+	AffectedComponents []AffectedComponent `json:"affectedComponents"`
+}
+
+// Vulnerability returns a vulnerability with its affected components
+// (GET /api/v1/vulnerability/source/{source}/vuln/{vulnId}).
+func (c *Client) Vulnerability(ctx context.Context, source, vulnID string) (VulnerabilityDetail, error) {
+	u := c.baseURL + "/api/v1/vulnerability/source/" + url.PathEscape(source) + "/vuln/" + url.PathEscape(vulnID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return VulnerabilityDetail{}, err
+	}
+	req.Header.Set("X-Api-Key", c.apiKey)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return VulnerabilityDetail{}, fmt.Errorf("dependency-track: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return VulnerabilityDetail{}, fmt.Errorf("dependency-track: GET vulnerability %s/%s: %s: %s", source, vulnID, resp.Status, strings.TrimSpace(string(body)))
+	}
+	var v VulnerabilityDetail
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return VulnerabilityDetail{}, fmt.Errorf("dependency-track: decode vulnerability: %w", err)
+	}
+	return v, nil
+}

@@ -43,17 +43,25 @@ func (s *Sink) Post(_ context.Context, channel string, m notify.Message) (notify
 	if m.Link != "" {
 		s.printf("    %s\n", m.Link)
 	}
+	s.printPRs(m)
 	return ref, nil
 }
 
 func (s *Sink) Update(_ context.Context, ref notify.Ref, m notify.Message) error {
 	s.printf("✏️  [%s] finding #%s updated: %s\n", ref.Channel, ref.ID, notify.Summary(m))
+	s.printPRs(m)
 	return nil
 }
 
 func (s *Sink) Reply(_ context.Context, ref notify.Ref, text string) error {
 	s.printf("    ↳ [%s] finding #%s: %s\n", ref.Channel, ref.ID, text)
 	return nil
+}
+
+func (s *Sink) printPRs(m notify.Message) {
+	for _, pr := range m.PullRequests {
+		s.printf("    fix PR: %s %s · %s\n", notify.PRRef(pr.Repository, pr.Number), pr.State, notify.VerdictLabel(pr.Verdict))
+	}
 }
 
 func (s *Sink) printf(format string, args ...any) {

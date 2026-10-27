@@ -25,6 +25,10 @@ const (
 	EventStateChanged    = "state_changed"
 	EventSeverityChanged = "severity_changed"
 	EventNotified        = "notified"
+	EventPRLinked        = "pr_linked"
+	EventPRUpdated       = "pr_updated"
+	EventPRMerged        = "pr_merged"
+	EventPRClosed        = "pr_closed"
 )
 
 // Severity levels, normalized to lower case.
@@ -70,6 +74,8 @@ type Observation struct {
 	DTProjectUUID       string
 	DTComponentUUID     string
 	DTVulnerabilityUUID string
+	DTVulnSource        string // e.g. NVD, GITHUB, OSV
+	DTVulnID            string // id within DTVulnSource
 }
 
 // CanonicalID picks a stable identifier from a set of ids that refer to the

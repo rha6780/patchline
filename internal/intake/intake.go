@@ -45,6 +45,9 @@ type Store interface {
 	ApplyState(ctx context.Context, key store.DTKey, to finding.State, evidence map[string]any) (int, error)
 	InsertInboxAt(ctx context.Context, source, eventType, dedupKey string, payload []byte, notBefore time.Time) (int64, bool, error)
 	ResolveMissing(ctx context.Context, dtProjectUUID string, keep []int64, evidence map[string]any) ([]int64, error)
+	OpenFindingsInRepository(ctx context.Context, repository string, environments []string) ([]store.Finding, error)
+	LinkPullRequest(ctx context.Context, l store.PullRequestLink) (bool, error)
+	ClosePullRequest(ctx context.Context, repository string, number int, merged bool, mergeSHA string) ([]int64, error)
 }
 
 // Processor drains the webhook inbox.
@@ -183,6 +186,8 @@ func (p *Processor) handle(ctx context.Context, it store.InboxItem) (note string
 	switch it.Source {
 	case SourceDependencyTrack:
 		return p.handleDependencyTrack(ctx, it)
+	case SourceGitea:
+		return p.handleGitea(ctx, it)
 	default:
 		return "", fmt.Errorf("%w %q", errUnknownSource, it.Source)
 	}
@@ -413,5 +418,7 @@ func (p *Processor) observe(s dependencytrack.Sighting) finding.Observation {
 		DTProjectUUID:       s.Project.UUID,
 		DTComponentUUID:     s.Component.UUID,
 		DTVulnerabilityUUID: s.Vulnerability.UUID,
+		DTVulnSource:        s.Vulnerability.Source,
+		DTVulnID:            s.Vulnerability.VulnID,
 	}
 }

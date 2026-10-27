@@ -24,6 +24,14 @@ func Blocks(m notify.Message) []map[string]any {
 	if f.DueAt != nil {
 		fields = append(fields, mrkdwn("*Due*\n"+escape(*f.DueAt)))
 	}
+	if len(m.PullRequests) > 0 {
+		var lines []string
+		for _, pr := range m.PullRequests {
+			lines = append(lines, fmt.Sprintf("<%s|%s> %s · %s", pr.URL, escape(notify.PRRef(pr.Repository, pr.Number)),
+				pr.State, notify.VerdictLabel(pr.Verdict)))
+		}
+		fields = append(fields, mrkdwn("*Fix PR*\n"+strings.Join(lines, "\n")))
+	}
 
 	blocks := []map[string]any{
 		{"type": "header", "text": map[string]any{"type": "plain_text", "text": truncate(header, 150), "emoji": true}},

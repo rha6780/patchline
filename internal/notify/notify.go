@@ -32,6 +32,8 @@ type Message struct {
 	Service *inventory.Service
 	// Link points to the finding in Dependency-Track, when known.
 	Link string
+	// PullRequests are the pull requests linked to the finding.
+	PullRequests []store.PullRequestLink
 }
 
 // Sink delivers messages to a chat system.
@@ -59,6 +61,7 @@ type Store interface {
 	PendingNotifications(ctx context.Context, sink, minSeverity string, limit int) ([]store.NotificationWork, error)
 	RecordNotification(ctx context.Context, r store.NotificationResult) error
 	MarkNotificationFailed(ctx context.Context, findingID int64, sink string, cause error, retryAfter time.Duration) error
+	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
 }
 
 // Notifier drives a sink.
@@ -177,6 +180,11 @@ func (n *Notifier) deliver(ctx context.Context, w store.NotificationWork) error 
 	}
 	last := w.NewEvents[len(w.NewEvents)-1].ID
 	msg := n.message(w.Finding)
+	prs, err := n.Store.FindingPullRequests(ctx, w.Finding.ID)
+	if err != nil {
+		return err
+	}
+	msg.PullRequests = prs
 	result := store.NotificationResult{FindingID: w.Finding.ID, Sink: n.Sink.Name(), Channel: w.Channel, MessageRef: w.MessageRef, LastEventID: last}
 
 	if w.MessageRef == "" {

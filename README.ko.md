@@ -4,7 +4,7 @@
 
 [English](README.md) | 한국어
 
-> ⚠️ **상태: 초기 개발 중(M3).** Dependency-Track에서 Finding을 수집하고, Finding마다 Slack 메시지 하나로 상태를 갱신하며, 새 BOM에서 사라지면 해결로 판정합니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
+> ⚠️ **상태: 초기 개발 중(M4).** Dependency-Track에서 Finding을 수집해 Renovate PR과 연결하고, Finding마다 Slack 메시지 하나로 상태를 갱신하며, 새 BOM에서 사라지면 해결로 판정합니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
 
 Patchline은 [Dependency-Track](https://dependencytrack.org/) 위에서 조치 루프를 닫아 줍니다. Finding을 서비스·담당자와 연결하고, Renovate PR과 배포를 해결 근거로 추적하며, 수정이 배포될 때까지 Slack 메시지 하나를 계속 갱신합니다.
 
@@ -88,7 +88,7 @@ UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-T
 | ✅ **M1** 수집 | DT Webhook → Inbox → 인벤토리와 연결된 Finding 생성 |
 | ✅ **M2** 알림 | Slack 최초 알림, 메시지 갱신, 스레드 이력, Console Sink |
 | ✅ **M3** 해결 판정 | 재스캔 diff → 해결·재발, Commit SHA 기록 |
-| **M4** PR 연결 | Gitea Webhook, Renovate PR ↔ Finding, "이 PR로 고쳐지는가" 판정 |
+| ✅ **M4** PR 연결 | Gitea Webhook, Renovate PR ↔ Finding, "이 PR로 고쳐지는가" 판정 |
 | **M5** UI | Overview, Finding 타임라인 |
 | 이후 | SLA 재알림, 예외 만료, `prod` 배포 근거, Gitea 이슈 Sink, OpenCVE 수집원 |
 
@@ -122,6 +122,7 @@ patchline/
 │   ├── source/             # 입력: dependencytrack, gitea, jenkins
 │   ├── sink/               # 출력: slack, giteaissue, console
 │   ├── store/              # 저장소 + 마이그레이션
+│   ├── version/            # 생태계 공통 버전 비교(best-effort)
 │   ├── job/                # 스케줄 작업(재알림, 만료, heartbeat)
 │   └── web/                # templ 템플릿 + 정적 파일
 ├── examples/               # 샘플 인벤토리, 정책, SBOM
@@ -146,8 +147,10 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 | `GET` | `/healthz` | Liveness |
 | `GET` | `/readyz` | Readiness(DB) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track Outbound Webhook(`?token=` 또는 `Authorization: Bearer`) |
+| `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` Webhook(HMAC 서명 또는 토큰) |
 | `GET` | `/api/v1/findings` | 담당자 정보를 포함한 Finding 목록. 필터 `service`, `environment`, `state`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
+| `GET` | `/api/v1/findings/{id}/pull-requests` | Finding에 연결된 PR |
 
 ### 설정
 
@@ -159,6 +162,7 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 | `PATCHLINE_WEBHOOK_TOKEN` | — | Webhook 공유 비밀값. 비우면 인증 없음(개발용) |
 | `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
 | `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키 |
+| `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | PR Webhook의 Secret. 비우면 `PATCHLINE_WEBHOOK_TOKEN` 사용 |
 | `PATCHLINE_DT_UI_URL` | — | 메시지에 넣을 Dependency-Track UI 주소 |
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack Bot 토큰(`chat:write`, `chat:write.public`). 비우면 stdout으로 출력 |
@@ -194,6 +198,16 @@ jq --arg c "$GITHUB_SHA" --arg r "$GITHUB_REF" \
   '.metadata.properties += [{"name":"patchline:git:commit","value":$c},{"name":"patchline:git:ref","value":$r}]' \
   bom.json > bom.patchline.json
 ```
+
+### PR 연결 방식
+
+1. Gitea, Forgejo, GitHub의 저장소(또는 조직)에 **Pull Request** 이벤트 Webhook을 추가합니다. 주소는 `/webhooks/gitea`, Secret은 `PATCHLINE_GITEA_WEBHOOK_SECRET`입니다.
+2. PR이 열리거나 바뀌면 Renovate의 변경 표(없으면 제목 `Update dependency X to vY`)에서 업데이트 내용을 읽습니다.
+3. 업데이트마다 해당 저장소의 열린 Finding과 패키지 이름으로 연결합니다(Maven `group:artifact` = `group/artifact`). 환경은 base 브랜치 이름과 같은 것만 봅니다.
+4. 목표 버전을 Dependency-Track의 취약 버전 범위와 비교해 **범위를 벗어남**, **여전히 영향 있음**, 범위 정보가 없으면 **확인 불가**로 판정합니다.
+5. PR이 연결되면 Finding은 *조치중*, Merge되면 *검증대기*가 됩니다. Merge 없이 닫히면 기록만 하고 상태는 유지합니다. 해결 판정은 다음 재스캔에서만 합니다.
+
+베이스 이미지 업데이트는 아직 OS 패키지 Finding과 연결하지 않습니다. 이 경우에도 재스캔으로 해결됩니다.
 
 ### 알림 동작 방식
 

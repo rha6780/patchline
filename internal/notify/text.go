@@ -107,6 +107,8 @@ func EventText(e store.FindingEvent) string {
 		return text
 	case finding.EventSeverityChanged:
 		return fmt.Sprintf("Severity: %s → %s", str("from"), str("to"))
+	case finding.EventPRLinked, finding.EventPRUpdated, finding.EventPRMerged, finding.EventPRClosed:
+		return prText(e, ev)
 	case finding.EventDetected, finding.EventNotified:
 		return ""
 	}
@@ -131,4 +133,61 @@ func shortSHA(s string) string {
 		return s[:12]
 	}
 	return s
+}
+
+// VerdictLabel describes a fix verdict.
+func VerdictLabel(v string) string {
+	switch v {
+	case store.VerdictFixes:
+		return "✅ leaves the affected range"
+	case store.VerdictInsufficient:
+		return "⚠️ still affected"
+	}
+	return "❔ not verified"
+}
+
+// PRRef renders "owner/repo#12".
+func PRRef(repo string, number int) string {
+	return fmt.Sprintf("%s#%d", repo, number)
+}
+
+func prText(e store.FindingEvent, ev map[string]any) string {
+	str := func(k string) string { v, _ := ev[k].(string); return v }
+	num := 0
+	if f, ok := ev["number"].(float64); ok {
+		num = int(f)
+	}
+	ref := PRRef(str("repository"), num)
+	if u := str("url"); u != "" {
+		ref += " " + u
+	}
+
+	var text string
+	switch e.Kind {
+	case finding.EventPRLinked, finding.EventPRUpdated:
+		verb := "Fix PR opened"
+		if e.Kind == finding.EventPRUpdated {
+			verb = "Fix PR updated"
+		}
+		change := str("to_version")
+		if from := str("from_version"); from != "" {
+			change = from + " → " + change
+		}
+		text = fmt.Sprintf("🔧 %s: %s — %s %s · %s", verb, ref, str("package"), change, VerdictLabel(str("verdict")))
+		if d := str("verdict_detail"); d != "" && str("verdict") != store.VerdictUnknown {
+			text += " (" + d + ")"
+		}
+	case finding.EventPRMerged:
+		text = "🔀 Fix PR merged: " + ref
+		if sha := str("merge_sha"); sha != "" {
+			text += " (commit `" + shortSHA(sha) + "`)"
+		}
+		text += " — waiting for a rescan to confirm"
+	case finding.EventPRClosed:
+		text = "🚫 Fix PR closed without merging: " + ref
+	}
+	if e.FromState != nil && e.ToState != nil {
+		text += fmt.Sprintf("\nState: %s → %s", StateLabel(*e.FromState), StateLabel(*e.ToState))
+	}
+	return text
 }

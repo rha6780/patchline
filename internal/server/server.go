@@ -16,6 +16,7 @@ import (
 
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
+	"github.com/rha6780/patchline/internal/source/gitea"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -37,6 +38,7 @@ type Inbox interface {
 type Findings interface {
 	ListFindings(ctx context.Context, f store.FindingFilter) ([]store.Finding, error)
 	FindingEvents(ctx context.Context, findingID int64) ([]store.FindingEvent, error)
+	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
 }
 
 // Options wires the handler's dependencies.
@@ -48,6 +50,10 @@ type Options struct {
 	// WebhookToken, when set, must be sent as ?token=... or
 	// "Authorization: Bearer ...". Leave empty only for local development.
 	WebhookToken string
+	// GiteaSecret, when set, is the webhook secret configured in Gitea /
+	// Forgejo / GitHub; requests must carry a valid HMAC signature. When
+	// empty, the Gitea webhook falls back to WebhookToken.
+	GiteaSecret string
 	// OnInbox is called after a new delivery is stored (to wake the processor).
 	OnInbox func()
 	Logger  *slog.Logger
@@ -58,8 +64,10 @@ type Options struct {
 //	GET  /healthz                      liveness: the process is up
 //	GET  /readyz                       readiness: the database answers
 //	POST /webhooks/dependency-track    Dependency-Track outbound webhook
+//	POST /webhooks/gitea               Gitea / Forgejo / GitHub pull_request webhook
 //	GET  /api/v1/findings              findings with owners (?service=&environment=&state=&limit=)
 //	GET  /api/v1/findings/{id}/events  a finding's timeline
+//	GET  /api/v1/findings/{id}/pull-requests  linked pull requests
 func New(o Options) http.Handler {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
@@ -79,10 +87,12 @@ func New(o Options) http.Handler {
 	mux.HandleFunc("GET /readyz", h.readyz)
 	if o.Inbox != nil {
 		mux.HandleFunc("POST /webhooks/dependency-track", h.dependencyTrackWebhook)
+		mux.HandleFunc("POST /webhooks/gitea", h.giteaWebhook)
 	}
 	if o.Findings != nil {
 		mux.HandleFunc("GET /api/v1/findings", h.listFindings)
 		mux.HandleFunc("GET /api/v1/findings/{id}/events", h.findingEvents)
+		mux.HandleFunc("GET /api/v1/findings/{id}/pull-requests", h.findingPullRequests)
 	}
 	return mux
 }
@@ -116,14 +126,8 @@ func (h *handler) dependencyTrackWebhook(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnauthorized, "invalid or missing webhook token")
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxWebhookBody))
-	if err != nil {
-		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
-			writeError(w, http.StatusRequestEntityTooLarge, "payload too large")
-			return
-		}
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+	body, ok := readBody(w, r)
+	if !ok {
 		return
 	}
 	n, err := dependencytrack.ParseNotification(body)
@@ -144,6 +148,78 @@ func (h *handler) dependencyTrackWebhook(w http.ResponseWriter, r *http.Request)
 	}
 	h.o.Logger.Debug("dependency-track webhook stored", "inbox_id", id, "group", n.Group, "duplicate", !inserted)
 	writeJSON(w, http.StatusAccepted, map[string]any{"inbox_id": id, "duplicate": !inserted})
+}
+
+func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxWebhookBody))
+	if err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, "payload too large")
+		} else {
+			writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		}
+		return nil, false
+	}
+	return body, true
+}
+
+func (h *handler) giteaWebhook(w http.ResponseWriter, r *http.Request) {
+	body, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	if h.o.GiteaSecret != "" {
+		if !gitea.VerifySignature(r.Header, body, h.o.GiteaSecret) {
+			writeError(w, http.StatusUnauthorized, "invalid or missing webhook signature")
+			return
+		}
+	} else if !h.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "invalid or missing webhook token")
+		return
+	}
+
+	event := gitea.EventType(r.Header)
+	if event != gitea.EventPullRequest {
+		// Ping and other events are acknowledged and dropped.
+		writeJSON(w, http.StatusAccepted, map[string]any{"ignored": true, "event": event})
+		return
+	}
+	if _, err := gitea.ParsePullRequestEvent(body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	key := gitea.DeliveryID(r.Header)
+	if key == "" {
+		sum := sha256.Sum256(body)
+		key = hex.EncodeToString(sum[:])
+	}
+	id, inserted, err := h.o.Inbox.InsertInbox(r.Context(), "gitea", event, key, body)
+	if err != nil {
+		h.o.Logger.Error("store webhook", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not store delivery")
+		return
+	}
+	if inserted {
+		h.o.OnInbox()
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"inbox_id": id, "duplicate": !inserted})
+}
+
+func (h *handler) findingPullRequests(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid finding id")
+		return
+	}
+	prs, err := h.o.Findings.FindingPullRequests(r.Context(), id)
+	if err != nil {
+		h.o.Logger.Error("finding pull requests", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not load pull requests")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pull_requests": prs})
 }
 
 // findingView adds inventory context to a stored finding.

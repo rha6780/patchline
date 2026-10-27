@@ -4,7 +4,7 @@
 
 English | [한국어](README.ko.md)
 
-> ⚠️ **Status: early development (M3).** Findings are collected from Dependency-Track, kept up to date in one Slack message each, and resolved when a new BOM no longer contains them. APIs, config and data models will change.
+> ⚠️ **Status: early development (M4).** Findings are collected from Dependency-Track, linked to Renovate pull requests, kept up to date in one Slack message each, and resolved when a new BOM no longer contains them. APIs, config and data models will change.
 
 Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and deployments as evidence, and keeps a single Slack message up to date until the fix ships.
 
@@ -88,7 +88,7 @@ The UI is read-mostly. Configuration stays in Git, deep analysis stays in Depend
 | ✅ **M1** Intake | DT webhooks → inbox → findings joined with the inventory |
 | ✅ **M2** Notify | Slack first message, in-place updates, thread history; console sink |
 | ✅ **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
-| **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
+| ✅ **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
 | **M5** UI | Overview and finding timeline |
 | Later | SLA reminders, exception expiry, `prod` deploy evidence, Gitea issue sink, OpenCVE source |
 
@@ -122,6 +122,7 @@ patchline/
 │   ├── source/             # inputs: dependencytrack, gitea, jenkins
 │   ├── sink/               # outputs: slack, giteaissue, console
 │   ├── store/              # persistence + migrations
+│   ├── version/            # best-effort cross-ecosystem version comparison
 │   ├── job/                # scheduled jobs (reminders, expiry, heartbeat)
 │   └── web/                # templ templates + static assets
 ├── examples/               # sample inventory, policy, SBOM
@@ -146,8 +147,10 @@ Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change 
 | `GET` | `/healthz` | Liveness |
 | `GET` | `/readyz` | Readiness (database) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track outbound webhook (`?token=` or `Authorization: Bearer`) |
+| `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` webhook (HMAC signature, or the token) |
 | `GET` | `/api/v1/findings` | Findings with owners; filters `service`, `environment`, `state`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
+| `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
 
 ### Configuration
 
@@ -159,6 +162,7 @@ Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change 
 | `PATCHLINE_WEBHOOK_TOKEN` | — | Shared secret for webhooks. Unset = no authentication (development only) |
 | `PATCHLINE_DT_URL` | — | Dependency-Track API server URL |
 | `PATCHLINE_DT_API_KEY` | — | API key with `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` |
+| `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | Secret of the pull request webhook. Unset = use `PATCHLINE_WEBHOOK_TOKEN` |
 | `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages |
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | Wait after `BOM_PROCESSED` before comparing findings |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Unset = print to stdout |
@@ -194,6 +198,16 @@ jq --arg c "$GITHUB_SHA" --arg r "$GITHUB_REF" \
   '.metadata.properties += [{"name":"patchline:git:commit","value":$c},{"name":"patchline:git:ref","value":$r}]' \
   bom.json > bom.patchline.json
 ```
+
+### How pull requests are linked
+
+1. Add a webhook for **Pull Request** events to the repository (or organization) in Gitea, Forgejo or GitHub, pointing at `/webhooks/gitea` with the secret `PATCHLINE_GITEA_WEBHOOK_SECRET`.
+2. When a pull request opens or changes, Patchline reads the updates from Renovate's change table (or the title, `Update dependency X to vY`).
+3. Each update is matched to open findings of that repository by package name (Maven `group:artifact` = `group/artifact`), in the environment named after the base branch.
+4. The target version is compared with the vulnerability's affected ranges from Dependency-Track: **leaves the affected range**, **still affected**, or **not verified** when no range is known.
+5. A linked pull request moves the finding to *in progress*; merging it moves it to *awaiting verification*. Closing without merging is recorded but keeps the state. Only the next rescan resolves the finding.
+
+Base-image updates are not matched to OS-package findings yet; they resolve through the rescan as usual.
 
 ### How notifications work
 

@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -156,5 +159,47 @@ func TestListFindingsAddsOwners(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/findings/1/events", nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"detected"`) {
 		t.Fatalf("events: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestGiteaWebhook(t *testing.T) {
+	st := newStore(t)
+	h := New(Options{DB: st, Inbox: st, Findings: st, GiteaSecret: "hook-secret", Logger: quiet})
+	body, err := os.ReadFile(filepath.Join("..", "source", "gitea", "testdata", "renovate_opened.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sign := func(b []byte) string {
+		mac := hmac.New(sha256.New, []byte("hook-secret"))
+		mac.Write(b)
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+	post := func(event, sig string, payload []byte) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/gitea", strings.NewReader(string(payload)))
+		req.Header.Set("X-Gitea-Event", event)
+		req.Header.Set("X-Gitea-Delivery", "delivery-1")
+		if sig != "" {
+			req.Header.Set("X-Gitea-Signature", sig)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := post("pull_request", "", body); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unsigned: %d", rec.Code)
+	}
+	if rec := post("pull_request", sign([]byte("other")), body); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bad signature: %d", rec.Code)
+	}
+	if rec := post("push", sign(body), body); rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"ignored":true`) {
+		t.Fatalf("push event: %d %s", rec.Code, rec.Body)
+	}
+	rec := post("pull_request", sign(body), body)
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"duplicate":false`) {
+		t.Fatalf("pull_request: %d %s", rec.Code, rec.Body)
+	}
+	if rec := post("pull_request", sign(body), body); !strings.Contains(rec.Body.String(), `"duplicate":true`) {
+		t.Fatalf("redelivery should be a duplicate: %s", rec.Body)
 	}
 }

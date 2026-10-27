@@ -50,6 +50,20 @@ Without a token, notifications are printed to the Patchline log (`make demo-logs
 2. Set `PATCHLINE_SLACK_BOT_TOKEN` (the `xoxb-...` token) in `.env`, and optionally `PATCHLINE_SLACK_DEFAULT_CHANNEL`.
 3. Edit `slack_channel` in `examples/inventory/services.yaml` to a channel that exists, then `make demo-up`.
 
+## 4b. (Optional) Connect Gitea / Forgejo / GitHub
+
+Add a **Pull Request** webhook to the repository that holds the service code:
+
+| Field | Value |
+|---|---|
+| URL | `http://<host reachable from Gitea>:18080/webhooks/gitea` |
+| Secret | `PATCHLINE_GITEA_WEBHOOK_SECRET` from `.env` |
+| Events | Pull request |
+
+The repository must be listed in `examples/inventory/services.yaml` (`repo: owner/name`).
+When Renovate opens a fix PR, the finding moves to *in progress* and the thread shows
+whether the new version leaves the affected range.
+
 ## 5. Upload a sample SBOM
 
 ```sh

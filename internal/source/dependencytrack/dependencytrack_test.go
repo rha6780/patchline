@@ -181,3 +181,24 @@ func TestAnalysisFindingState(t *testing.T) {
 		t.Error("unknown state should not map")
 	}
 }
+
+func TestClientVulnerability(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"vulnId":"GHSA-jfh8-c2jp-5v3q","source":"GITHUB","patchedVersions":"2.15.0",
+		  "affectedComponents":[{"identityType":"PURL","identity":"pkg:maven/org.apache.logging.log4j/log4j-core",
+		  "versionType":"RANGE","versionStartIncluding":"2.0-beta9","versionEndExcluding":"2.15.0"}]}`))
+	}))
+	defer srv.Close()
+	v, err := NewClient(srv.URL, "k", nil).Vulnerability(context.Background(), "GITHUB", "GHSA-jfh8-c2jp-5v3q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/v1/vulnerability/source/GITHUB/vuln/GHSA-jfh8-c2jp-5v3q" {
+		t.Errorf("path = %s", gotPath)
+	}
+	if len(v.AffectedComponents) != 1 || v.AffectedComponents[0].VersionEndExcluding != "2.15.0" || v.PatchedVersions != "2.15.0" {
+		t.Errorf("v = %+v", v)
+	}
+}

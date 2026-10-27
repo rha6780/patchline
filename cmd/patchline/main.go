@@ -120,6 +120,7 @@ func run() error {
 			Findings:     st,
 			Inventory:    inv,
 			WebhookToken: cfg.WebhookToken,
+			GiteaSecret:  cfg.GiteaWebhookSecret,
 			OnInbox:      proc.Wake,
 			Logger:       logger,
 		}),

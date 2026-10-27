@@ -41,6 +41,11 @@ type Config struct {
 	// frontend, used for links in messages (PATCHLINE_DT_UI_URL).
 	DependencyTrackUIURL string
 
+	// GiteaWebhookSecret is the secret set on the Gitea / Forgejo / GitHub
+	// webhook; requests must carry its HMAC signature
+	// (PATCHLINE_GITEA_WEBHOOK_SECRET). Empty falls back to WebhookToken.
+	GiteaWebhookSecret string
+
 	// SlackBotToken enables the Slack sink (PATCHLINE_SLACK_BOT_TOKEN).
 	// Without it notifications are printed to stdout.
 	SlackBotToken string
@@ -120,6 +125,7 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		}
 		cfg.DependencyTrackReconcileDelay = d
 	}
+	cfg.GiteaWebhookSecret, _ = lookup("PATCHLINE_GITEA_WEBHOOK_SECRET")
 	cfg.SlackBotToken, _ = lookup("PATCHLINE_SLACK_BOT_TOKEN")
 	cfg.SlackDefaultChannel, _ = lookup("PATCHLINE_SLACK_DEFAULT_CHANNEL")
 	if v, ok := lookup("PATCHLINE_NOTIFY_MIN_SEVERITY"); ok && v != "" {

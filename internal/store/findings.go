@@ -31,6 +31,8 @@ type Finding struct {
 	ResolvedAt       *string  `json:"resolved_at,omitempty"`
 	UpdatedAt        string   `json:"updated_at"`
 	DTProjectUUID    string   `json:"dt_project_uuid,omitempty"`
+	DTVulnSource     string   `json:"dt_vuln_source,omitempty"`
+	DTVulnID         string   `json:"dt_vuln_id,omitempty"`
 }
 
 // UpsertFinding records an observation. A new (service, environment,
@@ -97,11 +99,13 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 			SET aliases = ?, severity = ?, title = ?, registered = ?, repository = ?,
 			    component_name = ?, component_version = ?,
 			    dt_project_uuid = ?, dt_component_uuid = ?, dt_vulnerability_uuid = ?,
+			    dt_vuln_source = ?, dt_vuln_id = ?,
 			    updated_at = ?
 			WHERE id = ?`,
 			string(aliases), obs.Severity, obs.Title, obs.Registered, obs.Repository,
 			obs.ComponentName, obs.ComponentVersion,
 			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID,
+			obs.DTVulnSource, obs.DTVulnID,
 			now, id)
 		if err != nil {
 			return 0, false, err
@@ -112,13 +116,13 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 			INSERT INTO findings (
 				service, environment, component_purl, vuln_id, aliases, severity, state,
 				registered, repository, component_name, component_version, title,
-				dt_project_uuid, dt_component_uuid, dt_vulnerability_uuid,
+				dt_project_uuid, dt_component_uuid, dt_vulnerability_uuid, dt_vuln_source, dt_vuln_id,
 				first_seen_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			RETURNING id`,
 			obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID, string(aliases), obs.Severity, finding.StateNew,
 			obs.Registered, obs.Repository, obs.ComponentName, obs.ComponentVersion, obs.Title,
-			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID,
+			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID, obs.DTVulnSource, obs.DTVulnID,
 			now, now).Scan(&id)
 		if err != nil {
 			return 0, false, err
@@ -348,7 +352,7 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 
 const findingColumns = `SELECT id, service, registered, repository, environment, component_purl,
 	component_name, component_version, vuln_id, aliases, severity, title,
-	state, due_at, first_seen_at, resolved_at, updated_at, dt_project_uuid`
+	state, due_at, first_seen_at, resolved_at, updated_at, dt_project_uuid, dt_vuln_source, dt_vuln_id`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -361,7 +365,7 @@ func scanFinding(sc scanner) (Finding, error) {
 	)
 	if err := sc.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
 		&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
-		&r.State, &due, &r.FirstSeenAt, &resolved, &r.UpdatedAt, &r.DTProjectUUID); err != nil {
+		&r.State, &due, &r.FirstSeenAt, &resolved, &r.UpdatedAt, &r.DTProjectUUID, &r.DTVulnSource, &r.DTVulnID); err != nil {
 		return Finding{}, err
 	}
 	if err := json.Unmarshal([]byte(aliases), &r.Aliases); err != nil {

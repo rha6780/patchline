@@ -120,7 +120,13 @@ func TestBlocks(t *testing.T) {
 		}
 	}
 
-	m.Service, m.Finding.Registered, m.Link = nil, false, ""
+	m.PullRequests = []store.PullRequestLink{{Repository: "acme/api", Number: 12, URL: "https://git/pulls/12", State: "open", Verdict: "fixes"}}
+	b, _ = json.Marshal(Blocks(m))
+	if !strings.Contains(string(b), "Fix PR") || !strings.Contains(string(b), `\u003chttps://git/pulls/12|acme/api#12\u003e open`) {
+		t.Errorf("PR field missing: %s", b)
+	}
+
+	m.Service, m.Finding.Registered, m.Link, m.PullRequests = nil, false, "", nil
 	b, _ = json.Marshal(Blocks(m))
 	if !strings.Contains(string(b), "not in inventory") || strings.Contains(string(b), "Open in Dependency-Track") {
 		t.Errorf("unregistered blocks: %s", b)
