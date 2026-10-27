@@ -1,0 +1,42 @@
+[
+  {
+    "component": {
+      "uuid": "4d5cd8df-cff7-4212-a038-91ae4ab79396",
+      "name": "log4j-core",
+      "group": "org.apache.logging.log4j",
+      "version": "2.14.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "project": "6fb1820f-5280-4577-ac51-40124aabe307"
+    },
+    "vulnerability": {
+      "uuid": "941a93f5-e06b-4304-84de-4d788eeb4969",
+      "source": "NVD",
+      "vulnId": "CVE-2021-44228",
+      "title": "Log4Shell",
+      "severity": "CRITICAL",
+      "severityRank": 0,
+      "aliases": [{ "cveId": "CVE-2021-44228", "ghsaId": "GHSA-jfh8-c2jp-5v3q" }]
+    },
+    "analysis": { "state": "NOT_SET", "isSuppressed": false },
+    "attribution": { "analyzerIdentity": "INTERNAL_ANALYZER" },
+    "matrix": "6fb1820f-5280-4577-ac51-40124aabe307:4d5cd8df-cff7-4212-a038-91ae4ab79396:941a93f5-e06b-4304-84de-4d788eeb4969"
+  },
+  {
+    "component": {
+      "uuid": "aa5cd8df-cff7-4212-a038-91ae4ab79396",
+      "name": "openssl",
+      "version": "3.0.11-1~deb12u2",
+      "purl": "pkg:deb/debian/openssl@3.0.11-1~deb12u2?arch=amd64&distro=debian-12",
+      "project": "6fb1820f-5280-4577-ac51-40124aabe307"
+    },
+    "vulnerability": {
+      "uuid": "bb1a93f5-e06b-4304-84de-4d788eeb4969",
+      "source": "NVD",
+      "vulnId": "CVE-2024-0727",
+      "severity": "LOW",
+      "aliases": []
+    },
+    "analysis": { "isSuppressed": true },
+    "matrix": "x"
+  }
+]

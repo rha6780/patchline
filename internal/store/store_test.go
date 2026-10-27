@@ -41,3 +41,17 @@ func TestOpenAndMigrate(t *testing.T) {
 		t.Errorf("foreign_keys = %d (err %v), want 1", fk, err)
 	}
 }
+
+func newTestStore(t *testing.T) *Store {
+	t.Helper()
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "patchline.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if _, err := Migrate(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	return New(db)
+}

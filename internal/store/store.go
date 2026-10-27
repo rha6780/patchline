@@ -8,9 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
-	_ "github.com/ncruces/go-sqlite3/driver" // registers the "sqlite3" driver
-	_ "github.com/ncruces/go-sqlite3/embed"  // bundles the SQLite build (pure Go, no cgo)
+	_ "github.com/ncruces/go-sqlite3/driver" // registers the "sqlite3" driver (pure Go, no cgo)
 	"github.com/pressly/goose/v3"
 )
 
@@ -30,7 +30,8 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 		"?_pragma=journal_mode(WAL)" +
 		"&_pragma=foreign_keys(1)" +
 		"&_pragma=busy_timeout(5000)" +
-		"&_pragma=synchronous(NORMAL)"
+		"&_pragma=synchronous(NORMAL)" +
+		"&_txlock=immediate" // take the write lock at BEGIN to avoid upgrade deadlocks
 
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
@@ -59,3 +60,23 @@ func Migrate(ctx context.Context, db *sql.DB) (int, error) {
 	}
 	return len(results), nil
 }
+
+// timeLayout matches the strftime format used in the schema defaults, so
+// stored timestamps compare correctly as strings.
+const timeLayout = "2006-01-02T15:04:05.000Z"
+
+func formatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
+
+// Store provides typed access to the database.
+type Store struct {
+	db  *sql.DB
+	now func() time.Time
+}
+
+// New wraps an open, migrated database.
+func New(db *sql.DB) *Store {
+	return &Store{db: db, now: time.Now}
+}
+
+// PingContext lets the store serve as a readiness check.
+func (s *Store) PingContext(ctx context.Context) error { return s.db.PingContext(ctx) }

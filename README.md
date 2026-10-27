@@ -4,7 +4,7 @@
 
 English | [한국어](README.ko.md)
 
-> ⚠️ **Status: early development (M0).** Nothing is usable yet. APIs, config and data models will change.
+> ⚠️ **Status: early development (M1).** Findings are collected from Dependency-Track; notifications are not implemented yet. APIs, config and data models will change.
 
 Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and deployments as evidence, and keeps a single Slack message up to date until the fix ships.
 
@@ -84,8 +84,8 @@ The UI is read-mostly. Configuration stays in Git, deep analysis stays in Depend
 
 | Milestone | Scope |
 |---|---|
-| **M0** Skeleton | Module layout, config, SQLite + migrations, `/healthz`, Compose demo (DT + Patchline) |
-| **M1** Intake | DT webhooks → inbox → findings joined with the inventory |
+| ✅ **M0** Skeleton | Module layout, config, SQLite + migrations, `/healthz`, Compose demo (DT + Patchline) |
+| ✅ **M1** Intake | DT webhooks → inbox → findings joined with the inventory |
 | **M2** Notify | Slack first message, in-place updates, thread history; console sink |
 | **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
 | **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
@@ -117,6 +117,7 @@ patchline/
 │   ├── finding/            # model, state transitions, event log
 │   ├── policy/             # severity + SLA rules
 │   ├── inventory/          # Git-managed service inventory
+│   ├── intake/             # inbox processor: webhook deliveries → findings
 │   ├── source/             # inputs: dependencytrack, gitea, jenkins
 │   ├── sink/               # outputs: slack, giteaissue, console
 │   ├── store/              # persistence + migrations
@@ -129,22 +130,45 @@ patchline/
 
 ## Getting started
 
-Not usable yet — only the M0 skeleton runs.
-
 ```sh
-make build && ./bin/patchline     # :8080, GET /healthz and /readyz
+make build && ./bin/patchline     # :8080
 make demo-up                      # Dependency-Track + Patchline via docker compose
 ```
 
-| Variable | Default |
-|---|---|
-| `PATCHLINE_ADDR` | `:8080` |
-| `PATCHLINE_DB_PATH` | `data/patchline.db` |
-| `PATCHLINE_LOG_LEVEL` | `info` |
-| `PATCHLINE_LOG_FORMAT` | `text` (`json`) |
-| `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` |
+The demo walkthrough (API key, webhook, sample SBOM) is in [deploy/compose/README.md](deploy/compose/README.md).
+Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change them in `deploy/compose/.env`).
 
-The demo serves Dependency-Track on `:8081` (API) and `:8082` (UI). Its API server needs several GB of memory.
+### Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/healthz` | Liveness |
+| `GET` | `/readyz` | Readiness (database) |
+| `POST` | `/webhooks/dependency-track` | Dependency-Track outbound webhook (`?token=` or `Authorization: Bearer`) |
+| `GET` | `/api/v1/findings` | Findings with owners; filters `service`, `environment`, `state`, `limit` |
+| `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
+
+### Configuration
+
+| Variable | Default | |
+|---|---|---|
+| `PATCHLINE_ADDR` | `:8080` | Listen address |
+| `PATCHLINE_DB_PATH` | `data/patchline.db` | SQLite file |
+| `PATCHLINE_INVENTORY_PATH` | — | Inventory YAML file or directory ([example](examples/inventory/services.yaml)) |
+| `PATCHLINE_WEBHOOK_TOKEN` | — | Shared secret for webhooks. Unset = no authentication (development only) |
+| `PATCHLINE_DT_URL` | — | Dependency-Track API server URL |
+| `PATCHLINE_DT_API_KEY` | — | API key with `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` |
+| `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `PATCHLINE_LOG_FORMAT` | `text` | `text` or `json` |
+| `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown limit |
+
+### How intake works
+
+1. The webhook handler validates the payload, stores it in an inbox table (de-duplicated by content hash) and returns `202`.
+2. A background processor handles inbox entries, retrying failures with backoff (30s → 30m, 5 attempts).
+3. `NEW_VULNERABILITY` and `NEW_VULNERABLE_DEPENDENCY` carry the findings directly; `BOM_PROCESSED` makes Patchline read the project's current findings from the Dependency-Track API.
+4. Each Dependency-Track project **name** is resolved to a service through the inventory, and its **version** becomes the environment (`main`, `prod`). Projects not in the inventory are kept as *unregistered*.
+5. A finding is one service × environment × component × vulnerability. CVE ids are preferred over GHSA/OSV ids as the canonical id; the others are kept as aliases.
 
 ## Scope
 

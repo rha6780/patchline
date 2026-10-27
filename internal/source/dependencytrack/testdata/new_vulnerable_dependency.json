@@ -1,0 +1,36 @@
+{
+  "notification": {
+    "level": "INFORMATIONAL",
+    "scope": "PORTFOLIO",
+    "group": "NEW_VULNERABLE_DEPENDENCY",
+    "timestamp": "2026-10-27T23:23:00.145",
+    "title": "Vulnerable Dependency Introduced",
+    "content": "A dependency was introduced that contains 2 known vulnerabilities",
+    "subject": {
+      "project": { "uuid": "6fb1820f-5280-4577-ac51-40124aabe307", "name": "storefront-api", "version": "main" },
+      "component": {
+        "uuid": "4d5cd8df-cff7-4212-a038-91ae4ab79396",
+        "group": "apache",
+        "name": "axis",
+        "version": "1.4",
+        "purl": "pkg:maven/apache/axis@1.4"
+      },
+      "vulnerabilities": [
+        {
+          "uuid": "941a93f5-e06b-4304-84de-4d788eeb4969",
+          "vulnId": "CVE-2012-5784",
+          "source": "NVD",
+          "aliases": [{ "vulnId": "GHSA-55w9-c3g2-4rrh", "source": "GITHUB" }],
+          "severity": "MEDIUM"
+        },
+        {
+          "uuid": "ca318ca7-616f-4af0-9c6b-15b8e208c586",
+          "vulnId": "CVE-2014-3596",
+          "source": "NVD",
+          "aliases": [],
+          "severity": "MEDIUM"
+        }
+      ]
+    }
+  }
+}

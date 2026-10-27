@@ -4,7 +4,7 @@
 
 [English](README.md) | 한국어
 
-> ⚠️ **상태: 초기 개발 중(M0).** 아직 사용할 수 있는 기능이 없습니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
+> ⚠️ **상태: 초기 개발 중(M1).** Dependency-Track에서 Finding을 수집하는 단계까지 구현됐고, 알림은 아직 없습니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
 
 Patchline은 [Dependency-Track](https://dependencytrack.org/) 위에서 조치 루프를 닫아 줍니다. Finding을 서비스·담당자와 연결하고, Renovate PR과 배포를 해결 근거로 추적하며, 수정이 배포될 때까지 Slack 메시지 하나를 계속 갱신합니다.
 
@@ -84,8 +84,8 @@ UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-T
 
 | 마일스톤 | 범위 |
 |---|---|
-| **M0** 뼈대 | 모듈 구조, 설정, SQLite + 마이그레이션, `/healthz`, Compose 데모(DT + Patchline) |
-| **M1** 수집 | DT Webhook → Inbox → 인벤토리와 연결된 Finding 생성 |
+| ✅ **M0** 뼈대 | 모듈 구조, 설정, SQLite + 마이그레이션, `/healthz`, Compose 데모(DT + Patchline) |
+| ✅ **M1** 수집 | DT Webhook → Inbox → 인벤토리와 연결된 Finding 생성 |
 | **M2** 알림 | Slack 최초 알림, 메시지 갱신, 스레드 이력, Console Sink |
 | **M3** 해결 판정 | 재스캔 diff → 해결·재발, Commit SHA 기록 |
 | **M4** PR 연결 | Gitea Webhook, Renovate PR ↔ Finding, "이 PR로 고쳐지는가" 판정 |
@@ -117,6 +117,7 @@ patchline/
 │   ├── finding/            # 모델, 상태 전이, 이벤트 로그
 │   ├── policy/             # 등급 + SLA 규칙
 │   ├── inventory/          # Git으로 관리하는 서비스 인벤토리
+│   ├── intake/             # Inbox 처리기: Webhook 수신분 → Finding
 │   ├── source/             # 입력: dependencytrack, gitea, jenkins
 │   ├── sink/               # 출력: slack, giteaissue, console
 │   ├── store/              # 저장소 + 마이그레이션
@@ -129,22 +130,45 @@ patchline/
 
 ## 시작하기
 
-아직 사용할 수 있는 기능은 없고, M0 뼈대만 실행됩니다.
-
 ```sh
-make build && ./bin/patchline     # :8080, GET /healthz 와 /readyz
+make build && ./bin/patchline     # :8080
 make demo-up                      # docker compose로 Dependency-Track + Patchline 실행
 ```
 
-| 환경변수 | 기본값 |
-|---|---|
-| `PATCHLINE_ADDR` | `:8080` |
-| `PATCHLINE_DB_PATH` | `data/patchline.db` |
-| `PATCHLINE_LOG_LEVEL` | `info` |
-| `PATCHLINE_LOG_FORMAT` | `text` (`json`) |
-| `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` |
+데모 진행 순서(API 키, Webhook 설정, 샘플 SBOM 업로드)는 [deploy/compose/README.md](deploy/compose/README.md)에 있습니다.
+데모 포트는 Patchline `18080`, Dependency-Track API `18081`, UI `18082`입니다(`deploy/compose/.env`에서 변경).
 
-데모에서 Dependency-Track은 `:8081`(API), `:8082`(UI)로 열립니다. API 서버는 메모리를 수 GB 사용합니다.
+### 엔드포인트
+
+| 메서드 | 경로 | 용도 |
+|---|---|---|
+| `GET` | `/healthz` | Liveness |
+| `GET` | `/readyz` | Readiness(DB) |
+| `POST` | `/webhooks/dependency-track` | Dependency-Track Outbound Webhook(`?token=` 또는 `Authorization: Bearer`) |
+| `GET` | `/api/v1/findings` | 담당자 정보를 포함한 Finding 목록. 필터 `service`, `environment`, `state`, `limit` |
+| `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
+
+### 설정
+
+| 환경변수 | 기본값 | 설명 |
+|---|---|---|
+| `PATCHLINE_ADDR` | `:8080` | 수신 주소 |
+| `PATCHLINE_DB_PATH` | `data/patchline.db` | SQLite 파일 |
+| `PATCHLINE_INVENTORY_PATH` | — | 인벤토리 YAML 파일 또는 디렉터리([예시](examples/inventory/services.yaml)) |
+| `PATCHLINE_WEBHOOK_TOKEN` | — | Webhook 공유 비밀값. 비우면 인증 없음(개발용) |
+| `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
+| `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키 |
+| `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `PATCHLINE_LOG_FORMAT` | `text` | `text` 또는 `json` |
+| `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | 정상 종료 제한 시간 |
+
+### 수집 동작 방식
+
+1. Webhook 핸들러는 payload를 검증해 Inbox 테이블에 저장하고(내용 해시로 중복 제거) `202`를 반환합니다.
+2. 백그라운드 처리기가 Inbox를 처리하고, 실패하면 backoff(30초 → 30분, 최대 5회)로 재시도합니다.
+3. `NEW_VULNERABILITY`, `NEW_VULNERABLE_DEPENDENCY`는 Finding을 직접 담고 있고, `BOM_PROCESSED`를 받으면 해당 프로젝트의 현재 Finding을 Dependency-Track API로 조회합니다.
+4. Dependency-Track 프로젝트 **이름**은 인벤토리에서 서비스로 연결되고, **버전**은 환경(`main`, `prod`)이 됩니다. 인벤토리에 없는 프로젝트는 *미등록*으로 저장됩니다.
+5. Finding 단위는 서비스 × 환경 × 구성요소 × 취약점입니다. 대표 ID는 CVE를 우선하고, GHSA·OSV ID는 별칭으로 보관합니다.
 
 ## 범위 밖
 

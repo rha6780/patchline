@@ -1,0 +1,257 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/rha6780/patchline/internal/finding"
+)
+
+// Finding is a stored finding.
+type Finding struct {
+	ID               int64    `json:"id"`
+	Service          string   `json:"service"`
+	Registered       bool     `json:"registered"`
+	Repository       string   `json:"repository"`
+	Environment      string   `json:"environment"`
+	ComponentRef     string   `json:"component_ref"`
+	ComponentName    string   `json:"component_name"`
+	ComponentVersion string   `json:"component_version"`
+	VulnID           string   `json:"vuln_id"`
+	Aliases          []string `json:"aliases"`
+	Severity         string   `json:"severity"`
+	Title            string   `json:"title,omitempty"`
+	State            string   `json:"state"`
+	DueAt            *string  `json:"due_at,omitempty"`
+	FirstSeenAt      string   `json:"first_seen_at"`
+	UpdatedAt        string   `json:"updated_at"`
+	DTProjectUUID    string   `json:"dt_project_uuid,omitempty"`
+}
+
+// UpsertFinding records an observation. A new (service, environment,
+// component, vulnerability) creates a finding in state "new" together with a
+// "detected" event carrying evidence; a known one only refreshes its
+// descriptive fields.
+func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evidence map[string]any) (id int64, created bool, err error) {
+	aliases, err := json.Marshal(nonNil(obs.Aliases))
+	if err != nil {
+		return 0, false, err
+	}
+	now := formatTime(s.now())
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	err = tx.QueryRowContext(ctx, `
+		SELECT id FROM findings
+		WHERE service = ? AND environment = ? AND component_purl = ? AND vuln_id = ?`,
+		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id)
+
+	switch {
+	case err == nil:
+		_, err = tx.ExecContext(ctx, `
+			UPDATE findings
+			SET aliases = ?, severity = ?, title = ?, registered = ?, repository = ?,
+			    component_name = ?, component_version = ?,
+			    dt_project_uuid = ?, dt_component_uuid = ?, dt_vulnerability_uuid = ?,
+			    updated_at = ?
+			WHERE id = ?`,
+			string(aliases), obs.Severity, obs.Title, obs.Registered, obs.Repository,
+			obs.ComponentName, obs.ComponentVersion,
+			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID,
+			now, id)
+		if err != nil {
+			return 0, false, err
+		}
+
+	case errors.Is(err, sql.ErrNoRows):
+		err = tx.QueryRowContext(ctx, `
+			INSERT INTO findings (
+				service, environment, component_purl, vuln_id, aliases, severity, state,
+				registered, repository, component_name, component_version, title,
+				dt_project_uuid, dt_component_uuid, dt_vulnerability_uuid,
+				first_seen_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			RETURNING id`,
+			obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID, string(aliases), obs.Severity, finding.StateNew,
+			obs.Registered, obs.Repository, obs.ComponentName, obs.ComponentVersion, obs.Title,
+			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID,
+			now, now).Scan(&id)
+		if err != nil {
+			return 0, false, err
+		}
+		ev, mErr := json.Marshal(evidence)
+		if mErr != nil {
+			err = mErr
+			return 0, false, err
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO finding_events (finding_id, kind, to_state, evidence, occurred_at)
+			VALUES (?, ?, ?, ?, ?)`,
+			id, finding.EventDetected, finding.StateNew, string(ev), now)
+		if err != nil {
+			return 0, false, err
+		}
+		created = true
+
+	default:
+		return 0, false, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return id, created, nil
+}
+
+// FindingFilter narrows ListFindings. Empty fields match everything.
+type FindingFilter struct {
+	Service     string
+	Environment string
+	State       string
+	Limit       int
+}
+
+// ListFindings returns findings, most severe and most recent first.
+func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, error) {
+	var where []string
+	var args []any
+	for col, v := range map[string]string{"service": f.Service, "environment": f.Environment, "state": f.State} {
+		if v != "" {
+			where = append(where, col+" = ?")
+			args = append(args, v)
+		}
+	}
+	q := `SELECT id, service, registered, repository, environment, component_purl,
+	             component_name, component_version, vuln_id, aliases, severity, title,
+	             state, due_at, first_seen_at, updated_at, dt_project_uuid
+	      FROM findings`
+	if len(where) > 0 {
+		q += " WHERE " + strings.Join(where, " AND ")
+	}
+	q += ` ORDER BY CASE severity
+	           WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2
+	           WHEN 'low' THEN 3 WHEN 'info' THEN 4 ELSE 5 END,
+	         first_seen_at DESC, id DESC`
+	limit := f.Limit
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+	q += fmt.Sprintf(" LIMIT %d", limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []Finding{}
+	for rows.Next() {
+		var (
+			r       Finding
+			aliases string
+			due     sql.NullString
+		)
+		if err := rows.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
+			&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
+			&r.State, &due, &r.FirstSeenAt, &r.UpdatedAt, &r.DTProjectUUID); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(aliases), &r.Aliases); err != nil {
+			return nil, fmt.Errorf("finding %d: aliases: %w", r.ID, err)
+		}
+		if due.Valid {
+			r.DueAt = &due.String
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// FindingEvent is one entry of a finding's timeline.
+type FindingEvent struct {
+	Kind       string          `json:"kind"`
+	FromState  *string         `json:"from_state,omitempty"`
+	ToState    *string         `json:"to_state,omitempty"`
+	Evidence   json.RawMessage `json:"evidence"`
+	OccurredAt string          `json:"occurred_at"`
+}
+
+// FindingEvents returns a finding's events in order.
+func (s *Store) FindingEvents(ctx context.Context, findingID int64) ([]FindingEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT kind, from_state, to_state, evidence, occurred_at
+		FROM finding_events WHERE finding_id = ? ORDER BY occurred_at, id`, findingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []FindingEvent{}
+	for rows.Next() {
+		var (
+			e        FindingEvent
+			from, to sql.NullString
+			ev       string
+		)
+		if err := rows.Scan(&e.Kind, &from, &to, &ev, &e.OccurredAt); err != nil {
+			return nil, err
+		}
+		if from.Valid {
+			e.FromState = &from.String
+		}
+		if to.Valid {
+			e.ToState = &to.String
+		}
+		e.Evidence = json.RawMessage(ev)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// SourceProject is a project seen from a source.
+type SourceProject struct {
+	Source     string
+	ProjectID  string
+	Name       string
+	Version    string
+	Service    string
+	Registered bool
+}
+
+// TouchSourceProject records that a source project was seen, and when bom
+// is true, that a new BOM was processed for it.
+func (s *Store) TouchSourceProject(ctx context.Context, p SourceProject, bom bool) error {
+	now := formatTime(s.now())
+	var bomAt sql.NullString
+	if bom {
+		bomAt = sql.NullString{String: now, Valid: true}
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO source_projects (source, project_id, name, version, service, registered, last_bom_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (source, project_id) DO UPDATE SET
+			name = excluded.name, version = excluded.version, service = excluded.service,
+			registered = excluded.registered,
+			last_bom_at = COALESCE(excluded.last_bom_at, source_projects.last_bom_at),
+			updated_at = excluded.updated_at`,
+		p.Source, p.ProjectID, p.Name, p.Version, p.Service, p.Registered, bomAt, now)
+	return err
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}

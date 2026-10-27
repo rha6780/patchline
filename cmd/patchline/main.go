@@ -15,7 +15,10 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/config"
+	"github.com/rha6780/patchline/internal/intake"
+	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/server"
+	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -50,6 +53,12 @@ func run() error {
 	logger := newLogger(cfg)
 	slog.SetDefault(logger)
 
+	inv, err := inventory.Load(cfg.InventoryPath)
+	if err != nil {
+		return err
+	}
+	logger.Info("inventory loaded", "path", cfg.InventoryPath, "services", len(inv.Services()))
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -65,9 +74,35 @@ func run() error {
 	}
 	logger.Info("database ready", "path", cfg.DatabasePath, "migrations_applied", applied)
 
+	st := store.New(db)
+
+	proc := &intake.Processor{Store: st, Inventory: inv, Logger: logger}
+	if cfg.DependencyTrackEnabled() {
+		proc.DT = dependencytrack.NewClient(cfg.DependencyTrackURL, cfg.DependencyTrackAPIKey, nil)
+	} else {
+		logger.Warn("PATCHLINE_DT_URL or PATCHLINE_DT_API_KEY not set: BOM_PROCESSED events will not fetch findings")
+	}
+	if cfg.WebhookToken == "" {
+		logger.Warn("PATCHLINE_WEBHOOK_TOKEN not set: webhooks are accepted without authentication")
+	}
+
+	procDone := make(chan struct{})
+	go func() {
+		defer close(procDone)
+		proc.Run(ctx)
+	}()
+
 	srv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           server.New(db),
+		Addr: cfg.Addr,
+		Handler: server.New(server.Options{
+			DB:           st,
+			Inbox:        st,
+			Findings:     st,
+			Inventory:    inv,
+			WebhookToken: cfg.WebhookToken,
+			OnInbox:      proc.Wake,
+			Logger:       logger,
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -89,7 +124,9 @@ func run() error {
 	logger.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+	err = srv.Shutdown(shutdownCtx)
+	<-procDone
+	return err
 }
 
 func healthcheck(addr string) error {

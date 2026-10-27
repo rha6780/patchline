@@ -21,6 +21,24 @@ type Config struct {
 	LogFormat string
 	// ShutdownTimeout bounds graceful shutdown (PATCHLINE_SHUTDOWN_TIMEOUT).
 	ShutdownTimeout time.Duration
+
+	// InventoryPath is a YAML file or a directory of YAML files
+	// (PATCHLINE_INVENTORY_PATH). Empty means no inventory.
+	InventoryPath string
+	// WebhookToken is the shared secret webhook senders must present
+	// (PATCHLINE_WEBHOOK_TOKEN). Empty disables the check.
+	WebhookToken string
+	// DependencyTrackURL is the Dependency-Track API server base URL
+	// (PATCHLINE_DT_URL). Empty disables fetching findings on BOM_PROCESSED.
+	DependencyTrackURL string
+	// DependencyTrackAPIKey authenticates to Dependency-Track (PATCHLINE_DT_API_KEY).
+	DependencyTrackAPIKey string
+}
+
+// DependencyTrackEnabled reports whether findings can be fetched from the
+// Dependency-Track API (both URL and API key are set).
+func (c Config) DependencyTrackEnabled() bool {
+	return c.DependencyTrackURL != "" && c.DependencyTrackAPIKey != ""
 }
 
 // Default returns the configuration used when no variables are set.
@@ -70,5 +88,9 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		cfg.ShutdownTimeout = d
 	}
 
+	cfg.InventoryPath, _ = lookup("PATCHLINE_INVENTORY_PATH")
+	cfg.WebhookToken, _ = lookup("PATCHLINE_WEBHOOK_TOKEN")
+	cfg.DependencyTrackURL, _ = lookup("PATCHLINE_DT_URL")
+	cfg.DependencyTrackAPIKey, _ = lookup("PATCHLINE_DT_API_KEY")
 	return cfg, nil
 }

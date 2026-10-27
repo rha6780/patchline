@@ -30,6 +30,10 @@ func TestFromLookupOverrides(t *testing.T) {
 		"PATCHLINE_LOG_LEVEL":        "debug",
 		"PATCHLINE_LOG_FORMAT":       "JSON",
 		"PATCHLINE_SHUTDOWN_TIMEOUT": "3s",
+		"PATCHLINE_INVENTORY_PATH":   "/etc/patchline/inventory",
+		"PATCHLINE_WEBHOOK_TOKEN":    "tok",
+		"PATCHLINE_DT_URL":           "http://dt:8080",
+		"PATCHLINE_DT_API_KEY":       "key",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +44,11 @@ func TestFromLookupOverrides(t *testing.T) {
 		LogLevel:        slog.LevelDebug,
 		LogFormat:       "json",
 		ShutdownTimeout: 3 * time.Second,
+
+		InventoryPath:         "/etc/patchline/inventory",
+		WebhookToken:          "tok",
+		DependencyTrackURL:    "http://dt:8080",
+		DependencyTrackAPIKey: "key",
 	}
 	if cfg != want {
 		t.Fatalf("got %+v, want %+v", cfg, want)
@@ -54,6 +63,18 @@ func TestFromLookupInvalid(t *testing.T) {
 	} {
 		if _, err := FromLookup(lookupFrom(tc)); err == nil {
 			t.Errorf("%v: expected error", tc)
+		}
+	}
+}
+
+func TestDependencyTrackEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		url, key string
+		want     bool
+	}{{"", "", false}, {"http://dt", "", false}, {"", "k", false}, {"http://dt", "k", true}} {
+		c := Config{DependencyTrackURL: tc.url, DependencyTrackAPIKey: tc.key}
+		if got := c.DependencyTrackEnabled(); got != tc.want {
+			t.Errorf("url=%q key=%q: got %v, want %v", tc.url, tc.key, got, tc.want)
 		}
 	}
 }
