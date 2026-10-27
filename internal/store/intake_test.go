@@ -89,8 +89,14 @@ func TestUpsertFinding(t *testing.T) {
 	}
 
 	events, err := s.FindingEvents(ctx, id)
-	if err != nil || len(events) != 1 || events[0].Kind != finding.EventDetected || string(events[0].Evidence) != `{"inbox_id":1}` {
-		t.Fatalf("events = %+v err %v (want one detected event from the first sighting)", events, err)
+	if err != nil || len(events) != 2 {
+		t.Fatalf("events = %+v err %v, want detected + severity_changed", events, err)
+	}
+	if events[0].Kind != finding.EventDetected || string(events[0].Evidence) != `{"inbox_id":1}` {
+		t.Errorf("first event = %+v (want detected from the first sighting)", events[0])
+	}
+	if events[1].Kind != finding.EventSeverityChanged {
+		t.Errorf("second event = %+v", events[1])
 	}
 }
 
@@ -107,5 +113,53 @@ func TestTouchSourceProject(t *testing.T) {
 	var bom *string
 	if err := s.db.QueryRowContext(ctx, `SELECT last_bom_at FROM source_projects WHERE project_id = 'p1'`).Scan(&bom); err != nil || bom == nil {
 		t.Fatalf("last_bom_at should survive a non-BOM touch: %v %v", bom, err)
+	}
+}
+
+func TestSeverityChangeAndApplyState(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	obs := finding.Observation{
+		Service: "storefront", Registered: true, Environment: "main",
+		ComponentRef: "pkg:npm/express@4.17.1", VulnID: "CVE-2024-29041", Severity: finding.SeverityMedium,
+		DTProjectUUID: "p", DTComponentUUID: "c", DTVulnerabilityUUID: "v",
+	}
+	id, _, err := s.UpsertFinding(ctx, obs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs.Severity = finding.SeverityHigh
+	if _, _, err := s.UpsertFinding(ctx, obs, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	key := DTKey{ProjectUUID: "p", ComponentUUID: "c", VulnerabilityUUID: "v"}
+	if n, err := s.ApplyState(ctx, key, finding.StateInProgress, map[string]any{"analysis": "IN_TRIAGE"}); err != nil || n != 1 {
+		t.Fatalf("apply: n=%d err=%v", n, err)
+	}
+	// Same state again: no change, no event.
+	if n, _ := s.ApplyState(ctx, key, finding.StateInProgress, nil); n != 0 {
+		t.Fatalf("repeat apply changed %d", n)
+	}
+	if n, _ := s.ApplyState(ctx, DTKey{ProjectUUID: "other"}, finding.StateInProgress, nil); n != 0 {
+		t.Fatal("unmatched key should change nothing")
+	}
+
+	events, _ := s.FindingEvents(ctx, id)
+	var kinds []string
+	for _, e := range events {
+		kinds = append(kinds, e.Kind)
+	}
+	want := []string{finding.EventDetected, finding.EventSeverityChanged, finding.EventStateChanged}
+	if len(kinds) != len(want) {
+		t.Fatalf("events = %v, want %v", kinds, want)
+	}
+	for i := range want {
+		if kinds[i] != want[i] {
+			t.Fatalf("events = %v, want %v", kinds, want)
+		}
+	}
+	if *events[2].FromState != "new" || *events[2].ToState != "in_progress" {
+		t.Errorf("state event = %+v", events[2])
 	}
 }

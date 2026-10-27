@@ -1,0 +1,35 @@
+{
+  "notification": {
+    "level": "INFORMATIONAL",
+    "scope": "PORTFOLIO",
+    "group": "PROJECT_AUDIT_CHANGE",
+    "timestamp": "2026-10-28T09:53:54.414",
+    "title": "Analysis Decision: In Triage",
+    "content": "An analysis decision was made to a finding affecting a project",
+    "subject": {
+      "component": {
+        "uuid": "4d5cd8df-cff7-4212-a038-91ae4ab79396",
+        "group": "org.apache.logging.log4j",
+        "name": "log4j-core",
+        "version": "2.14.1"
+      },
+      "vulnerability": {
+        "uuid": "941a93f5-e06b-4304-84de-4d788eeb4969",
+        "vulnId": "GHSA-jfh8-c2jp-5v3q",
+        "source": "GITHUB",
+        "aliases": [{ "vulnId": "CVE-2021-44228", "source": "NVD" }],
+        "severity": "CRITICAL"
+      },
+      "analysis": {
+        "suppressed": false,
+        "state": "IN_TRIAGE",
+        "project": "6fb1820f-5280-4577-ac51-40124aabe307",
+        "component": "4d5cd8df-cff7-4212-a038-91ae4ab79396",
+        "vulnerability": "941a93f5-e06b-4304-84de-4d788eeb4969"
+      },
+      "affectedProjects": [
+        { "uuid": "6fb1820f-5280-4577-ac51-40124aabe307", "name": "storefront-api", "version": "main" }
+      ]
+    }
+  }
+}

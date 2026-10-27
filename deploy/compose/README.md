@@ -37,12 +37,20 @@ In the Dependency-Track UI: **Administration → Access Management → Teams →
 |---|---|
 | Publisher | Outbound Webhook |
 | Scope | Portfolio |
-| Groups | `NEW_VULNERABILITY`, `NEW_VULNERABLE_DEPENDENCY`, `BOM_PROCESSED` |
+| Groups | `NEW_VULNERABILITY`, `NEW_VULNERABLE_DEPENDENCY`, `BOM_PROCESSED`, `PROJECT_AUDIT_CHANGE` |
 | Destination | `http://patchline:8080/webhooks/dependency-track?token=<PATCHLINE_WEBHOOK_TOKEN>` |
 
 The destination uses the in-network name `patchline`, not `localhost`.
 
-## 4. Upload a sample SBOM
+## 4. (Optional) Connect Slack
+
+Without a token, notifications are printed to the Patchline log (`make demo-logs`).
+
+1. Create a Slack app at https://api.slack.com/apps, add the bot scopes `chat:write` and `chat:write.public`, and install it to the workspace.
+2. Set `PATCHLINE_SLACK_BOT_TOKEN` (the `xoxb-...` token) in `.env`, and optionally `PATCHLINE_SLACK_DEFAULT_CHANNEL`.
+3. Edit `slack_channel` in `examples/inventory/services.yaml` to a channel that exists, then `make demo-up`.
+
+## 5. Upload a sample SBOM
 
 ```sh
 curl -sS -X POST http://localhost:18081/api/v1/bom \
@@ -54,12 +62,16 @@ curl -sS -X POST http://localhost:18081/api/v1/bom \
 `storefront-api` is mapped to the `storefront` service in `examples/inventory/services.yaml`;
 the project version `main` becomes the environment.
 
-## 5. Check the findings
+## 6. Check the findings
 
 ```sh
 curl -sS http://localhost:18080/api/v1/findings | jq '.findings[] | {service, environment, vuln_id, severity, owners}'
 make demo-logs
 ```
+
+Each finding is posted once. Change its analysis in Dependency-Track
+(for example *In Triage* or *Not Affected*): the same message is updated and the
+change is added to its thread.
 
 Findings appear once Dependency-Track has analyzed the BOM. If the mirror
 is still downloading on first start, upload the SBOM again later — Patchline

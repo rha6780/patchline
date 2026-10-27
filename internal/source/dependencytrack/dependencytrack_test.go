@@ -141,3 +141,43 @@ func TestClientError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestAuditChange(t *testing.T) {
+	n, err := ParseNotification(fixture(t, "project_audit_change.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := n.AuditChange()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Analysis.State != "IN_TRIAGE" || a.Analysis.Project != "6fb1820f-5280-4577-ac51-40124aabe307" {
+		t.Fatalf("analysis = %+v", a.Analysis)
+	}
+	if st, ok := a.Analysis.FindingState(); !ok || st != "in_progress" {
+		t.Fatalf("state = %q %v", st, ok)
+	}
+}
+
+func TestAnalysisFindingState(t *testing.T) {
+	tests := []struct {
+		a    Analysis
+		want string
+	}{
+		{Analysis{State: "NOT_SET"}, "new"},
+		{Analysis{State: "IN_TRIAGE"}, "in_progress"},
+		{Analysis{State: "EXPLOITABLE"}, "in_progress"},
+		{Analysis{State: "RESOLVED"}, "awaiting_verification"},
+		{Analysis{State: "NOT_AFFECTED"}, "not_affected"},
+		{Analysis{State: "FALSE_POSITIVE", Suppressed: true}, "not_affected"},
+		{Analysis{State: "EXPLOITABLE", Suppressed: true}, "risk_accepted"},
+	}
+	for _, tc := range tests {
+		if got, ok := tc.a.FindingState(); !ok || string(got) != tc.want {
+			t.Errorf("%+v -> %q (%v), want %q", tc.a, got, ok, tc.want)
+		}
+	}
+	if _, ok := (Analysis{State: "SOMETHING_NEW"}).FindingState(); ok {
+		t.Error("unknown state should not map")
+	}
+}

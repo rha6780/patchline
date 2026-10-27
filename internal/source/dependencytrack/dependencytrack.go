@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+
+	"github.com/rha6780/patchline/internal/finding"
 )
 
 // Notification groups Patchline acts on. Others are accepted and ignored.
@@ -181,4 +183,64 @@ func (n Notification) SubjectProject() (Project, error) {
 		return Project{}, fmt.Errorf("%s: subject has no project uuid", n.Group)
 	}
 	return s.Project, nil
+}
+
+// Analysis is a Dependency-Track audit decision on one finding.
+type Analysis struct {
+	State         string `json:"state"`
+	Suppressed    bool   `json:"suppressed"`
+	Project       string `json:"project"`       // project uuid
+	Component     string `json:"component"`     // component uuid
+	Vulnerability string `json:"vulnerability"` // vulnerability uuid
+}
+
+// FindingState maps the decision to a Patchline state. Suppressing a
+// finding that is not marked not-affected is treated as risk acceptance.
+func (a Analysis) FindingState() (finding.State, bool) {
+	switch a.State {
+	case "NOT_AFFECTED", "FALSE_POSITIVE":
+		return finding.StateNotAffected, true
+	}
+	if a.Suppressed {
+		return finding.StateRiskAccepted, true
+	}
+	switch a.State {
+	case "IN_TRIAGE", "EXPLOITABLE":
+		return finding.StateInProgress, true
+	case "RESOLVED":
+		// A person says it is fixed; a rescan has to confirm it.
+		return finding.StateAwaitingVerification, true
+	case "NOT_SET", "":
+		return finding.StateNew, true
+	}
+	return "", false
+}
+
+// AuditChange is the subject of PROJECT_AUDIT_CHANGE.
+type AuditChange struct {
+	Component        Component     `json:"component"`
+	Vulnerability    Vulnerability `json:"vulnerability"`
+	Analysis         Analysis      `json:"analysis"`
+	AffectedProjects []Project     `json:"affectedProjects"`
+}
+
+// AuditChange decodes a PROJECT_AUDIT_CHANGE subject.
+func (n Notification) AuditChange() (AuditChange, error) {
+	var a AuditChange
+	if err := json.Unmarshal(n.Subject, &a); err != nil {
+		return AuditChange{}, fmt.Errorf("decode %s subject: %w", n.Group, err)
+	}
+	if a.Analysis.Component == "" {
+		a.Analysis.Component = a.Component.UUID
+	}
+	if a.Analysis.Vulnerability == "" {
+		a.Analysis.Vulnerability = a.Vulnerability.UUID
+	}
+	if a.Analysis.Project == "" && len(a.AffectedProjects) == 1 {
+		a.Analysis.Project = a.AffectedProjects[0].UUID
+	}
+	if a.Analysis.Project == "" || a.Analysis.Component == "" || a.Analysis.Vulnerability == "" {
+		return AuditChange{}, fmt.Errorf("%s: analysis is missing project, component or vulnerability uuid", n.Group)
+	}
+	return a, nil
 }

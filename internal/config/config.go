@@ -33,6 +33,19 @@ type Config struct {
 	DependencyTrackURL string
 	// DependencyTrackAPIKey authenticates to Dependency-Track (PATCHLINE_DT_API_KEY).
 	DependencyTrackAPIKey string
+	// DependencyTrackUIURL is the browser URL of the Dependency-Track
+	// frontend, used for links in messages (PATCHLINE_DT_UI_URL).
+	DependencyTrackUIURL string
+
+	// SlackBotToken enables the Slack sink (PATCHLINE_SLACK_BOT_TOKEN).
+	// Without it notifications are printed to stdout.
+	SlackBotToken string
+	// SlackDefaultChannel receives findings whose service has no
+	// slack_channel (PATCHLINE_SLACK_DEFAULT_CHANNEL).
+	SlackDefaultChannel string
+	// NotifyMinSeverity is the lowest severity that is posted
+	// (PATCHLINE_NOTIFY_MIN_SEVERITY): critical, high, medium, low, info.
+	NotifyMinSeverity string
 }
 
 // DependencyTrackEnabled reports whether findings can be fetched from the
@@ -49,6 +62,8 @@ func Default() Config {
 		LogLevel:        slog.LevelInfo,
 		LogFormat:       "text",
 		ShutdownTimeout: 10 * time.Second,
+
+		NotifyMinSeverity: "medium",
 	}
 }
 
@@ -92,5 +107,17 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	cfg.WebhookToken, _ = lookup("PATCHLINE_WEBHOOK_TOKEN")
 	cfg.DependencyTrackURL, _ = lookup("PATCHLINE_DT_URL")
 	cfg.DependencyTrackAPIKey, _ = lookup("PATCHLINE_DT_API_KEY")
+	cfg.DependencyTrackUIURL, _ = lookup("PATCHLINE_DT_UI_URL")
+	cfg.SlackBotToken, _ = lookup("PATCHLINE_SLACK_BOT_TOKEN")
+	cfg.SlackDefaultChannel, _ = lookup("PATCHLINE_SLACK_DEFAULT_CHANNEL")
+	if v, ok := lookup("PATCHLINE_NOTIFY_MIN_SEVERITY"); ok && v != "" {
+		v = strings.ToLower(v)
+		switch v {
+		case "critical", "high", "medium", "low", "info":
+			cfg.NotifyMinSeverity = v
+		default:
+			return Config{}, fmt.Errorf("PATCHLINE_NOTIFY_MIN_SEVERITY: want critical, high, medium, low or info, got %q", v)
+		}
+	}
 	return cfg, nil
 }

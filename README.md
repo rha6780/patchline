@@ -4,7 +4,7 @@
 
 English | [한국어](README.ko.md)
 
-> ⚠️ **Status: early development (M1).** Findings are collected from Dependency-Track; notifications are not implemented yet. APIs, config and data models will change.
+> ⚠️ **Status: early development (M2).** Findings are collected from Dependency-Track and kept up to date in one Slack message each; resolution tracking is next. APIs, config and data models will change.
 
 Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and deployments as evidence, and keeps a single Slack message up to date until the fix ships.
 
@@ -86,7 +86,7 @@ The UI is read-mostly. Configuration stays in Git, deep analysis stays in Depend
 |---|---|
 | ✅ **M0** Skeleton | Module layout, config, SQLite + migrations, `/healthz`, Compose demo (DT + Patchline) |
 | ✅ **M1** Intake | DT webhooks → inbox → findings joined with the inventory |
-| **M2** Notify | Slack first message, in-place updates, thread history; console sink |
+| ✅ **M2** Notify | Slack first message, in-place updates, thread history; console sink |
 | **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
 | **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
 | **M5** UI | Overview and finding timeline |
@@ -118,6 +118,7 @@ patchline/
 │   ├── policy/             # severity + SLA rules
 │   ├── inventory/          # Git-managed service inventory
 │   ├── intake/             # inbox processor: webhook deliveries → findings
+│   ├── notify/             # notifier: one message per finding, updates, thread history
 │   ├── source/             # inputs: dependencytrack, gitea, jenkins
 │   ├── sink/               # outputs: slack, giteaissue, console
 │   ├── store/              # persistence + migrations
@@ -158,6 +159,10 @@ Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change 
 | `PATCHLINE_WEBHOOK_TOKEN` | — | Shared secret for webhooks. Unset = no authentication (development only) |
 | `PATCHLINE_DT_URL` | — | Dependency-Track API server URL |
 | `PATCHLINE_DT_API_KEY` | — | API key with `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` |
+| `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages |
+| `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Unset = print to stdout |
+| `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | Channel for services without `slack_channel` and unregistered projects |
+| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | Lowest severity that is posted |
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` or `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown limit |
@@ -169,6 +174,15 @@ Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change 
 3. `NEW_VULNERABILITY` and `NEW_VULNERABLE_DEPENDENCY` carry the findings directly; `BOM_PROCESSED` makes Patchline read the project's current findings from the Dependency-Track API.
 4. Each Dependency-Track project **name** is resolved to a service through the inventory, and its **version** becomes the environment (`main`, `prod`). Projects not in the inventory are kept as *unregistered*.
 5. A finding is one service × environment × component × vulnerability. CVE ids are preferred over GHSA/OSV ids as the canonical id; the others are kept as aliases.
+6. `PROJECT_AUDIT_CHANGE` (an analysis decision in Dependency-Track) moves the finding's state: `IN_TRIAGE`/`EXPLOITABLE` → in progress, `NOT_AFFECTED`/`FALSE_POSITIVE` → not affected, suppressed → risk accepted, `RESOLVED` → awaiting verification (a rescan confirms it later).
+
+### How notifications work
+
+- Each finding at or above `PATCHLINE_NOTIFY_MIN_SEVERITY` gets **one** message in its service's `slack_channel` (or the default channel).
+- When the finding changes (state, severity), the message is edited in place (`chat.update`) and the change is added to its thread.
+- Progress is stored per finding, so restarts and Slack outages only delay messages; rate limits (`429`) pause delivery for `Retry-After`.
+- Findings closed before they were ever posted (for example marked not affected right away) are not posted.
+- Without a Slack token the same messages are printed to stdout.
 
 ## Scope
 

@@ -11,13 +11,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/rha6780/patchline/internal/config"
 	"github.com/rha6780/patchline/internal/intake"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/server"
+	"github.com/rha6780/patchline/internal/sink/console"
+	"github.com/rha6780/patchline/internal/sink/slack"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -86,11 +90,27 @@ func run() error {
 		logger.Warn("PATCHLINE_WEBHOOK_TOKEN not set: webhooks are accepted without authentication")
 	}
 
-	procDone := make(chan struct{})
-	go func() {
-		defer close(procDone)
-		proc.Run(ctx)
-	}()
+	var sink notify.Sink = console.New(os.Stdout)
+	if cfg.SlackBotToken != "" {
+		sink = slack.New(cfg.SlackBotToken, "", nil)
+	} else {
+		logger.Info("PATCHLINE_SLACK_BOT_TOKEN not set: notifications are printed to stdout")
+	}
+	notifier := &notify.Notifier{
+		Store:          st,
+		Sink:           sink,
+		Inventory:      inv,
+		Logger:         logger,
+		DefaultChannel: cfg.SlackDefaultChannel,
+		MinSeverity:    cfg.NotifyMinSeverity,
+		DTUIURL:        cfg.DependencyTrackUIURL,
+	}
+	proc.OnChange = notifier.Wake
+
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() { defer workers.Done(); proc.Run(ctx) }()
+	go func() { defer workers.Done(); notifier.Run(ctx) }()
 
 	srv := &http.Server{
 		Addr: cfg.Addr,
@@ -125,7 +145,7 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	err = srv.Shutdown(shutdownCtx)
-	<-procDone
+	workers.Wait()
 	return err
 }
 

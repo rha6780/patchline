@@ -197,3 +197,26 @@ func TestBackoff(t *testing.T) {
 		}
 	}
 }
+
+func TestAuditChangeMovesState(t *testing.T) {
+	ctx := context.Background()
+	p, st := setup(t, nil)
+	changes := 0
+	p.OnChange = func() { changes++ }
+
+	enqueue(t, st, "new_vulnerability.json")
+	if _, err := p.ProcessPending(ctx); err != nil {
+		t.Fatal(err)
+	}
+	enqueue(t, st, "project_audit_change.json")
+	if _, err := p.ProcessPending(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := st.ListFindings(ctx, store.FindingFilter{Service: "storefront"})
+	if len(list) != 1 || list[0].State != "in_progress" {
+		t.Fatalf("findings = %+v", list)
+	}
+	if changes != 2 {
+		t.Errorf("OnChange called %d times, want 2", changes)
+	}
+}

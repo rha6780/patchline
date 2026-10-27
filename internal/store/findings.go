@@ -53,13 +53,26 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 		}
 	}()
 
+	var prevSeverity string
 	err = tx.QueryRowContext(ctx, `
-		SELECT id FROM findings
+		SELECT id, severity FROM findings
 		WHERE service = ? AND environment = ? AND component_purl = ? AND vuln_id = ?`,
-		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id)
+		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id, &prevSeverity)
 
 	switch {
 	case err == nil:
+		if prevSeverity != obs.Severity {
+			ev, mErr := json.Marshal(map[string]any{"from": prevSeverity, "to": obs.Severity, "observation": evidence})
+			if mErr != nil {
+				err = mErr
+				return 0, false, err
+			}
+			if _, err = tx.ExecContext(ctx, `
+				INSERT INTO finding_events (finding_id, kind, evidence, occurred_at) VALUES (?, ?, ?, ?)`,
+				id, finding.EventSeverityChanged, string(ev), now); err != nil {
+				return 0, false, err
+			}
+		}
 		_, err = tx.ExecContext(ctx, `
 			UPDATE findings
 			SET aliases = ?, severity = ?, title = ?, registered = ?, repository = ?,
@@ -115,6 +128,80 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 	return id, created, nil
 }
 
+// DTKey identifies a finding by its Dependency-Track identifiers.
+type DTKey struct {
+	ProjectUUID       string
+	ComponentUUID     string
+	VulnerabilityUUID string
+}
+
+// ApplyState moves the findings matching key to state to, when the
+// lifecycle allows it, recording a state_changed event with evidence.
+// It returns how many findings changed.
+func (s *Store) ApplyState(ctx context.Context, key DTKey, to finding.State, evidence map[string]any) (changed int, err error) {
+	ev, err := json.Marshal(evidence)
+	if err != nil {
+		return 0, err
+	}
+	now := formatTime(s.now())
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, state FROM findings
+		WHERE dt_project_uuid = ? AND dt_component_uuid = ? AND dt_vulnerability_uuid = ?`,
+		key.ProjectUUID, key.ComponentUUID, key.VulnerabilityUUID)
+	if err != nil {
+		return 0, err
+	}
+	type row struct {
+		id    int64
+		state finding.State
+	}
+	var matches []row
+	for rows.Next() {
+		var r row
+		if err = rows.Scan(&r.id, &r.state); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		matches = append(matches, r)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+
+	for _, r := range matches {
+		if !finding.CanTransition(r.state, to) {
+			continue
+		}
+		if _, err = tx.ExecContext(ctx,
+			`UPDATE findings SET state = ?, updated_at = ? WHERE id = ?`, to, now, r.id); err != nil {
+			return 0, err
+		}
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO finding_events (finding_id, kind, from_state, to_state, evidence, occurred_at)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			r.id, finding.EventStateChanged, r.state, to, string(ev), now); err != nil {
+			return 0, err
+		}
+		changed++
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return changed, nil
+}
+
 // FindingFilter narrows ListFindings. Empty fields match everything.
 type FindingFilter struct {
 	Service     string
@@ -133,10 +220,7 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 			args = append(args, v)
 		}
 	}
-	q := `SELECT id, service, registered, repository, environment, component_purl,
-	             component_name, component_version, vuln_id, aliases, severity, title,
-	             state, due_at, first_seen_at, updated_at, dt_project_uuid
-	      FROM findings`
+	q := findingColumns + ` FROM findings`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -158,29 +242,49 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 
 	out := []Finding{}
 	for rows.Next() {
-		var (
-			r       Finding
-			aliases string
-			due     sql.NullString
-		)
-		if err := rows.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
-			&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
-			&r.State, &due, &r.FirstSeenAt, &r.UpdatedAt, &r.DTProjectUUID); err != nil {
+		r, err := scanFinding(rows)
+		if err != nil {
 			return nil, err
-		}
-		if err := json.Unmarshal([]byte(aliases), &r.Aliases); err != nil {
-			return nil, fmt.Errorf("finding %d: aliases: %w", r.ID, err)
-		}
-		if due.Valid {
-			r.DueAt = &due.String
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
 }
 
+const findingColumns = `SELECT id, service, registered, repository, environment, component_purl,
+	component_name, component_version, vuln_id, aliases, severity, title,
+	state, due_at, first_seen_at, updated_at, dt_project_uuid`
+
+type scanner interface{ Scan(dest ...any) error }
+
+func scanFinding(sc scanner) (Finding, error) {
+	var (
+		r       Finding
+		aliases string
+		due     sql.NullString
+	)
+	if err := sc.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
+		&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
+		&r.State, &due, &r.FirstSeenAt, &r.UpdatedAt, &r.DTProjectUUID); err != nil {
+		return Finding{}, err
+	}
+	if err := json.Unmarshal([]byte(aliases), &r.Aliases); err != nil {
+		return Finding{}, fmt.Errorf("finding %d: aliases: %w", r.ID, err)
+	}
+	if due.Valid {
+		r.DueAt = &due.String
+	}
+	return r, nil
+}
+
+// GetFinding returns one finding.
+func (s *Store) GetFinding(ctx context.Context, id int64) (Finding, error) {
+	return scanFinding(s.db.QueryRowContext(ctx, findingColumns+` FROM findings WHERE id = ?`, id))
+}
+
 // FindingEvent is one entry of a finding's timeline.
 type FindingEvent struct {
+	ID         int64           `json:"id"`
 	Kind       string          `json:"kind"`
 	FromState  *string         `json:"from_state,omitempty"`
 	ToState    *string         `json:"to_state,omitempty"`
@@ -191,7 +295,7 @@ type FindingEvent struct {
 // FindingEvents returns a finding's events in order.
 func (s *Store) FindingEvents(ctx context.Context, findingID int64) ([]FindingEvent, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT kind, from_state, to_state, evidence, occurred_at
+		SELECT id, kind, from_state, to_state, evidence, occurred_at
 		FROM finding_events WHERE finding_id = ? ORDER BY occurred_at, id`, findingID)
 	if err != nil {
 		return nil, err
@@ -204,7 +308,7 @@ func (s *Store) FindingEvents(ctx context.Context, findingID int64) ([]FindingEv
 			from, to sql.NullString
 			ev       string
 		)
-		if err := rows.Scan(&e.Kind, &from, &to, &ev, &e.OccurredAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Kind, &from, &to, &ev, &e.OccurredAt); err != nil {
 			return nil, err
 		}
 		if from.Valid {

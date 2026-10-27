@@ -4,7 +4,7 @@
 
 [English](README.md) | 한국어
 
-> ⚠️ **상태: 초기 개발 중(M1).** Dependency-Track에서 Finding을 수집하는 단계까지 구현됐고, 알림은 아직 없습니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
+> ⚠️ **상태: 초기 개발 중(M2).** Dependency-Track에서 Finding을 수집하고 Finding마다 Slack 메시지 하나로 상태를 갱신합니다. 해결 판정은 다음 단계입니다. API, 설정, 데이터 모델은 바뀔 수 있습니다.
 
 Patchline은 [Dependency-Track](https://dependencytrack.org/) 위에서 조치 루프를 닫아 줍니다. Finding을 서비스·담당자와 연결하고, Renovate PR과 배포를 해결 근거로 추적하며, 수정이 배포될 때까지 Slack 메시지 하나를 계속 갱신합니다.
 
@@ -86,7 +86,7 @@ UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-T
 |---|---|
 | ✅ **M0** 뼈대 | 모듈 구조, 설정, SQLite + 마이그레이션, `/healthz`, Compose 데모(DT + Patchline) |
 | ✅ **M1** 수집 | DT Webhook → Inbox → 인벤토리와 연결된 Finding 생성 |
-| **M2** 알림 | Slack 최초 알림, 메시지 갱신, 스레드 이력, Console Sink |
+| ✅ **M2** 알림 | Slack 최초 알림, 메시지 갱신, 스레드 이력, Console Sink |
 | **M3** 해결 판정 | 재스캔 diff → 해결·재발, Commit SHA 기록 |
 | **M4** PR 연결 | Gitea Webhook, Renovate PR ↔ Finding, "이 PR로 고쳐지는가" 판정 |
 | **M5** UI | Overview, Finding 타임라인 |
@@ -118,6 +118,7 @@ patchline/
 │   ├── policy/             # 등급 + SLA 규칙
 │   ├── inventory/          # Git으로 관리하는 서비스 인벤토리
 │   ├── intake/             # Inbox 처리기: Webhook 수신분 → Finding
+│   ├── notify/             # Notifier: Finding당 메시지 1개, 갱신, 스레드 이력
 │   ├── source/             # 입력: dependencytrack, gitea, jenkins
 │   ├── sink/               # 출력: slack, giteaissue, console
 │   ├── store/              # 저장소 + 마이그레이션
@@ -158,6 +159,10 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 | `PATCHLINE_WEBHOOK_TOKEN` | — | Webhook 공유 비밀값. 비우면 인증 없음(개발용) |
 | `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
 | `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키 |
+| `PATCHLINE_DT_UI_URL` | — | 메시지에 넣을 Dependency-Track UI 주소 |
+| `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack Bot 토큰(`chat:write`, `chat:write.public`). 비우면 stdout으로 출력 |
+| `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | `slack_channel`이 없는 서비스와 미등록 프로젝트용 채널 |
+| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | 알림을 보낼 최소 심각도 |
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` 또는 `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | 정상 종료 제한 시간 |
@@ -169,6 +174,15 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 3. `NEW_VULNERABILITY`, `NEW_VULNERABLE_DEPENDENCY`는 Finding을 직접 담고 있고, `BOM_PROCESSED`를 받으면 해당 프로젝트의 현재 Finding을 Dependency-Track API로 조회합니다.
 4. Dependency-Track 프로젝트 **이름**은 인벤토리에서 서비스로 연결되고, **버전**은 환경(`main`, `prod`)이 됩니다. 인벤토리에 없는 프로젝트는 *미등록*으로 저장됩니다.
 5. Finding 단위는 서비스 × 환경 × 구성요소 × 취약점입니다. 대표 ID는 CVE를 우선하고, GHSA·OSV ID는 별칭으로 보관합니다.
+6. `PROJECT_AUDIT_CHANGE`(Dependency-Track의 분석 판정)를 받으면 Finding 상태가 바뀝니다. `IN_TRIAGE`·`EXPLOITABLE` → 조치중, `NOT_AFFECTED`·`FALSE_POSITIVE` → 해당 없음, Suppress → 위험 수용, `RESOLVED` → 검증대기(이후 재스캔으로 확인)입니다.
+
+### 알림 동작 방식
+
+- `PATCHLINE_NOTIFY_MIN_SEVERITY` 이상인 Finding은 서비스의 `slack_channel`(없으면 기본 채널)에 메시지를 **하나만** 보냅니다.
+- Finding이 바뀌면(상태, 심각도) 같은 메시지를 `chat.update`로 수정하고, 변경 내용을 스레드에 남깁니다.
+- 진행 상황을 Finding별로 저장하므로 재시작이나 Slack 장애가 있어도 메시지가 늦어질 뿐 빠지지 않습니다. Rate limit(`429`)을 받으면 `Retry-After`만큼 쉬었다가 보냅니다.
+- 알리기 전에 이미 종료된 Finding(예: 바로 해당 없음으로 판정)은 보내지 않습니다.
+- Slack 토큰이 없으면 같은 내용을 stdout으로 출력합니다.
 
 ## 범위 밖
 

@@ -21,7 +21,10 @@ const (
 
 // Event kinds recorded in the append-only finding_events log.
 const (
-	EventDetected = "detected"
+	EventDetected        = "detected"
+	EventStateChanged    = "state_changed"
+	EventSeverityChanged = "severity_changed"
+	EventNotified        = "notified"
 )
 
 // Severity levels, normalized to lower case.

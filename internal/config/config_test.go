@@ -25,15 +25,19 @@ func TestFromLookupDefaults(t *testing.T) {
 
 func TestFromLookupOverrides(t *testing.T) {
 	cfg, err := FromLookup(lookupFrom(map[string]string{
-		"PATCHLINE_ADDR":             "127.0.0.1:9000",
-		"PATCHLINE_DB_PATH":          "/var/lib/patchline/db.sqlite",
-		"PATCHLINE_LOG_LEVEL":        "debug",
-		"PATCHLINE_LOG_FORMAT":       "JSON",
-		"PATCHLINE_SHUTDOWN_TIMEOUT": "3s",
-		"PATCHLINE_INVENTORY_PATH":   "/etc/patchline/inventory",
-		"PATCHLINE_WEBHOOK_TOKEN":    "tok",
-		"PATCHLINE_DT_URL":           "http://dt:8080",
-		"PATCHLINE_DT_API_KEY":       "key",
+		"PATCHLINE_ADDR":                  "127.0.0.1:9000",
+		"PATCHLINE_DB_PATH":               "/var/lib/patchline/db.sqlite",
+		"PATCHLINE_LOG_LEVEL":             "debug",
+		"PATCHLINE_LOG_FORMAT":            "JSON",
+		"PATCHLINE_SHUTDOWN_TIMEOUT":      "3s",
+		"PATCHLINE_INVENTORY_PATH":        "/etc/patchline/inventory",
+		"PATCHLINE_WEBHOOK_TOKEN":         "tok",
+		"PATCHLINE_DT_URL":                "http://dt:8080",
+		"PATCHLINE_DT_API_KEY":            "key",
+		"PATCHLINE_DT_UI_URL":             "http://localhost:18082",
+		"PATCHLINE_SLACK_BOT_TOKEN":       "xoxb-1",
+		"PATCHLINE_SLACK_DEFAULT_CHANNEL": "#security",
+		"PATCHLINE_NOTIFY_MIN_SEVERITY":   "HIGH",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +53,11 @@ func TestFromLookupOverrides(t *testing.T) {
 		WebhookToken:          "tok",
 		DependencyTrackURL:    "http://dt:8080",
 		DependencyTrackAPIKey: "key",
+		DependencyTrackUIURL:  "http://localhost:18082",
+
+		SlackBotToken:       "xoxb-1",
+		SlackDefaultChannel: "#security",
+		NotifyMinSeverity:   "high",
 	}
 	if cfg != want {
 		t.Fatalf("got %+v, want %+v", cfg, want)
@@ -60,6 +69,7 @@ func TestFromLookupInvalid(t *testing.T) {
 		{"PATCHLINE_LOG_LEVEL": "loud"},
 		{"PATCHLINE_LOG_FORMAT": "xml"},
 		{"PATCHLINE_SHUTDOWN_TIMEOUT": "soon"},
+		{"PATCHLINE_NOTIFY_MIN_SEVERITY": "urgent"},
 	} {
 		if _, err := FromLookup(lookupFrom(tc)); err == nil {
 			t.Errorf("%v: expected error", tc)

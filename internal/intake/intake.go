@@ -37,6 +37,7 @@ type Store interface {
 	MarkInboxFailed(ctx context.Context, id int64, cause error, retryAfter time.Duration) error
 	UpsertFinding(ctx context.Context, obs finding.Observation, evidence map[string]any) (int64, bool, error)
 	TouchSourceProject(ctx context.Context, p store.SourceProject, bom bool) error
+	ApplyState(ctx context.Context, key store.DTKey, to finding.State, evidence map[string]any) (int, error)
 }
 
 // Processor drains the webhook inbox.
@@ -47,6 +48,9 @@ type Processor struct {
 	// findings only arrive through NEW_VULNERABILITY / NEW_VULNERABLE_DEPENDENCY.
 	DT     FindingsFetcher
 	Logger *slog.Logger
+	// OnChange is called after an item created or changed findings
+	// (for example to wake the notifier). Optional.
+	OnChange func()
 
 	PollInterval time.Duration // default 5s
 	MaxAttempts  int           // default 5
@@ -73,6 +77,9 @@ func (p *Processor) defaults() {
 	}
 	if p.Inventory == nil {
 		p.Inventory = inventory.Empty()
+	}
+	if p.OnChange == nil {
+		p.OnChange = func() {}
 	}
 	p.wake = make(chan struct{}, 1)
 }
@@ -177,6 +184,7 @@ func (p *Processor) handleDependencyTrack(ctx context.Context, it store.InboxIte
 		if err != nil {
 			return "", err
 		}
+		p.OnChange()
 		p.Logger.Info("dependency-track notification processed", "id", it.ID, "group", n.Group,
 			"sightings", len(sightings), "new_findings", created)
 		return "", nil
@@ -202,13 +210,50 @@ func (p *Processor) handleDependencyTrack(ctx context.Context, it store.InboxIte
 		if err != nil {
 			return "", err
 		}
+		p.OnChange()
 		p.Logger.Info("dependency-track BOM processed", "id", it.ID, "project", project.Name,
 			"version", project.Version, "findings", len(sightings), "new_findings", created)
 		return "", nil
 
+	case dependencytrack.GroupProjectAuditChange:
+		return p.handleAuditChange(ctx, it, n)
+
 	default:
 		return "ignored: group " + n.Group, nil
 	}
+}
+
+func (p *Processor) handleAuditChange(ctx context.Context, it store.InboxItem, n dependencytrack.Notification) (string, error) {
+	a, err := n.AuditChange()
+	if err != nil {
+		return "", err
+	}
+	to, ok := a.Analysis.FindingState()
+	if !ok {
+		return "ignored: analysis state " + a.Analysis.State, nil
+	}
+	changed, err := p.Store.ApplyState(ctx, store.DTKey{
+		ProjectUUID:       a.Analysis.Project,
+		ComponentUUID:     a.Analysis.Component,
+		VulnerabilityUUID: a.Analysis.Vulnerability,
+	}, to, map[string]any{
+		"source":             SourceDependencyTrack,
+		"notification_group": n.Group,
+		"inbox_id":           it.ID,
+		"analysis_state":     a.Analysis.State,
+		"suppressed":         a.Analysis.Suppressed,
+		"title":              n.Title,
+	})
+	if err != nil {
+		return "", err
+	}
+	p.Logger.Info("dependency-track audit change processed", "id", it.ID, "analysis", a.Analysis.State,
+		"suppressed", a.Analysis.Suppressed, "to", to, "findings_changed", changed)
+	if changed == 0 {
+		return "no matching finding changed", nil
+	}
+	p.OnChange()
+	return "", nil
 }
 
 // record upserts each sighting and returns how many new findings it created.

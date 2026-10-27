@@ -68,6 +68,10 @@ services:
       PATCHLINE_WEBHOOK_TOKEN: ${PATCHLINE_WEBHOOK_TOKEN:-change-me}
       PATCHLINE_DT_URL: http://dtrack-apiserver:8080
       PATCHLINE_DT_API_KEY: ${PATCHLINE_DT_API_KEY:-}
+      PATCHLINE_DT_UI_URL: http://localhost:${DT_UI_PORT:-18082}
+      PATCHLINE_SLACK_BOT_TOKEN: ${PATCHLINE_SLACK_BOT_TOKEN:-}
+      PATCHLINE_SLACK_DEFAULT_CHANNEL: ${PATCHLINE_SLACK_DEFAULT_CHANNEL:-}
+      PATCHLINE_NOTIFY_MIN_SEVERITY: ${PATCHLINE_NOTIFY_MIN_SEVERITY:-medium}
     volumes:
       - patchline-data:/data
       - ../../examples/inventory:/etc/patchline/inventory:ro
