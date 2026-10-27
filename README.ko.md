@@ -99,7 +99,7 @@ UI는 조회 위주입니다. 설정은 Git에서, 상세 분석은 Dependency-T
 | 언어 | Go |
 | HTTP | `net/http` (Go 1.22+ 라우팅) |
 | UI | `templ` + HTMX |
-| DB | SQLite(`modernc.org/sqlite`) / PostgreSQL(`pgx`), `sqlc`, `goose` |
+| DB | SQLite(`ncruces/go-sqlite3`, 순수 Go) / PostgreSQL(`pgx`), `sqlc`, `goose` |
 | 스케줄러 | `gocron` |
 | 연동 | Gitea SDK, `slack-go/slack`, 얇은 Dependency-Track 클라이언트 |
 | 식별자 | `packageurl-go`, 생태계별 버전 비교 라이브러리 |
@@ -129,14 +129,22 @@ patchline/
 
 ## 시작하기
 
-아직 준비 중입니다. 지금은 뼈대만 빌드하고 실행할 수 있습니다.
+아직 사용할 수 있는 기능은 없고, M0 뼈대만 실행됩니다.
 
 ```sh
-go build -o bin/patchline ./cmd/patchline
-./bin/patchline            # :8080에서 실행, GET /healthz
+make build && ./bin/patchline     # :8080, GET /healthz 와 /readyz
+make demo-up                      # docker compose로 Dependency-Track + Patchline 실행
 ```
 
-Dependency-Track과 샘플 SBOM이 포함된 `docker compose up` 데모는 M0에서 추가할 예정입니다.
+| 환경변수 | 기본값 |
+|---|---|
+| `PATCHLINE_ADDR` | `:8080` |
+| `PATCHLINE_DB_PATH` | `data/patchline.db` |
+| `PATCHLINE_LOG_LEVEL` | `info` |
+| `PATCHLINE_LOG_FORMAT` | `text` (`json`) |
+| `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` |
+
+데모에서 Dependency-Track은 `:8081`(API), `:8082`(UI)로 열립니다. API 서버는 메모리를 수 GB 사용합니다.
 
 ## 범위 밖
 

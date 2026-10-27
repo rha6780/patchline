@@ -99,7 +99,7 @@ The UI is read-mostly. Configuration stays in Git, deep analysis stays in Depend
 | Language | Go |
 | HTTP | `net/http` (Go 1.22+ routing) |
 | UI | `templ` + HTMX |
-| Database | SQLite (`modernc.org/sqlite`) / PostgreSQL (`pgx`), `sqlc`, `goose` |
+| Database | SQLite (`ncruces/go-sqlite3`, pure Go) / PostgreSQL (`pgx`), `sqlc`, `goose` |
 | Scheduler | `gocron` |
 | Integrations | Gitea SDK, `slack-go/slack`, thin Dependency-Track client |
 | Identifiers | `packageurl-go`, ecosystem version comparators |
@@ -129,14 +129,22 @@ patchline/
 
 ## Getting started
 
-Not ready yet. For now you can build and run the skeleton:
+Not usable yet — only the M0 skeleton runs.
 
 ```sh
-go build -o bin/patchline ./cmd/patchline
-./bin/patchline            # listens on :8080, GET /healthz
+make build && ./bin/patchline     # :8080, GET /healthz and /readyz
+make demo-up                      # Dependency-Track + Patchline via docker compose
 ```
 
-A `docker compose up` demo with Dependency-Track and sample SBOMs is planned for M0.
+| Variable | Default |
+|---|---|
+| `PATCHLINE_ADDR` | `:8080` |
+| `PATCHLINE_DB_PATH` | `data/patchline.db` |
+| `PATCHLINE_LOG_LEVEL` | `info` |
+| `PATCHLINE_LOG_FORMAT` | `text` (`json`) |
+| `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` |
+
+The demo serves Dependency-Track on `:8081` (API) and `:8082` (UI). Its API server needs several GB of memory.
 
 ## Scope
 

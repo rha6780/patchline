@@ -3,26 +3,119 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/rha6780/patchline/internal/config"
+	"github.com/rha6780/patchline/internal/server"
+	"github.com/rha6780/patchline/internal/store"
 )
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
-	addr := os.Getenv("PATCHLINE_ADDR")
-	if addr == "" {
-		addr = ":8080"
-	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-
-	slog.Info("patchline listening", "addr", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		slog.Error("server stopped", "err", err)
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "patchline:", err)
 		os.Exit(1)
 	}
+}
+
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "--version":
+			fmt.Println(version)
+			return nil
+		case "healthcheck":
+			// Used by container health checks: the runtime image has no curl.
+			return healthcheck(cfg.Addr)
+		default:
+			return fmt.Errorf("unknown command %q (want: version, healthcheck)", os.Args[1])
+		}
+	}
+	logger := newLogger(cfg)
+	slog.SetDefault(logger)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	db, err := store.Open(ctx, cfg.DatabasePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	applied, err := store.Migrate(ctx, db)
+	if err != nil {
+		return err
+	}
+	logger.Info("database ready", "path", cfg.DatabasePath, "migrations_applied", applied)
+
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           server.New(db),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("patchline listening", "addr", cfg.Addr, "version", version)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	logger.Info("shutting down")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
+}
+
+func healthcheck(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("parse PATCHLINE_ADDR: %w", err)
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthz returned %s", resp.Status)
+	}
+	return nil
+}
+
+func newLogger(cfg config.Config) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: cfg.LogLevel}
+	if cfg.LogFormat == "json" {
+		return slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	}
+	return slog.New(slog.NewTextHandler(os.Stdout, opts))
 }
