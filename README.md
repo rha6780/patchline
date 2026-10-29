@@ -4,9 +4,9 @@
 
 English | [한국어](README.ko.md)
 
-> ⚠️ **Status: early development.** The MVP loop works end to end — detection, Slack, Renovate PRs, rescan resolution and a web UI — but APIs, config and data models may still change before `v0.1.0`. APIs, config and data models will change.
+> ⚠️ **Status: early development.** Detection, Slack, Renovate PRs, rescan resolution, due dates and the web UI work end to end. APIs, configuration and data models may still change.
 
-Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and deployments as evidence, and keeps a single Slack message up to date until the fix ships.
+Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and rescans as evidence, and keeps a single Slack message up to date until the fix ships.
 
 Patchline does **not** detect vulnerabilities or compare versions itself. Dependency-Track decides *what is vulnerable*; Renovate proposes *how to fix it*; Patchline tracks *whether it actually got fixed, by whom, and by when*.
 
@@ -19,19 +19,18 @@ Scanners are good at finding vulnerabilities. What usually goes missing is every
 - Is the fix only on `main`, or is it running in `prod`?
 - When is it due, and is anyone late?
 
-Patchline answers these with **evidence** (commit SHA → PR → rescan → image digest), not with someone flipping a status by hand.
+Patchline answers these with **evidence** (commit SHA → PR → rescan), not with someone flipping a status by hand.
 
 ## How it works
 
 ```
 Service repos (Gitea) ── CI: SBOM (main) ──┐
 Deploy pipeline       ── image SBOM (prod) ┼──▶ Dependency-Track ── webhook ──┐
-Inventory (manual)    ── CPE SBOM ─────────┘                                  │
-                                                                              ▼
-Renovate ── security PRs ── Gitea webhook ───────────────────────────▶  Patchline  ◀── inventory (Git, YAML)
-Deploy pipeline ── deploy webhook (SHA, digest) ─────────────────────▶      │
-                                                         ┌──────────────────┼──────────────────┐
-                                                    Slack (bot)      Gitea issues           Web UI
+                                           │                                  ▼
+Renovate ── fix PRs ── Gitea / Forgejo / GitHub webhook ─────────────▶  Patchline  ◀── inventory (Git, YAML)
+                                                                              │        ◀── CISA KEV
+                                                                    ┌─────────┴─────────┐
+                                                               Slack (bot)            Web UI
 ```
 
 | Tool | Role |
@@ -40,7 +39,7 @@ Deploy pipeline ── deploy webhook (SHA, digest) ─────────�
 | **Renovate** | Opens fix PRs (dependency bumps, base-image digest updates) |
 | **Patchline** | Joins findings with the inventory, computes SLA, notifies, tracks state with evidence |
 
-OpenCVE can be added later as another source for host-installed infrastructure products.
+Dependency-Track is the vulnerability source today. Support for other tools as sources is planned, so Patchline is not tied to Dependency-Track.
 
 ## Features
 
@@ -49,17 +48,14 @@ OpenCVE can be added later as another source for host-installed infrastructure p
 - **Renovate PR linking** — PR opened → *in progress*, merged → *awaiting verification*, with a check that the target version leaves the affected range
 - **One message per finding** — Slack messages are updated in place (`chat.update`) with history in the thread
 - **SLA as code** — due dates by effective severity; CISA KEV, EPSS and service exposure escalate; reminders before and after the due date
-- **Read-only web UI** — overview with overdue counts, per-service environment comparison, evidence timeline, integration health
+- **Read-only web UI** — overview with overdue counts, per-service environment comparison, evidence timeline, integration health; English and Korean, light and dark themes
 - **Gitea / Forgejo first** (GitHub webhooks work too)
 - **Lightweight** — a single binary or container with SQLite
-
-Planned: risk acceptances that expire; production deploy evidence; Gitea issue mirror; OpenCVE as a source; PostgreSQL.
 
 ### Finding states
 
 | State | Trigger |
 |---|---|
-| `needs_review` | Component version unknown or CPE match uncertain (reserved) |
 | `new` | New finding from Dependency-Track |
 | `in_progress` | Analysis in triage / exploitable, or a fix PR is linked |
 | `awaiting_verification` | Fix PR merged, or analysis marked resolved |
@@ -69,19 +65,6 @@ Planned: risk acceptances that expire; production deploy evidence; Gitea issue m
 | `reopened` | A resolved finding is reported again |
 
 Human decisions are made in **one place**: Dependency-Track analysis.
-
-## Roadmap
-
-| Milestone | Scope |
-|---|---|
-| ✅ **M0** Skeleton | Module layout, config, SQLite + migrations, `/healthz`, Compose demo (DT + Patchline) |
-| ✅ **M1** Intake | DT webhooks → inbox → findings joined with the inventory |
-| ✅ **M2** Notify | Slack first message, in-place updates, thread history; console sink |
-| ✅ **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
-| ✅ **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
-| ✅ **M5** UI | Overview and finding timeline |
-| ✅ SLA | Policy-based due dates (KEV, EPSS, exposure) and reminders |
-| Later | Exception expiry, `prod` deploy evidence, Gitea issue sink, OpenCVE source |
 
 ## Tech stack
 
@@ -104,22 +87,22 @@ Human decisions are made in **one place**: Dependency-Track analysis.
 patchline/
 ├── cmd/patchline/          # main entrypoint
 ├── internal/
-│   ├── config/             # env + YAML settings
+│   ├── config/             # environment variables
 │   ├── server/             # HTTP: webhook inbox, internal API, UI routes
 │   ├── finding/            # model, state transitions, event log
 │   ├── policy/             # severity + SLA rules
 │   ├── inventory/          # Git-managed service inventory
+│   ├── i18n/               # English and Korean text
 │   ├── intake/             # inbox processor: webhook deliveries → findings
 │   ├── notify/             # notifier: one message per finding, updates, thread history
-│   ├── source/             # inputs: dependencytrack, gitea, jenkins
-│   ├── sink/               # outputs: slack, giteaissue, console
+│   ├── source/             # inputs: dependencytrack, gitea, kev
+│   ├── sink/               # outputs: slack, console
 │   ├── store/              # persistence + migrations
 │   ├── version/            # best-effort cross-ecosystem version comparison
-│   ├── job/                # scheduled jobs (reminders, expiry, heartbeat)
+│   ├── job/                # scheduled jobs: SLA evaluation, reminders, KEV refresh
 │   └── web/                # server-rendered pages + embedded CSS
 ├── examples/               # sample inventory, policy, SBOM
-├── deploy/compose/         # docker compose demo
-└── docs/
+└── deploy/compose/         # docker compose demo
 ```
 
 ## Getting started
@@ -135,6 +118,8 @@ Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change 
 ### Web UI
 
 Open `http://localhost:8080/` (`:18080` in the demo). The UI has no login: put it behind your authenticating proxy.
+
+The header switches between English and Korean and between system, light and dark themes. The choice is kept in a cookie; without one, the language follows the browser.
 
 | Page | Path |
 |---|---|
@@ -174,6 +159,7 @@ Open `http://localhost:8080/` (`:18080` in the demo). The UI has no login: put i
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Unset = print to stdout |
 | `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | Channel for services without `slack_channel` and unregistered projects |
 | `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | Lowest severity that is posted |
+| `PATCHLINE_NOTIFY_LANG` | `en` | Language of Slack and console messages: `en` or `ko` |
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` or `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown limit |
@@ -213,7 +199,7 @@ jq --arg c "$GITHUB_SHA" --arg r "$GITHUB_REF" \
 4. The target version is compared with the vulnerability's affected ranges from Dependency-Track: **leaves the affected range**, **still affected**, or **not verified** when no range is known.
 5. A linked pull request moves the finding to *in progress*; merging it moves it to *awaiting verification*. Closing without merging is recorded but keeps the state. Only the next rescan resolves the finding.
 
-Base-image updates are not matched to OS-package findings yet; they resolve through the rescan as usual.
+Base-image updates are not matched to OS-package findings; those resolve through the rescan.
 
 ### How due dates work
 
