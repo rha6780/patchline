@@ -135,7 +135,9 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := u.o.Now()
+	nowS, weekS := store.FormatTime(now), store.FormatTime(now.Add(7*24*time.Hour))
 	var (
+		overdue, dueWeek                     int
 		open, critHigh, awaiting, resolved30 int
 		mttrSum                              time.Duration
 		mttrN                                int
@@ -146,7 +148,12 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 		st := finding.State(f.State)
 		if st.Open() {
 			open++
-			if f.Severity == finding.SeverityCritical || f.Severity == finding.SeverityHigh {
+			if f.Overdue(nowS) {
+				overdue++
+			} else if f.DueAt != nil && *f.DueAt < weekS {
+				dueWeek++
+			}
+			if sev := f.DisplaySeverity(); sev == finding.SeverityCritical || sev == finding.SeverityHigh {
 				critHigh++
 				attention = append(attention, f)
 			}
@@ -158,7 +165,7 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 				row = &serviceRow{Name: f.Service, Registered: f.Registered, Counts: map[string]int{}}
 				rows[f.Service] = row
 			}
-			row.Counts[f.Severity]++
+			row.Counts[f.DisplaySeverity()]++
 			row.Open++
 		}
 		if st == finding.StateResolved && f.ResolvedAt != nil {
@@ -188,9 +195,19 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 		}
 		return a.Name < b.Name
 	})
-	sort.SliceStable(attention, func(i, j int) bool { return attention[i].FirstSeenAt < attention[j].FirstSeenAt })
+	// Overdue first, then by due date, then severity.
 	sort.SliceStable(attention, func(i, j int) bool {
-		return finding.SeverityRank(attention[i].Severity) < finding.SeverityRank(attention[j].Severity)
+		a, b := attention[i], attention[j]
+		if ao, bo := a.Overdue(nowS), b.Overdue(nowS); ao != bo {
+			return ao
+		}
+		if (a.DueAt != nil) != (b.DueAt != nil) {
+			return a.DueAt != nil
+		}
+		if a.DueAt != nil && *a.DueAt != *b.DueAt {
+			return *a.DueAt < *b.DueAt
+		}
+		return finding.SeverityRank(a.DisplaySeverity()) < finding.SeverityRank(b.DisplaySeverity())
 	})
 	sort.Slice(recent, func(i, j int) bool { return *recent[i].ResolvedAt > *recent[j].ResolvedAt })
 
@@ -200,6 +217,7 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 	}
 	u.render(w, "overview", "Overview", map[string]any{
 		"Open": open, "CritHigh": critHigh, "Awaiting": awaiting, "Resolved30": resolved30, "MTTR": mttr,
+		"Overdue": overdue, "DueWeek": dueWeek, "Now": nowS,
 		"Services": services, "Severities": severities,
 		"Attention": limit(attention, 10), "Recent": limit(recent, 10), "Total": len(all),
 	})
@@ -213,13 +231,23 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 		Service: q.Get("service"), Environment: q.Get("environment"),
 		State: q.Get("state"), Severity: q.Get("severity"), Open: q.Get("open") == "1", Limit: 500,
 	}
+	due := q.Get("due")
+	switch due {
+	case "overdue":
+		f.DueBefore = store.FormatTime(u.o.Now())
+	case "week":
+		f.DueBefore = store.FormatTime(u.o.Now().Add(7 * 24 * time.Hour))
+	default:
+		due = ""
+	}
 	list, err := u.o.Store.ListFindings(r.Context(), f)
 	if err != nil {
 		u.fail(w, err)
 		return
 	}
 	u.render(w, "findings", "Findings", map[string]any{
-		"Findings": list, "Filter": f, "Severities": severities, "States": states,
+		"Findings": list, "Filter": f, "Severities": severities, "States": states, "Due": due,
+		"Now": store.FormatTime(u.o.Now()),
 	})
 }
 
@@ -267,6 +295,7 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 	}
 	u.render(w, "finding", f.VulnID, map[string]any{
 		"F": f, "Service": svc, "Timeline": timeline, "PRs": prs, "DTLink": u.dtLink(f),
+		"Now": store.FormatTime(u.o.Now()),
 	})
 }
 
@@ -302,7 +331,7 @@ func (u *UI) service(w http.ResponseWriter, r *http.Request) {
 		key := f.ComponentName + "\x00" + f.VulnID
 		row, ok := rows[key]
 		if !ok {
-			row = &envRow{Component: f.ComponentName, Version: f.ComponentVersion, VulnID: f.VulnID, Severity: f.Severity, Cells: map[string]store.Finding{}}
+			row = &envRow{Component: f.ComponentName, Version: f.ComponentVersion, VulnID: f.VulnID, Severity: f.DisplaySeverity(), Cells: map[string]store.Finding{}}
 			rows[key] = row
 			keys = append(keys, key)
 		}
@@ -425,6 +454,10 @@ func (u *UI) funcs() template.FuncMap {
 		"staleBOM":  func(lastBOM, before string) bool { return lastBOM == "" || lastBOM < before },
 		"dtProject": func(uuid string) string { return u.dtProjectLink(uuid) },
 		"rich":      rich,
+		"dueText":   func(due string) string { return notify.DueText(due, u.o.Now()) },
+		"sevText":   notify.SeverityText,
+		"overdue":   func(f store.Finding, now string) bool { return f.Overdue(now) },
+		"epss":      func(v *float64) string { return fmt.Sprintf("%.2f", *v) },
 		"deref": func(s *string) string {
 			if s == nil {
 				return ""

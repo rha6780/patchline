@@ -132,3 +132,23 @@ func TestBlocks(t *testing.T) {
 		t.Errorf("unregistered blocks: %s", b)
 	}
 }
+
+func TestBlocksDueAndEscalation(t *testing.T) {
+	now = func() time.Time { return time.Date(2026, 11, 7, 0, 0, 0, 0, time.UTC) }
+	defer func() { now = time.Now }()
+	m := message()
+	due := "2026-11-05T00:00:00.000Z"
+	m.Finding.Severity, m.Finding.EffectiveSeverity = "high", "critical"
+	m.Finding.SLAReasons, m.Finding.DueAt = []string{"in CISA KEV"}, &due
+	b, _ := json.Marshal(Blocks(m))
+	s := string(b)
+	for _, want := range []string{"CRITICAL · CVE-2021-44228", "🚨 overdue by 2 days (due 2026-11-05)", "critical (scanner: high, in CISA KEV)"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in %s", want, s)
+		}
+	}
+	m.Finding.State = "resolved"
+	if b, _ := json.Marshal(Blocks(m)); strings.Contains(string(b), "overdue") {
+		t.Error("closed findings should not show a due date")
+	}
+}

@@ -33,6 +33,26 @@ type Finding struct {
 	DTProjectUUID    string   `json:"dt_project_uuid,omitempty"`
 	DTVulnSource     string   `json:"dt_vuln_source,omitempty"`
 	DTVulnID         string   `json:"dt_vuln_id,omitempty"`
+
+	EPSS              *float64 `json:"epss,omitempty"`
+	KEV               bool     `json:"kev"`
+	EffectiveSeverity string   `json:"effective_severity,omitempty"`
+	SLAReasons        []string `json:"sla_reasons,omitempty"`
+	SLAStartedAt      *string  `json:"sla_started_at,omitempty"`
+}
+
+// Overdue reports whether the finding is open and past its due date.
+func (f Finding) Overdue(now string) bool {
+	return f.DueAt != nil && *f.DueAt <= now && finding.State(f.State).Open()
+}
+
+// DisplaySeverity is the effective severity when evaluated, else the
+// scanner's severity.
+func (f Finding) DisplaySeverity() string {
+	if f.EffectiveSeverity != "" {
+		return f.EffectiveSeverity
+	}
+	return f.Severity
 }
 
 // UpsertFinding records an observation. A new (service, environment,
@@ -71,8 +91,10 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 				err = mErr
 				return 0, false, err
 			}
-			if _, err = tx.ExecContext(ctx,
-				`UPDATE findings SET state = ?, resolved_at = NULL WHERE id = ?`, finding.StateReopened, id); err != nil {
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE findings SET state = ?, resolved_at = NULL, sla_started_at = ?,
+				       reminded_due_soon_at = NULL, reminded_overdue_at = NULL
+				WHERE id = ?`, finding.StateReopened, now, id); err != nil {
 				return 0, false, err
 			}
 			if _, err = tx.ExecContext(ctx, `
@@ -99,13 +121,13 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 			SET aliases = ?, severity = ?, title = ?, registered = ?, repository = ?,
 			    component_name = ?, component_version = ?,
 			    dt_project_uuid = ?, dt_component_uuid = ?, dt_vulnerability_uuid = ?,
-			    dt_vuln_source = ?, dt_vuln_id = ?,
+			    dt_vuln_source = ?, dt_vuln_id = ?, epss = COALESCE(?, epss),
 			    updated_at = ?
 			WHERE id = ?`,
 			string(aliases), obs.Severity, obs.Title, obs.Registered, obs.Repository,
 			obs.ComponentName, obs.ComponentVersion,
 			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID,
-			obs.DTVulnSource, obs.DTVulnID,
+			obs.DTVulnSource, obs.DTVulnID, obs.EPSS,
 			now, id)
 		if err != nil {
 			return 0, false, err
@@ -117,13 +139,13 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 				service, environment, component_purl, vuln_id, aliases, severity, state,
 				registered, repository, component_name, component_version, title,
 				dt_project_uuid, dt_component_uuid, dt_vulnerability_uuid, dt_vuln_source, dt_vuln_id,
-				first_seen_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				epss, first_seen_at, sla_started_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			RETURNING id`,
 			obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID, string(aliases), obs.Severity, finding.StateNew,
 			obs.Registered, obs.Repository, obs.ComponentName, obs.ComponentVersion, obs.Title,
 			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID, obs.DTVulnSource, obs.DTVulnID,
-			now, now).Scan(&id)
+			obs.EPSS, now, now, now).Scan(&id)
 		if err != nil {
 			return 0, false, err
 		}
@@ -308,8 +330,10 @@ type FindingFilter struct {
 	State       string
 	Severity    string
 	// Open limits the result to findings that still need action.
-	Open  bool
-	Limit int
+	Open bool
+	// DueBefore limits the result to open findings due before this time.
+	DueBefore string
+	Limit     int
 }
 
 // ListFindings returns findings, most severe and most recent first.
@@ -324,14 +348,18 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 			args = append(args, c.v)
 		}
 	}
-	if f.Open {
+	if f.Open || f.DueBefore != "" {
 		where = append(where, "state NOT IN ('resolved', 'not_affected', 'risk_accepted')")
+	}
+	if f.DueBefore != "" {
+		where = append(where, "due_at IS NOT NULL AND due_at < ?")
+		args = append(args, f.DueBefore)
 	}
 	q := findingColumns + ` FROM findings`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
-	q += ` ORDER BY CASE severity
+	q += ` ORDER BY CASE COALESCE(NULLIF(effective_severity, ''), severity)
 	           WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2
 	           WHEN 'low' THEN 3 WHEN 'info' THEN 4 ELSE 5 END,
 	         first_seen_at DESC, id DESC`
@@ -363,7 +391,8 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 
 const findingColumns = `SELECT id, service, registered, repository, environment, component_purl,
 	component_name, component_version, vuln_id, aliases, severity, title,
-	state, due_at, first_seen_at, resolved_at, updated_at, dt_project_uuid, dt_vuln_source, dt_vuln_id`
+	state, due_at, first_seen_at, resolved_at, updated_at, dt_project_uuid, dt_vuln_source, dt_vuln_id,
+	epss, kev, effective_severity, sla_reasons, sla_started_at`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -373,11 +402,24 @@ func scanFinding(sc scanner) (Finding, error) {
 		aliases  string
 		due      sql.NullString
 		resolved sql.NullString
+		epss     sql.NullFloat64
+		reasons  string
+		started  sql.NullString
 	)
 	if err := sc.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
 		&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
-		&r.State, &due, &r.FirstSeenAt, &resolved, &r.UpdatedAt, &r.DTProjectUUID, &r.DTVulnSource, &r.DTVulnID); err != nil {
+		&r.State, &due, &r.FirstSeenAt, &resolved, &r.UpdatedAt, &r.DTProjectUUID, &r.DTVulnSource, &r.DTVulnID,
+		&epss, &r.KEV, &r.EffectiveSeverity, &reasons, &started); err != nil {
 		return Finding{}, err
+	}
+	if epss.Valid {
+		r.EPSS = &epss.Float64
+	}
+	if started.Valid {
+		r.SLAStartedAt = &started.String
+	}
+	if err := json.Unmarshal([]byte(reasons), &r.SLAReasons); err != nil {
+		return Finding{}, fmt.Errorf("finding %d: sla_reasons: %w", r.ID, err)
 	}
 	if err := json.Unmarshal([]byte(aliases), &r.Aliases); err != nil {
 		return Finding{}, fmt.Errorf("finding %d: aliases: %w", r.ID, err)

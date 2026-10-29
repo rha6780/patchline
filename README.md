@@ -48,11 +48,12 @@ OpenCVE can be added later as another source for host-installed infrastructure p
 - **Evidence-based resolution** — a finding is resolved only when a new BOM no longer contains it, with the commit as evidence; regressions reopen it; `main` and `prod` are tracked separately
 - **Renovate PR linking** — PR opened → *in progress*, merged → *awaiting verification*, with a check that the target version leaves the affected range
 - **One message per finding** — Slack messages are updated in place (`chat.update`) with history in the thread
-- **Read-only web UI** — overview, per-service environment comparison, evidence timeline, integration health
+- **SLA as code** — due dates by effective severity; CISA KEV, EPSS and service exposure escalate; reminders before and after the due date
+- **Read-only web UI** — overview with overdue counts, per-service environment comparison, evidence timeline, integration health
 - **Gitea / Forgejo first** (GitHub webhooks work too)
 - **Lightweight** — a single binary or container with SQLite
 
-Planned: SLA due dates and reminders from CVSS, CISA KEV, EPSS and exposure; risk acceptances that expire; production deploy evidence; Gitea issue mirror; OpenCVE as a source; PostgreSQL.
+Planned: risk acceptances that expire; production deploy evidence; Gitea issue mirror; OpenCVE as a source; PostgreSQL.
 
 ### Finding states
 
@@ -79,7 +80,8 @@ Human decisions are made in **one place**: Dependency-Track analysis.
 | ✅ **M3** Resolve | Rescan diff → resolved / reopened, commit SHA recorded |
 | ✅ **M4** Link PRs | Gitea webhooks, Renovate PR ↔ finding, "does this PR fix it?" |
 | ✅ **M5** UI | Overview and finding timeline |
-| Later | SLA reminders, exception expiry, `prod` deploy evidence, Gitea issue sink, OpenCVE source |
+| ✅ SLA | Policy-based due dates (KEV, EPSS, exposure) and reminders |
+| Later | Exception expiry, `prod` deploy evidence, Gitea issue sink, OpenCVE source |
 
 ## Tech stack
 
@@ -167,6 +169,8 @@ Open `http://localhost:8080/` (`:18080` in the demo). The UI has no login: put i
 | `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | Secret of the pull request webhook. Unset = use `PATCHLINE_WEBHOOK_TOKEN` |
 | `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages |
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | Wait after `BOM_PROCESSED` before comparing findings |
+| `PATCHLINE_POLICY_PATH` | — | Remediation policy YAML ([example](examples/policy/policy.yaml)). Unset = built-in defaults |
+| `PATCHLINE_KEV_URL` | CISA feed | CISA KEV catalog URL, refreshed daily; `off` disables |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Unset = print to stdout |
 | `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | Channel for services without `slack_channel` and unregistered projects |
 | `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | Lowest severity that is posted |
@@ -210,6 +214,18 @@ jq --arg c "$GITHUB_SHA" --arg r "$GITHUB_REF" \
 5. A linked pull request moves the finding to *in progress*; merging it moves it to *awaiting verification*. Closing without merging is recorded but keeps the state. Only the next rescan resolves the finding.
 
 Base-image updates are not matched to OS-package findings yet; they resolve through the rescan as usual.
+
+### How due dates work
+
+The policy ([example](examples/policy/policy.yaml)) turns risk signals into an **effective severity** and a due date:
+
+1. Start from the scanner's severity.
+2. Raise one level when the EPSS score (from Dependency-Track) is at or above `epss_threshold`.
+3. Add the service's exposure adjustment (default: `internet` +1).
+4. A CVE in the CISA KEV catalog is raised to at least `kev` (default critical).
+5. The due date is the SLA for that severity (default critical 7d, high 30d, medium 90d, low 180d), counted from first detection or from reopening.
+
+The SLA job re-evaluates open findings every 5 minutes and right after intake, so a CVE added to KEV escalates findings that are already open (the thread says why and moves the due date). It records one reminder before the due date and repeats while overdue. New findings are posted after their first evaluation, so the first message already shows the due date, and the notification threshold uses the effective severity.
 
 ### How notifications work
 

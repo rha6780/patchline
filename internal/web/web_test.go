@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -142,5 +143,35 @@ func TestRich(t *testing.T) {
 	}
 	if got := string(rich("`<script>`")); got != "<code>&lt;script&gt;</code>" {
 		t.Errorf("code escaping: %s", got)
+	}
+}
+
+func TestDueDisplay(t *testing.T) {
+	ctx := context.Background()
+	u, st := setup(t)
+	prod, err := st.ListFindings(ctx, store.FindingFilter{Service: "storefront", Environment: "prod"})
+	if err != nil || len(prod) != 1 {
+		t.Fatalf("prod = %+v %v", prod, err)
+	}
+	past := time.Now().Add(-48 * time.Hour)
+	if err := st.UpdateSLA(ctx, store.SLAUpdate{FindingID: prod[0].ID, KEV: true, EffectiveSeverity: "critical",
+		Reasons: []string{"in CISA KEV"}, Due: &past}, prod[0]); err != nil {
+		t.Fatal(err)
+	}
+	for path, wants := range map[string][]string{
+		"/":                     {"Overdue", `class="tile alert"`, "KEV", "overdue by 2 days"},
+		"/findings?due=overdue": {"CVE-2021-44228", "overdue by"},
+		"/findings?due=week":    {"CVE-2021-44228"},
+		"/findings/" + strconv.FormatInt(prod[0].ID, 10): {"CISA KEV", "overdue by", "in CISA KEV", "Due date updated"},
+	} {
+		code, body := get(t, u, path)
+		if code != 200 {
+			t.Errorf("%s: %d", path, code)
+		}
+		for _, w := range wants {
+			if !strings.Contains(body, w) {
+				t.Errorf("%s: missing %q", path, w)
+			}
+		}
 	}
 }

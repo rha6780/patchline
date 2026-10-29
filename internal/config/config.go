@@ -46,6 +46,12 @@ type Config struct {
 	// (PATCHLINE_GITEA_WEBHOOK_SECRET). Empty falls back to WebhookToken.
 	GiteaWebhookSecret string
 
+	// PolicyPath is the remediation policy YAML (PATCHLINE_POLICY_PATH).
+	// Empty uses the built-in defaults.
+	PolicyPath string
+	// KEVURL is the CISA KEV feed (PATCHLINE_KEV_URL); "off" disables it.
+	KEVURL string
+
 	// SlackBotToken enables the Slack sink (PATCHLINE_SLACK_BOT_TOKEN).
 	// Without it notifications are printed to stdout.
 	SlackBotToken string
@@ -73,6 +79,7 @@ func Default() Config {
 		ShutdownTimeout: 10 * time.Second,
 
 		NotifyMinSeverity:             "medium",
+		KEVURL:                        "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
 		DependencyTrackReconcileDelay: 2 * time.Minute,
 	}
 }
@@ -126,6 +133,13 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		cfg.DependencyTrackReconcileDelay = d
 	}
 	cfg.GiteaWebhookSecret, _ = lookup("PATCHLINE_GITEA_WEBHOOK_SECRET")
+	cfg.PolicyPath, _ = lookup("PATCHLINE_POLICY_PATH")
+	if v, ok := lookup("PATCHLINE_KEV_URL"); ok && v != "" {
+		cfg.KEVURL = v
+		if strings.EqualFold(v, "off") {
+			cfg.KEVURL = ""
+		}
+	}
 	cfg.SlackBotToken, _ = lookup("PATCHLINE_SLACK_BOT_TOKEN")
 	cfg.SlackDefaultChannel, _ = lookup("PATCHLINE_SLACK_DEFAULT_CHANNEL")
 	if v, ok := lookup("PATCHLINE_NOTIFY_MIN_SEVERITY"); ok && v != "" {

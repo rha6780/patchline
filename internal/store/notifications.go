@@ -22,15 +22,18 @@ type NotificationWork struct {
 	NewEvents []FindingEvent
 }
 
-// PendingNotifications returns findings at or above minSeverity (by rank)
-// that have events not yet reflected in sink, and are due for an attempt.
+// PendingNotifications returns findings whose effective severity is at or
+// above minSeverity that have events not yet reflected in sink, and are due
+// for an attempt. Findings the policy has not evaluated yet wait, so the
+// first message already carries the due date.
 func (s *Store) PendingNotifications(ctx context.Context, sink string, minSeverity string, limit int) ([]NotificationWork, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT f.id, COALESCE(n.channel, ''), COALESCE(n.message_ref, ''),
 		       COALESCE(n.last_event_id, 0), COALESCE(n.attempts, 0)
 		FROM findings f
 		LEFT JOIN finding_notifications n ON n.finding_id = f.id AND n.sink = ?
-		WHERE (CASE f.severity
+		WHERE f.effective_severity != ''
+		  AND (CASE f.effective_severity
 		         WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2
 		         WHEN 'low' THEN 3 WHEN 'info' THEN 4 ELSE 5 END) <= ?
 		  AND (n.next_attempt_at IS NULL OR n.next_attempt_at <= ?)

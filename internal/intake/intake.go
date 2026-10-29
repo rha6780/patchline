@@ -420,5 +420,6 @@ func (p *Processor) observe(s dependencytrack.Sighting) finding.Observation {
 		DTVulnerabilityUUID: s.Vulnerability.UUID,
 		DTVulnSource:        s.Vulnerability.Source,
 		DTVulnID:            s.Vulnerability.VulnID,
+		EPSS:                s.Vulnerability.EPSSScore,
 	}
 }

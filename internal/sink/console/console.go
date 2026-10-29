@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/rha6780/patchline/internal/notify"
 )
@@ -43,6 +44,7 @@ func (s *Sink) Post(_ context.Context, channel string, m notify.Message) (notify
 	if m.Link != "" {
 		s.printf("    %s\n", m.Link)
 	}
+	s.printDue(m)
 	s.printPRs(m)
 	return ref, nil
 }
@@ -56,6 +58,12 @@ func (s *Sink) Update(_ context.Context, ref notify.Ref, m notify.Message) error
 func (s *Sink) Reply(_ context.Context, ref notify.Ref, text string) error {
 	s.printf("    ↳ [%s] finding #%s: %s\n", ref.Channel, ref.ID, text)
 	return nil
+}
+
+func (s *Sink) printDue(m notify.Message) {
+	if m.Finding.DueAt != nil {
+		s.printf("    %s · severity %s\n", notify.DueText(*m.Finding.DueAt, time.Now()), notify.SeverityText(m.Finding))
+	}
 }
 
 func (s *Sink) printPRs(m notify.Message) {

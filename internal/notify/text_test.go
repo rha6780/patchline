@@ -3,6 +3,7 @@ package notify
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -34,6 +35,16 @@ func TestEventText(t *testing.T) {
 		{store.FindingEvent{Kind: "severity_changed", Evidence: ev(map[string]any{"from": "medium", "to": "high"})},
 			"Severity: medium → high"},
 		{store.FindingEvent{Kind: "detected", Evidence: ev(nil)}, ""},
+		{store.FindingEvent{Kind: "sla_changed", Evidence: ev(map[string]any{"from_severity": "high", "to_severity": "critical",
+			"reasons": []string{"in CISA KEV"}, "from_due": "2026-11-28T00:00:00.000Z", "to_due": "2026-11-05T00:00:00.000Z"})},
+			"⏫ Escalated: high → critical (in CISA KEV) · due 2026-11-05 (was 2026-11-28)"},
+		{store.FindingEvent{Kind: "sla_changed", Evidence: ev(map[string]any{"from_severity": "high", "to_severity": "high",
+			"from_due": "2026-11-28T00:00:00.000Z", "to_due": "2026-11-30T00:00:00.000Z"})},
+			"📅 Due date updated · due 2026-11-30 (was 2026-11-28)"},
+		{store.FindingEvent{Kind: "reminder", Evidence: ev(map[string]any{"kind": "due_soon", "due": "2026-11-05T00:00:00.000Z"})},
+			"⏰ Due soon — 2026-11-05"},
+		{store.FindingEvent{Kind: "reminder", Evidence: ev(map[string]any{"kind": "overdue", "due": "2026-11-05T00:00:00.000Z"})},
+			"🚨 Overdue — the SLA ended 2026-11-05"},
 		{store.FindingEvent{Kind: "pr_linked", FromState: ptr("new"), ToState: ptr("in_progress"),
 			Evidence: ev(map[string]any{"repository": "acme/api", "number": 12, "url": "https://git/pulls/12",
 				"package": "log4j-core", "from_version": "2.14.1", "to_version": "2.17.1",
@@ -52,5 +63,27 @@ func TestEventText(t *testing.T) {
 		if got := EventText(tc.e); got != tc.want {
 			t.Errorf("EventText(%s)\n got %q\nwant %q", tc.e.Kind, got, tc.want)
 		}
+	}
+}
+
+func TestDueAndSeverityText(t *testing.T) {
+	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	for due, want := range map[string]string{
+		"2026-11-05T00:00:00.000Z": "due 2026-11-05 (in 6 days)",
+		"2026-10-30T05:00:00.000Z": "due 2026-10-30 (today)",
+		"2026-10-28T00:00:00.000Z": "overdue by 2 days (due 2026-10-28)",
+		"2026-11-28T23:59:00.000Z": "due 2026-11-28 (in 30 days)",
+		"2026-10-31T00:00:00.000Z": "due 2026-10-31 (in 1 day)",
+	} {
+		if got := DueText(due, now); got != want {
+			t.Errorf("DueText(%s) = %q, want %q", due, got, want)
+		}
+	}
+	f := store.Finding{Severity: "high", EffectiveSeverity: "critical", SLAReasons: []string{"in CISA KEV"}}
+	if got := SeverityText(f); got != "critical (scanner: high, in CISA KEV)" {
+		t.Errorf("SeverityText = %q", got)
+	}
+	if got := SeverityText(store.Finding{Severity: "low"}); got != "low" {
+		t.Errorf("plain = %q", got)
 	}
 }

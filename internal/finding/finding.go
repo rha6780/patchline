@@ -29,6 +29,8 @@ const (
 	EventPRUpdated       = "pr_updated"
 	EventPRMerged        = "pr_merged"
 	EventPRClosed        = "pr_closed"
+	EventSLAChanged      = "sla_changed"
+	EventReminder        = "reminder"
 )
 
 // Severity levels, normalized to lower case.
@@ -76,6 +78,9 @@ type Observation struct {
 	DTVulnerabilityUUID string
 	DTVulnSource        string // e.g. NVD, GITHUB, OSV
 	DTVulnID            string // id within DTVulnSource
+
+	// EPSS is the exploit prediction score (0..1), when the source has it.
+	EPSS *float64
 }
 
 // CanonicalID picks a stable identifier from a set of ids that refer to the

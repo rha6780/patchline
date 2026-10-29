@@ -87,8 +87,8 @@ func TestPostThenUpdateAndThread(t *testing.T) {
 	sink := &recorder{needsChannel: true}
 	n := &notify.Notifier{Store: st, Sink: sink, Inventory: inv, Logger: quiet}
 
-	_, _, _ = st.UpsertFinding(ctx, obs("storefront", true, "pkg:npm/a@1", finding.SeverityCritical), nil)
-	_, _, _ = st.UpsertFinding(ctx, obs("storefront", true, "pkg:npm/low@1", finding.SeverityLow), nil) // below threshold
+	upsert(t, st, obs("storefront", true, "pkg:npm/a@1", finding.SeverityCritical))
+	upsert(t, st, obs("storefront", true, "pkg:npm/low@1", finding.SeverityLow)) // below threshold
 
 	if _, err := n.RunOnce(ctx); err != nil {
 		t.Fatal(err)
@@ -121,9 +121,9 @@ func TestSkips(t *testing.T) {
 	n := &notify.Notifier{Store: st, Sink: sink, Inventory: inv, Logger: quiet}
 
 	// Unregistered and no default channel: skipped, not retried.
-	_, _, _ = st.UpsertFinding(ctx, obs("unknown", false, "pkg:npm/u@1", finding.SeverityHigh), nil)
+	upsert(t, st, obs("unknown", false, "pkg:npm/u@1", finding.SeverityHigh))
 	// Closed before it was ever posted: skipped.
-	_, _, _ = st.UpsertFinding(ctx, obs("storefront", true, "pkg:npm/x@1", finding.SeverityHigh), nil)
+	upsert(t, st, obs("storefront", true, "pkg:npm/x@1", finding.SeverityHigh))
 	_, _ = st.ApplyState(ctx, store.DTKey{ProjectUUID: "p-storefront", ComponentUUID: "c-pkg:npm/x@1", VulnerabilityUUID: "v"},
 		finding.StateNotAffected, nil)
 
@@ -135,7 +135,7 @@ func TestSkips(t *testing.T) {
 
 	// With a default channel, a newly detected unregistered finding goes there.
 	n2 := &notify.Notifier{Store: st, Sink: &recorder{needsChannel: true}, Inventory: inv, Logger: quiet, DefaultChannel: "#security"}
-	_, _, _ = st.UpsertFinding(ctx, obs("other", false, "pkg:npm/o@1", finding.SeverityHigh), nil)
+	upsert(t, st, obs("other", false, "pkg:npm/o@1", finding.SeverityHigh))
 	_, _ = n2.RunOnce(ctx)
 	if got := strings.Join(n2.Sink.(*recorder).calls, "|"); got != "post #security new" {
 		t.Fatalf("default channel calls = %q", got)
@@ -147,7 +147,7 @@ func TestFailuresAndRateLimit(t *testing.T) {
 	st, inv := setup(t)
 	sink := &recorder{needsChannel: true, failPost: &notify.RateLimitError{RetryAfter: 3 * time.Second}}
 	n := &notify.Notifier{Store: st, Sink: sink, Inventory: inv, Logger: quiet}
-	id, _, _ := st.UpsertFinding(ctx, obs("storefront", true, "pkg:npm/a@1", finding.SeverityHigh), nil)
+	id := upsert(t, st, obs("storefront", true, "pkg:npm/a@1", finding.SeverityHigh))
 
 	pause, err := n.RunOnce(ctx)
 	if err != nil || pause != 3*time.Second {
@@ -171,7 +171,7 @@ func TestPartialThreadFailureKeepsProgress(t *testing.T) {
 	sink := &recorder{needsChannel: true}
 	n := &notify.Notifier{Store: noDelay{st}, Sink: sink, Inventory: inv, Logger: quiet}
 	o := obs("storefront", true, "pkg:npm/a@1", finding.SeverityHigh)
-	_, _, _ = st.UpsertFinding(ctx, o, nil)
+	upsert(t, st, o)
 	_, _ = n.RunOnce(ctx)
 
 	key := store.DTKey{ProjectUUID: o.DTProjectUUID, ComponentUUID: o.DTComponentUUID, VulnerabilityUUID: "v"}
@@ -194,7 +194,7 @@ func TestConsoleSink(t *testing.T) {
 	var buf bytes.Buffer
 	n := &notify.Notifier{Store: st, Sink: console.New(&buf), Inventory: inv, Logger: quiet, DTUIURL: "http://dt.local/"}
 	o := obs("storefront", true, "pkg:npm/a@1", finding.SeverityCritical)
-	_, _, _ = st.UpsertFinding(ctx, o, nil)
+	upsert(t, st, o)
 	_, _ = n.RunOnce(ctx)
 	_, _ = st.ApplyState(ctx, store.DTKey{ProjectUUID: o.DTProjectUUID, ComponentUUID: o.DTComponentUUID, VulnerabilityUUID: "v"},
 		finding.StateInProgress, nil)
@@ -207,4 +207,20 @@ func TestConsoleSink(t *testing.T) {
 			t.Errorf("console output missing %q:\n%s", want, out)
 		}
 	}
+}
+
+// upsert stores an observation and a silent policy verdict (effective
+// severity = scanner severity), as the SLA job would.
+func upsert(t *testing.T, st *store.Store, o finding.Observation) int64 {
+	t.Helper()
+	ctx := context.Background()
+	id, _, err := st.UpsertFinding(ctx, o, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev, _ := st.GetFinding(ctx, id)
+	if err := st.UpdateSLA(ctx, store.SLAUpdate{FindingID: id, EffectiveSeverity: o.Severity, Silent: true}, prev); err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

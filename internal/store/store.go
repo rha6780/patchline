@@ -61,11 +61,14 @@ func Migrate(ctx context.Context, db *sql.DB) (int, error) {
 	return len(results), nil
 }
 
-// timeLayout matches the strftime format used in the schema defaults, so
+// TimeLayout matches the strftime format used in the schema defaults, so
 // stored timestamps compare correctly as strings.
-const timeLayout = "2006-01-02T15:04:05.000Z"
+const TimeLayout = "2006-01-02T15:04:05.000Z"
 
-func formatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
+// FormatTime formats a time the way the store keeps it.
+func FormatTime(t time.Time) string { return t.UTC().Format(TimeLayout) }
+
+func formatTime(t time.Time) string { return FormatTime(t) }
 
 // Store provides typed access to the database.
 type Store struct {

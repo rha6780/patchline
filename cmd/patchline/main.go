@@ -18,7 +18,9 @@ import (
 	"github.com/rha6780/patchline/internal/config"
 	"github.com/rha6780/patchline/internal/intake"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/job"
 	"github.com/rha6780/patchline/internal/notify"
+	"github.com/rha6780/patchline/internal/policy"
 	"github.com/rha6780/patchline/internal/server"
 	"github.com/rha6780/patchline/internal/sink/console"
 	"github.com/rha6780/patchline/internal/sink/slack"
@@ -63,6 +65,11 @@ func run() error {
 		return err
 	}
 	logger.Info("inventory loaded", "path", cfg.InventoryPath, "services", len(inv.Services()))
+	pol, err := policy.Load(cfg.PolicyPath)
+	if err != nil {
+		return err
+	}
+	logger.Info("policy loaded", "path", cfg.PolicyPath, "sla", pol.Summary(), "kev", cfg.KEVURL != "")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -106,11 +113,15 @@ func run() error {
 		MinSeverity:    cfg.NotifyMinSeverity,
 		DTUIURL:        cfg.DependencyTrackUIURL,
 	}
-	proc.OnChange = notifier.Wake
+	sla := &job.SLA{Store: st, Policy: pol, Inventory: inv, Logger: logger, KEVURL: cfg.KEVURL, OnChange: notifier.Wake}
+	// New findings are posted once the policy has evaluated them, so the
+	// SLA job runs first and wakes the notifier.
+	proc.OnChange = func() { sla.Wake(); notifier.Wake() }
 
 	var workers sync.WaitGroup
-	workers.Add(2)
+	workers.Add(3)
 	go func() { defer workers.Done(); proc.Run(ctx) }()
+	go func() { defer workers.Done(); sla.Run(ctx) }()
 	go func() { defer workers.Done(); notifier.Run(ctx) }()
 
 	ui, err := web.New(web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger})

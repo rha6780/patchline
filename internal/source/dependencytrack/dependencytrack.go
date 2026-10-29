@@ -66,6 +66,8 @@ type Vulnerability struct {
 	Title    string  `json:"title"`
 	Severity string  `json:"severity"`
 	Aliases  Aliases `json:"aliases"`
+	// EPSSScore is set by the finding API when Dependency-Track has EPSS data.
+	EPSSScore *float64 `json:"epssScore"`
 }
 
 // Aliases accepts both alias shapes Dependency-Track emits:

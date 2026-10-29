@@ -20,7 +20,14 @@ func TestNotificationWorkflow(t *testing.T) {
 	high, _, _ := s.UpsertFinding(ctx, base, nil)
 	low := base
 	low.ComponentRef, low.Severity = "pkg:npm/b@1", finding.SeverityLow
-	_, _, _ = s.UpsertFinding(ctx, low, nil)
+	lowID, _, _ := s.UpsertFinding(ctx, low, nil)
+
+	// Not evaluated by the policy yet: nothing is pending.
+	if work, _ := s.PendingNotifications(ctx, "slack", finding.SeverityMedium, 10); len(work) != 0 {
+		t.Fatalf("unevaluated findings should wait, got %+v", work)
+	}
+	evaluate(t, s, high, finding.SeverityHigh)
+	evaluate(t, s, lowID, finding.SeverityLow)
 
 	work, err := s.PendingNotifications(ctx, "slack", finding.SeverityMedium, 10)
 	if err != nil {
@@ -77,5 +84,17 @@ func TestNotificationWorkflow(t *testing.T) {
 	}
 	if kinds[finding.EventNotified] != 1 {
 		t.Errorf("notified events = %d, want 1", kinds[finding.EventNotified])
+	}
+}
+
+// evaluate stores a silent policy verdict with the given effective severity.
+func evaluate(t *testing.T, s *Store, id int64, sev string) {
+	t.Helper()
+	prev, err := s.GetFinding(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateSLA(context.Background(), SLAUpdate{FindingID: id, EffectiveSeverity: sev, Silent: true}, prev); err != nil {
+		t.Fatal(err)
 	}
 }

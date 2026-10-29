@@ -3,15 +3,22 @@ package slack
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/notify"
+	"github.com/rha6780/patchline/internal/store"
 )
+
+// now is replaceable in tests.
+var now = time.Now
 
 // Blocks renders a finding as Block Kit blocks.
 func Blocks(m notify.Message) []map[string]any {
 	f := m.Finding
 
-	header := fmt.Sprintf("%s %s · %s", notify.SeverityEmoji(f.Severity), strings.ToUpper(f.Severity), f.VulnID)
+	sev := f.DisplaySeverity()
+	header := fmt.Sprintf("%s %s · %s", notify.SeverityEmoji(sev), strings.ToUpper(sev), f.VulnID)
 	fields := []map[string]any{
 		mrkdwn(fmt.Sprintf("*Service*\n%s (%s)", escape(f.Service), escape(f.Environment))),
 		mrkdwn(fmt.Sprintf("*Component*\n`%s`", escape(notify.Component(f)))),
@@ -21,8 +28,15 @@ func Blocks(m notify.Message) []map[string]any {
 	if len(f.Aliases) > 0 {
 		fields = append(fields, mrkdwn("*Aliases*\n"+escape(strings.Join(f.Aliases, ", "))))
 	}
-	if f.DueAt != nil {
-		fields = append(fields, mrkdwn("*Due*\n"+escape(*f.DueAt)))
+	if f.DueAt != nil && finding.State(f.State).Open() {
+		due := notify.DueText(*f.DueAt, now())
+		if f.Overdue(store.FormatTime(now())) {
+			due = "🚨 " + due
+		}
+		fields = append(fields, mrkdwn("*Due*\n"+escape(due)))
+	}
+	if sev != f.Severity || len(f.SLAReasons) > 0 {
+		fields = append(fields, mrkdwn("*Severity*\n"+escape(notify.SeverityText(f))))
 	}
 	if len(m.PullRequests) > 0 {
 		var lines []string

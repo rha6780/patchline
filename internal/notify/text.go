@@ -3,7 +3,9 @@ package notify
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/store"
@@ -59,12 +61,57 @@ func Component(f store.Finding) string {
 	return name
 }
 
+// DueText describes a due date relative to now: "due 2026-11-05 (in 6
+// days)" or "overdue by 2 days (due 2026-11-05)".
+func DueText(due string, now time.Time) string {
+	t, err := time.Parse(store.TimeLayout, due)
+	if err != nil {
+		return due
+	}
+	day := t.UTC().Format("2006-01-02")
+	d := t.Sub(now)
+	switch {
+	case d < 0:
+		return fmt.Sprintf("overdue by %s (due %s)", days(-d), day)
+	case d < 24*time.Hour:
+		return fmt.Sprintf("due %s (today)", day)
+	default:
+		return fmt.Sprintf("due %s (in %s)", day, days(d))
+	}
+}
+
+func days(d time.Duration) string {
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%d hours", int(d.Hours()))
+	}
+	n := int(math.Round(d.Hours() / 24))
+	if n == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", n)
+}
+
+// SeverityText is the effective severity, with the scanner's when they differ:
+// "critical (high, in CISA KEV)".
+func SeverityText(f store.Finding) string {
+	sev := f.DisplaySeverity()
+	if sev == f.Severity && len(f.SLAReasons) == 0 {
+		return sev
+	}
+	var parts []string
+	if sev != f.Severity {
+		parts = append(parts, "scanner: "+f.Severity)
+	}
+	parts = append(parts, f.SLAReasons...)
+	return sev + " (" + strings.Join(parts, ", ") + ")"
+}
+
 // Summary is a one-line plain-text description, used as the message
 // fallback text and by the console sink.
 func Summary(m Message) string {
 	f := m.Finding
 	return fmt.Sprintf("[%s] %s in %s (%s/%s) — %s",
-		strings.ToUpper(f.Severity), f.VulnID, Component(f), f.Service, f.Environment, StateLabel(f.State))
+		strings.ToUpper(f.DisplaySeverity()), f.VulnID, Component(f), f.Service, f.Environment, StateLabel(f.State))
 }
 
 // EventText describes an event for a thread reply. Events that are already
@@ -109,6 +156,10 @@ func EventText(e store.FindingEvent) string {
 		return fmt.Sprintf("Severity: %s → %s", str("from"), str("to"))
 	case finding.EventPRLinked, finding.EventPRUpdated, finding.EventPRMerged, finding.EventPRClosed:
 		return prText(e, ev)
+	case finding.EventSLAChanged:
+		return slaText(ev)
+	case finding.EventReminder:
+		return reminderText(str("kind"), str("due"))
 	case finding.EventDetected, finding.EventNotified:
 		return ""
 	}
@@ -191,3 +242,54 @@ func prText(e store.FindingEvent, ev map[string]any) string {
 	}
 	return text
 }
+
+func slaText(ev map[string]any) string {
+	str := func(k string) string { v, _ := ev[k].(string); return v }
+	from, to := str("from_severity"), str("to_severity")
+	var reasons []string
+	if rs, ok := ev["reasons"].([]any); ok {
+		for _, r := range rs {
+			if s, ok := r.(string); ok {
+				reasons = append(reasons, s)
+			}
+		}
+	}
+	var text string
+	switch {
+	case from != to && SeverityRank(to) < SeverityRank(from):
+		text = fmt.Sprintf("⏫ Escalated: %s → %s", from, to)
+	case from != to:
+		text = fmt.Sprintf("⏬ Severity for the SLA: %s → %s", from, to)
+	default:
+		text = "📅 Due date updated"
+	}
+	if len(reasons) > 0 {
+		text += " (" + strings.Join(reasons, ", ") + ")"
+	}
+	if d := str("to_due"); d != "" {
+		text += " · due " + dateOnly(d)
+		if f := str("from_due"); f != "" && f != d {
+			text += " (was " + dateOnly(f) + ")"
+		}
+	} else if str("from_due") != "" {
+		text += " · no due date"
+	}
+	return text
+}
+
+func reminderText(kind, due string) string {
+	if kind == store.ReminderOverdue {
+		return "🚨 Overdue — the SLA ended " + dateOnly(due)
+	}
+	return "⏰ Due soon — " + dateOnly(due)
+}
+
+func dateOnly(ts string) string {
+	if len(ts) >= 10 {
+		return ts[:10]
+	}
+	return ts
+}
+
+// SeverityRank orders severities: 0 is most severe.
+func SeverityRank(s string) int { return finding.SeverityRank(s) }

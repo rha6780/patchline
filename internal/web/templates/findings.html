@@ -11,6 +11,11 @@
     <select name="state"><option value="">any</option>
       {{range .States}}<option value="{{.}}" {{if eq (print .) $.Filter.State}}selected{{end}}>{{stateLabel (print .)}}</option>{{end}}
     </select></label>
+  <label>Due
+    <select name="due"><option value="">any</option>
+      <option value="overdue" {{if eq .Due "overdue"}}selected{{end}}>overdue</option>
+      <option value="week" {{if eq .Due "week"}}selected{{end}}>within 7 days</option>
+    </select></label>
   <label class="check"><input type="checkbox" name="open" value="1" {{if .Filter.Open}}checked{{end}}> open only</label>
   <button type="submit">Filter</button>
   <a href="/findings">Reset</a>
@@ -18,16 +23,16 @@
 {{if .Findings}}
 <div class="scroll">
 <table>
-  <thead><tr><th>Severity</th><th>Vulnerability</th><th>Component</th><th>Service / env</th><th>State</th><th>First seen</th></tr></thead>
+  <thead><tr><th>Severity</th><th>Vulnerability</th><th>Component</th><th>Service / env</th><th>State</th><th>Due</th></tr></thead>
   <tbody>
   {{range .Findings}}
   <tr>
-    <td><span class="pill {{sevClass .Severity}}">{{.Severity}}</span></td>
+    <td><span class="pill {{sevClass .DisplaySeverity}}">{{.DisplaySeverity}}</span>{{if .KEV}} <span class="tag kev">KEV</span>{{end}}</td>
     <td><a href="/findings/{{.ID}}">{{.VulnID}}</a>{{if .Aliases}}<div class="meta">{{join .Aliases ", "}}</div>{{end}}</td>
     <td><code>{{component .}}</code></td>
     <td><a href="/services/{{pathEscape .Service}}">{{.Service}}</a> / {{.Environment}}{{if not .Registered}} <span class="tag warn">unregistered</span>{{end}}</td>
     <td><span class="state {{stateClass .State}}">{{stateLabel .State}}</span></td>
-    <td class="nowrap">{{ts .FirstSeenAt}}</td>
+    <td class="nowrap">{{if and .DueAt (isOpen .State)}}<span class="{{if overdue . $.Now}}late{{end}}">{{dueText (deref .DueAt)}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
   </tr>
   {{end}}
   </tbody>

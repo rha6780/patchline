@@ -65,6 +65,7 @@ services:
     environment:
       PATCHLINE_LOG_LEVEL: debug
       PATCHLINE_INVENTORY_PATH: /etc/patchline/inventory
+      PATCHLINE_POLICY_PATH: /etc/patchline/policy/policy.yaml
       PATCHLINE_WEBHOOK_TOKEN: ${PATCHLINE_WEBHOOK_TOKEN:-change-me}
       PATCHLINE_GITEA_WEBHOOK_SECRET: ${PATCHLINE_GITEA_WEBHOOK_SECRET:-}
       PATCHLINE_DT_URL: http://dtrack-apiserver:8080
@@ -77,6 +78,7 @@ services:
     volumes:
       - patchline-data:/data
       - ../../examples/inventory:/etc/patchline/inventory:ro
+      - ../../examples/policy:/etc/patchline/policy:ro
     ports:
       - "${PATCHLINE_PORT:-18080}:8080"
     restart: unless-stopped

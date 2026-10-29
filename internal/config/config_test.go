@@ -37,6 +37,8 @@ func TestFromLookupOverrides(t *testing.T) {
 		"PATCHLINE_DT_UI_URL":             "http://localhost:18082",
 		"PATCHLINE_DT_RECONCILE_DELAY":    "30s",
 		"PATCHLINE_GITEA_WEBHOOK_SECRET":  "gsec",
+		"PATCHLINE_POLICY_PATH":           "/etc/patchline/policy.yaml",
+		"PATCHLINE_KEV_URL":               "off",
 		"PATCHLINE_SLACK_BOT_TOKEN":       "xoxb-1",
 		"PATCHLINE_SLACK_DEFAULT_CHANNEL": "#security",
 		"PATCHLINE_NOTIFY_MIN_SEVERITY":   "HIGH",
@@ -59,6 +61,8 @@ func TestFromLookupOverrides(t *testing.T) {
 		DependencyTrackReconcileDelay: 30 * time.Second,
 
 		GiteaWebhookSecret:  "gsec",
+		PolicyPath:          "/etc/patchline/policy.yaml",
+		KEVURL:              "",
 		SlackBotToken:       "xoxb-1",
 		SlackDefaultChannel: "#security",
 		NotifyMinSeverity:   "high",

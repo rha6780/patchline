@@ -48,11 +48,12 @@ Renovate ── 보안 PR ── Gitea webhook ───────────
 - **증거 기반 해결 판정** — 새 BOM에서 사라져야 해결로 처리하고 커밋을 근거로 남김. 다시 나타나면 재발. `main`과 `prod`를 따로 추적
 - **Renovate PR 연결** — PR 열림 → *조치중*, Merge → *검증대기*. 목표 버전이 취약 범위를 벗어나는지 확인
 - **Finding 1건 = 메시지 1개** — Slack 메시지를 `chat.update`로 수정하고 이력은 스레드에 남김
-- **조회용 웹 UI** — Overview, 서비스별 환경 비교, 근거 타임라인, 연동 상태
+- **정책 기반 SLA** — 실효 심각도별 기한. CISA KEV, EPSS, 서비스 노출도로 상향. 기한 전과 초과 후 재알림
+- **조회용 웹 UI** — 기한 초과 건수를 포함한 Overview, 서비스별 환경 비교, 근거 타임라인, 연동 상태
 - **Gitea / Forgejo 우선 지원**(GitHub Webhook도 동작)
 - **가벼움** — SQLite를 쓰는 바이너리(또는 컨테이너) 1개
 
-예정: CVSS·CISA KEV·EPSS·노출도 기반 SLA 기한과 재알림, 만료가 있는 위험 수용, 운영 배포 근거, Gitea 이슈 미러, OpenCVE 수집원, PostgreSQL.
+예정: 만료가 있는 위험 수용, 운영 배포 근거, Gitea 이슈 미러, OpenCVE 수집원, PostgreSQL.
 
 ### Finding 상태
 
@@ -79,7 +80,8 @@ Renovate ── 보안 PR ── Gitea webhook ───────────
 | ✅ **M3** 해결 판정 | 재스캔 diff → 해결·재발, Commit SHA 기록 |
 | ✅ **M4** PR 연결 | Gitea Webhook, Renovate PR ↔ Finding, "이 PR로 고쳐지는가" 판정 |
 | ✅ **M5** UI | Overview, Finding 타임라인 |
-| 이후 | SLA 재알림, 예외 만료, `prod` 배포 근거, Gitea 이슈 Sink, OpenCVE 수집원 |
+| ✅ SLA | 정책 기반 기한(KEV, EPSS, 노출도)과 재알림 |
+| 이후 | 예외 만료, `prod` 배포 근거, Gitea 이슈 Sink, OpenCVE 수집원 |
 
 ## 기술 스택
 
@@ -167,6 +169,8 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 | `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | PR Webhook의 Secret. 비우면 `PATCHLINE_WEBHOOK_TOKEN` 사용 |
 | `PATCHLINE_DT_UI_URL` | — | 메시지에 넣을 Dependency-Track UI 주소 |
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |
+| `PATCHLINE_POLICY_PATH` | — | 조치 정책 YAML([예시](examples/policy/policy.yaml)). 비우면 기본값 |
+| `PATCHLINE_KEV_URL` | CISA 피드 | CISA KEV 카탈로그 주소(하루 한 번 갱신). `off`면 사용 안 함 |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack Bot 토큰(`chat:write`, `chat:write.public`). 비우면 stdout으로 출력 |
 | `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | `slack_channel`이 없는 서비스와 미등록 프로젝트용 채널 |
 | `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | 알림을 보낼 최소 심각도 |
@@ -210,6 +214,18 @@ jq --arg c "$GITHUB_SHA" --arg r "$GITHUB_REF" \
 5. PR이 연결되면 Finding은 *조치중*, Merge되면 *검증대기*가 됩니다. Merge 없이 닫히면 기록만 하고 상태는 유지합니다. 해결 판정은 다음 재스캔에서만 합니다.
 
 베이스 이미지 업데이트는 아직 OS 패키지 Finding과 연결하지 않습니다. 이 경우에도 재스캔으로 해결됩니다.
+
+### 기한 계산 방식
+
+정책([예시](examples/policy/policy.yaml))이 위험 신호를 **실효 심각도**와 기한으로 바꿉니다.
+
+1. 스캐너의 심각도에서 시작합니다.
+2. EPSS 점수(Dependency-Track 제공)가 `epss_threshold` 이상이면 한 단계 올립니다.
+3. 서비스 노출도에 따라 조정합니다(기본: `internet` +1).
+4. CISA KEV에 있는 CVE는 최소 `kev` 심각도(기본 critical)로 올립니다.
+5. 기한은 그 심각도의 SLA(기본 critical 7일, high 30일, medium 90일, low 180일)이고, 처음 탐지된 시각(재발 시 재발 시각)부터 셉니다.
+
+SLA 작업은 5분마다, 그리고 수집 직후에 열린 Finding을 다시 평가합니다. 그래서 어떤 CVE가 KEV에 추가되면 이미 열려 있는 Finding도 상향되고, 스레드에 사유와 바뀐 기한이 남습니다. 기한 전에 한 번 재알림을 남기고, 기한이 지나면 반복합니다. 새 Finding은 첫 평가가 끝난 뒤에 알리므로 첫 메시지부터 기한이 보이고, 알림 기준 심각도도 실효 심각도를 씁니다.
 
 ### 알림 동작 방식
 

@@ -1,11 +1,13 @@
 {{define "content"}}
 {{$f := .F}}
 <p class="crumbs"><a href="/findings?open=1">Findings</a> / <a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / #{{$f.ID}}</p>
-<h1><span class="pill big {{sevClass $f.Severity}}">{{$f.Severity}}</span> {{$f.VulnID}}</h1>
+<h1><span class="pill big {{sevClass $f.DisplaySeverity}}">{{$f.DisplaySeverity}}</span> {{$f.VulnID}}{{if $f.KEV}} <span class="tag kev">CISA KEV</span>{{end}}</h1>
 {{if $f.Title}}<p class="lead">{{$f.Title}}</p>{{end}}
 
 <dl class="facts">
   <div><dt>State</dt><dd><span class="state {{stateClass $f.State}}">{{stateLabel $f.State}}</span></dd></div>
+  <div><dt>Due</dt><dd>{{if and $f.DueAt (isOpen $f.State)}}<span class="{{if overdue $f .Now}}late{{end}}">{{dueText (deref $f.DueAt)}}</span>{{else}}—{{end}}</dd></div>
+  <div><dt>Severity</dt><dd>{{sevText $f}}{{if $f.EPSS}}<div class="meta">EPSS {{epss $f.EPSS}}</div>{{end}}</dd></div>
   <div><dt>Service</dt><dd><a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / {{$f.Environment}}{{if not $f.Registered}} <span class="tag warn">not in inventory</span>{{end}}</dd></div>
   <div><dt>Component</dt><dd><code>{{component $f}}</code><div class="meta">{{$f.ComponentRef}}</div></dd></div>
   {{if $f.Repository}}<div><dt>Repository</dt><dd>{{$f.Repository}}</dd></div>{{end}}

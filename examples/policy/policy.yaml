@@ -1,0 +1,27 @@
+# Remediation policy. Without PATCHLINE_POLICY_PATH these defaults apply.
+
+# Time to remediate by effective severity, counted from first detection
+# (or from reopening). A severity without an entry has no due date.
+# Units: d (days), h, m.
+sla:
+  critical: 7d
+  high: 30d
+  medium: 90d
+  low: 180d
+
+escalation:
+  # Findings in CISA's Known Exploited Vulnerabilities catalog are raised to
+  # this severity ("" disables).
+  kev: critical
+  # An EPSS score at or above this raises the severity one level (0 disables).
+  epss_threshold: 0.5
+  # Levels added per service exposure (from the inventory).
+  exposure:
+    internet: 1
+    # private: -1
+
+reminders:
+  # Remind once this long before the due date (0 disables).
+  due_soon: 3d
+  # Remind again this often while overdue (0 = once).
+  overdue_every: 7d
