@@ -101,3 +101,30 @@ func (s *Store) ListNotificationProblems(ctx context.Context, limit int) ([]Noti
 	}
 	return out, rows.Err()
 }
+
+// FindingFacets returns the distinct services and environments that have
+// findings, for filter menus.
+func (s *Store) FindingFacets(ctx context.Context) (services, environments []string, err error) {
+	for _, q := range []struct {
+		col string
+		out *[]string
+	}{{"service", &services}, {"environment", &environments}} {
+		rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT `+q.col+` FROM findings ORDER BY `+q.col)
+		if err != nil {
+			return nil, nil, err
+		}
+		for rows.Next() {
+			var v string
+			if err := rows.Scan(&v); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+			*q.out = append(*q.out, v)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, nil, err
+		}
+	}
+	return services, environments, nil
+}

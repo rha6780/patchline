@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ type Store interface {
 	GetFinding(ctx context.Context, id int64) (store.Finding, error)
 	FindingEvents(ctx context.Context, findingID int64) ([]store.FindingEvent, error)
 	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
+	FindingFacets(ctx context.Context) (services, environments []string, err error)
 	ListSourceProjects(ctx context.Context) ([]store.SourceProjectStatus, error)
 	ListInboxProblems(ctx context.Context, limit int) ([]store.InboxProblem, error)
 	ListNotificationProblems(ctx context.Context, limit int) ([]store.NotificationProblem, error)
@@ -289,8 +291,42 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 
 // ---- findings list ----------------------------------------------------
 
+// filterParams are the query parameters the findings page understands.
+var filterParams = []string{"service", "environment", "severity", "state", "due", "open"}
+
+type preset struct {
+	Key    string // i18n key
+	URL    string
+	Active bool
+}
+
+type activeFilter struct {
+	Label     string
+	Value     string
+	RemoveURL string
+}
+
+// canonical keeps only known, non-empty filter parameters in a stable order.
+func canonical(q url.Values) url.Values {
+	out := url.Values{}
+	for _, k := range filterParams {
+		if v := q.Get(k); v != "" {
+			out.Set(k, v)
+		}
+	}
+	return out
+}
+
+func findingsURL(q url.Values) string {
+	if enc := q.Encode(); enc != "" {
+		return "/findings?" + enc
+	}
+	return "/findings"
+}
+
 func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+	l := langOf(r)
+	q := canonical(r.URL.Query())
 	f := store.FindingFilter{
 		Service: q.Get("service"), Environment: q.Get("environment"),
 		State: q.Get("state"), Severity: q.Get("severity"), Open: q.Get("open") == "1", Limit: 500,
@@ -303,15 +339,64 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 		f.DueBefore = store.FormatTime(u.o.Now().Add(7 * 24 * time.Hour))
 	default:
 		due = ""
+		q.Del("due")
 	}
 	list, err := u.o.Store.ListFindings(r.Context(), f)
 	if err != nil {
 		u.fail(w, err)
 		return
 	}
+	services, envs, err := u.o.Store.FindingFacets(r.Context())
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	for _, s := range u.o.Inventory.Services() {
+		if !slices.Contains(services, s.Name) {
+			services = append(services, s.Name)
+		}
+	}
+	sort.Strings(services)
+
+	current := q.Encode()
+	var presets []preset
+	for _, p := range []struct{ key, query string }{
+		{"ui.preset.open", "open=1"},
+		{"ui.preset.overdue", "due=overdue"},
+		{"ui.preset.week", "due=week"},
+		{"ui.preset.critical", "open=1&severity=critical"},
+		{"ui.preset.awaiting", "state=awaiting_verification"},
+		{"ui.preset.all", ""},
+	} {
+		pq, _ := url.ParseQuery(p.query)
+		enc := canonical(pq).Encode()
+		presets = append(presets, preset{Key: p.key, URL: findingsURL(canonical(pq)), Active: enc == current})
+	}
+
+	var active []activeFilter
+	for _, k := range filterParams {
+		v := q.Get(k)
+		if v == "" {
+			continue
+		}
+		rest := canonical(q)
+		rest.Del(k)
+		label, value := l.T("ui.filter."+k), v
+		switch k {
+		case "state":
+			value = notify.StateLabel(l, v)
+		case "due":
+			value = l.T("ui.filter." + v)
+		case "open":
+			label, value = l.T("ui.filter.open_only"), ""
+		}
+		active = append(active, activeFilter{Label: label, Value: value, RemoveURL: findingsURL(rest)})
+	}
+
 	u.render(w, r, "findings", "ui.findings", map[string]any{
 		"Findings": list, "Filter": f, "Severities": severities, "States": states, "Due": due,
-		"Now": store.FormatTime(u.o.Now()),
+		"Now": store.FormatTime(u.o.Now()), "Presets": presets, "Active": active,
+		"Services": services, "Environments": envs,
 	})
 }
 

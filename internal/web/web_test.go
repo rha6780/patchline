@@ -243,3 +243,33 @@ func TestEveryPageInKorean(t *testing.T) {
 		}
 	}
 }
+
+func TestFindingsFilters(t *testing.T) {
+	u, _ := setup(t)
+	_, body := get(t, u, "/findings?open=1&service=storefront&bogus=1")
+	for _, want := range []string{
+		`<a class="chip" href="/findings?open=1" >Open</a>`,       // preset not active: extra filter applied
+		`<option value="storefront" selected>storefront</option>`, // service select from facets
+		`<option value="stray-app" >stray-app</option>`,           // other services listed
+		`<option value="prod" >prod</option>`,                     // environments listed
+		`href="/findings?open=1" title="Remove filter: Service"`,  // removing service keeps open
+		`href="/findings?service=storefront" title="Remove filter: open only"`,
+		"Active filters", "Clear all",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(body, "bogus=1&amp;") || strings.Contains(body, `title="Remove filter: bogus"`) {
+		t.Error("unknown parameters must be dropped from filter links")
+	}
+
+	_, body = get(t, u, "/findings?due=overdue")
+	if !strings.Contains(body, `href="/findings?due=overdue" aria-current="true"`) {
+		t.Error("overdue preset should be active")
+	}
+	_, body = get(t, u, "/findings")
+	if !strings.Contains(body, `href="/findings" aria-current="true"`) || strings.Contains(body, "Active filters") {
+		t.Error("all preset active, no active filters")
+	}
+}

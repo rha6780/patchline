@@ -34,6 +34,11 @@ func TestHealthQueries(t *testing.T) {
 		t.Fatalf("notification problems = %+v err %v", notes, err)
 	}
 
+	svcs, envs, err := s.FindingFacets(ctx)
+	if err != nil || len(svcs) != 1 || svcs[0] != "svc" || len(envs) != 1 || envs[0] != "main" {
+		t.Fatalf("facets = %v %v %v", svcs, envs, err)
+	}
+
 	open, _ := s.ListFindings(ctx, FindingFilter{Open: true, Severity: "high"})
 	if len(open) != 1 {
 		t.Fatalf("open high = %d", len(open))
