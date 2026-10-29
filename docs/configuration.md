@@ -17,6 +17,9 @@ The header switches between English and Korean and between system, light and dar
 | Finding: facts, fix pull requests, evidence timeline | `/findings/{id}` |
 | Service: owners, repositories, findings per environment (highlights fixed-on-`main`-but-open-in-`prod`) | `/services/{name}` |
 | Integrations: Dependency-Track projects with last BOM and commit, inventory projects without a BOM, failed webhooks and notifications | `/integrations` |
+| Integrations guide: vulnerability sources Patchline can take alerts from (Dependency-Track supported, OpenCVE planned), how to connect them, and links to the guides in `docs/integrations` | `/docs/integrations` |
+
+Every page has a footer with links to the integrations guide, this documentation, the upstream tools and the project.
 
 ## Endpoints
 

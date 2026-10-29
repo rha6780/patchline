@@ -17,6 +17,9 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | Finding 상세: 정보, 수정 PR, 근거 타임라인 | `/findings/{id}` |
 | 서비스: 담당자, 저장소, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조) | `/services/{name}` |
 | Integrations: DT 프로젝트별 마지막 BOM·커밋, BOM이 없는 인벤토리 프로젝트, 실패한 Webhook·알림 | `/integrations` |
+| 연동 가이드: 알림을 받을 수 있는 취약점 소스(Dependency-Track 지원, OpenCVE 예정), 연결 방법, `docs/integrations` 가이드 링크 | `/docs/integrations` |
+
+모든 화면 하단의 푸터에 연동 가이드, 이 문서, 연동 도구, 프로젝트 링크가 있습니다.
 
 ## 엔드포인트
 

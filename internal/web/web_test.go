@@ -93,6 +93,10 @@ func TestPages(t *testing.T) {
 			"fixed in one environment but still open in another", "acme/never-scanned"}},
 		{"/services/stray-app", []string{"not mapped to a service"}},
 		{"/integrations", []string{"storefront-api", "3f2a9c1e0b7d", "refs/heads/main", "never-scanned", "Inventory projects without a BOM"}},
+		{"/integrations", []string{`href="/docs/integrations"`}},
+		{"/docs/integrations", []string{"Integrations guide", "Dependency-Track", "OpenCVE", "Planned",
+			"<code>NEW_VULNERABLE_DEPENDENCY</code>", "<code>PATCHLINE_DT_URL</code>", "https://docs.opencve.io/", "CISA KEV",
+			"blob/main/docs/integrations/sbom-ci.md"}},
 		{"/static/style.css", []string{"--crit"}},
 	}
 	for _, tc := range tests {
@@ -105,6 +109,28 @@ func TestPages(t *testing.T) {
 			if !strings.Contains(body, w) {
 				t.Errorf("%s: missing %q", tc.path, w)
 			}
+		}
+	}
+}
+
+func TestFooter(t *testing.T) {
+	u, _ := setup(t)
+	for _, p := range []string{"/", "/findings", "/integrations", "/docs/integrations"} {
+		_, body := get(t, u, p)
+		for _, w := range []string{`<footer class="site">`, `href="/docs/integrations"`, "https://docs.opencve.io/",
+			"https://github.com/rha6780/patchline", "Not affiliated with OWASP"} {
+			if !strings.Contains(body, w) {
+				t.Errorf("%s footer: missing %q", p, w)
+			}
+		}
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/integrations", nil)
+	req.Header.Set("Accept-Language", "ko-KR")
+	u.ServeHTTP(rec, req)
+	for _, w := range []string{"연동 가이드", "예정", "docs/integrations/renovate.ko.md", "docs/README.ko.md", "OWASP 및 Dependency-Track 프로젝트와 무관"} {
+		if !strings.Contains(rec.Body.String(), w) {
+			t.Errorf("ko guide: missing %q", w)
 		}
 	}
 }

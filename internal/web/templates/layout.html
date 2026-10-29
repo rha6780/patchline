@@ -28,6 +28,40 @@
 <main>
 {{template "content" .}}
 </main>
-<footer>{{t .L "ui.footer" .Version}}</footer>
+<footer class="site">
+  <div class="foot">
+    <div class="foot-about">
+      <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>Patchline</a>{{if .Version}} <span class="ver">{{.Version}}</span>{{end}}
+      <p>{{t .L "ui.footer.about"}}</p>
+    </div>
+    <div class="foot-col">
+      <h2>{{t .L "ui.footer.docs"}}</h2>
+      <ul>
+        <li><a href="/docs/integrations" {{if eq .Page "guide"}}aria-current="page"{{end}}>{{t .L "ui.footer.guide"}}</a></li>
+        <li><a href="/docs/integrations#sources">Dependency-Track · OpenCVE</a></li>
+        <li><a href="{{.Docs}}README{{.DocExt}}" rel="noopener">{{t .L "ui.footer.all_docs"}} ↗</a></li>
+        <li><a href="/integrations">{{t .L "ui.footer.status"}}</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h2>{{t .L "ui.footer.tools"}}</h2>
+      <ul>
+        <li><a href="https://docs.dependencytrack.org/" rel="noopener">Dependency-Track ↗</a></li>
+        <li><a href="https://docs.opencve.io/" rel="noopener">OpenCVE ↗</a></li>
+        <li><a href="https://docs.renovatebot.com/" rel="noopener">Renovate ↗</a></li>
+        <li><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" rel="noopener">CISA KEV ↗</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h2>{{t .L "ui.footer.project"}}</h2>
+      <ul>
+        <li><a href="https://github.com/rha6780/patchline" rel="noopener">{{t .L "ui.footer.source"}} ↗</a></li>
+        <li><a href="https://github.com/rha6780/patchline/issues" rel="noopener">{{t .L "ui.footer.issues"}} ↗</a></li>
+        <li><a href="https://github.com/rha6780/patchline/blob/main/LICENSE" rel="noopener">{{t .L "ui.footer.license"}} ↗</a></li>
+      </ul>
+    </div>
+  </div>
+  <p class="fine">{{t .L "ui.footer.disclaimer"}}</p>
+</footer>
 </body>
 </html>

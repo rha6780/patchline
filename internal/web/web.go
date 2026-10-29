@@ -81,7 +81,7 @@ func New(o Options) (*UI, error) {
 		o.Now = time.Now
 	}
 	u := &UI{o: o, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, page := range []string{"overview", "findings", "finding", "service", "integrations"} {
+	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide"} {
 		t, err := template.New("layout.html").Funcs(u.funcs()).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -96,6 +96,7 @@ func New(o Options) (*UI, error) {
 	u.mux.HandleFunc("GET /findings/{id}", u.finding)
 	u.mux.HandleFunc("GET /services/{name}", u.service)
 	u.mux.HandleFunc("GET /integrations", u.integrations)
+	u.mux.HandleFunc("GET /docs/integrations", u.guide)
 	u.mux.HandleFunc("GET /prefs", u.prefs)
 	return u, nil
 }
@@ -116,6 +117,12 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page, titleKey strin
 	data["Page"] = page
 	data["Version"] = u.o.Version
 	data["DTUIURL"] = u.o.DTUIURL
+	// Documentation lives in the repository; Korean pages end in .ko.md.
+	data["Docs"] = docsURL
+	data["DocExt"] = ".md"
+	if l == i18n.KO {
+		data["DocExt"] = ".ko.md"
+	}
 	var buf strings.Builder
 	if err := u.pages[page].Execute(&buf, data); err != nil {
 		u.o.Logger.Error("render page", "page", page, "err", err)
@@ -568,6 +575,15 @@ func (u *UI) integrations(w http.ResponseWriter, r *http.Request) {
 		"Projects": projects, "Missing": missing, "Inbox": inbox, "Notifications": notes,
 		"Stale": staleBefore(u.o.Now()),
 	})
+}
+
+// docsURL is where the Markdown documentation is published.
+const docsURL = "https://github.com/rha6780/patchline/blob/main/docs/"
+
+// guide introduces the tools Patchline can take alerts from and how to
+// connect them. It is static: connection health is on /integrations.
+func (u *UI) guide(w http.ResponseWriter, r *http.Request) {
+	u.render(w, r, "guide", "ui.guide", map[string]any{})
 }
 
 // ---- helpers ----------------------------------------------------------

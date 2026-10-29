@@ -1,0 +1,108 @@
+{{define "content"}}
+{{$L := .L}}
+<h1>{{t $L "ui.guide"}}</h1>
+<p class="lead">{{t $L "ui.guide.lead"}}</p>
+<p><a href="/integrations">{{t $L "ui.guide.status_link"}}</a></p>
+
+<h2 id="sources">{{t $L "ui.guide.sources"}}</h2>
+<p class="muted">{{t $L "ui.guide.sources_lead"}}</p>
+
+<div class="cards">
+<article class="card" id="dependency-track">
+  <header><h3>Dependency-Track</h3><span class="tag ok">{{t $L "ui.guide.supported"}}</span></header>
+  <p>{{t $L "ui.guide.dt.what"}}</p>
+  <dl class="kv">
+    <div><dt>{{t $L "ui.guide.label.finds"}}</dt><dd>{{t $L "ui.guide.dt.finds"}}</dd></div>
+    <div><dt>{{t $L "ui.guide.label.receives"}}</dt><dd>{{t $L "ui.guide.dt.receives"}}</dd></div>
+    <div><dt>{{t $L "ui.guide.label.best"}}</dt><dd>{{t $L "ui.guide.dt.best"}}</dd></div>
+  </dl>
+  <h4>{{t $L "ui.guide.connect"}}</h4>
+  <ol class="steps">
+    <li>{{rich (t $L "ui.guide.dt.step1")}}</li>
+    <li>{{rich (t $L "ui.guide.dt.step2")}}</li>
+    <li>{{rich (t $L "ui.guide.dt.step3")}}</li>
+    <li>{{rich (t $L "ui.guide.dt.step4")}}</li>
+    <li>{{rich (t $L "ui.guide.dt.step5")}}</li>
+  </ol>
+  <h4>{{t $L "ui.guide.settings"}}</h4>
+  <div class="scroll">
+  <table class="compact">
+    <thead><tr><th>{{t $L "ui.guide.col.setting"}}</th><th>{{t $L "ui.guide.col.purpose"}}</th></tr></thead>
+    <tbody>
+      <tr><td><code>PATCHLINE_DT_URL</code></td><td>{{rich (t $L "ui.guide.dt.env.url")}}</td></tr>
+      <tr><td><code>PATCHLINE_DT_API_KEY</code></td><td>{{t $L "ui.guide.dt.env.key"}}</td></tr>
+      <tr><td><code>PATCHLINE_DT_UI_URL</code></td><td>{{t $L "ui.guide.dt.env.ui"}}</td></tr>
+      <tr><td><code>PATCHLINE_WEBHOOK_TOKEN</code></td><td>{{t $L "ui.guide.dt.env.token"}}</td></tr>
+      <tr><td><code>PATCHLINE_DT_RECONCILE_DELAY</code></td><td>{{rich (t $L "ui.guide.dt.env.delay")}}</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="links"><a href="{{.Docs}}integrations/dependency-track{{.DocExt}}" rel="noopener">{{t $L "ui.guide.setup_guide"}}</a> · <a href="https://docs.dependencytrack.org/" rel="noopener">{{t $L "ui.guide.docs_link" "Dependency-Track"}}</a></p>
+</article>
+
+<article class="card" id="opencve">
+  <header><h3>OpenCVE</h3><span class="tag plan">{{t $L "ui.guide.planned"}}</span></header>
+  <p>{{t $L "ui.guide.oc.what"}}</p>
+  <dl class="kv">
+    <div><dt>{{t $L "ui.guide.label.finds"}}</dt><dd>{{t $L "ui.guide.oc.finds"}}</dd></div>
+    <div><dt>{{t $L "ui.guide.label.receives"}}</dt><dd>{{t $L "ui.guide.oc.receives"}}</dd></div>
+    <div><dt>{{t $L "ui.guide.label.best"}}</dt><dd>{{t $L "ui.guide.oc.best"}}</dd></div>
+  </dl>
+  <h4>{{t $L "ui.guide.oc.plan"}}</h4>
+  <ol class="steps">
+    <li>{{t $L "ui.guide.oc.plan1"}}</li>
+    <li>{{t $L "ui.guide.oc.plan2"}}</li>
+    <li>{{t $L "ui.guide.oc.plan3"}}</li>
+  </ol>
+  <p class="note">{{t $L "ui.guide.oc.note"}}</p>
+  <p class="links"><a href="https://docs.opencve.io/" rel="noopener">{{t $L "ui.guide.docs_link" "OpenCVE"}}</a></p>
+</article>
+</div>
+
+<h2 id="compare">{{t $L "ui.guide.compare"}}</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th></th><th>Dependency-Track</th><th>OpenCVE</th></tr></thead>
+  <tbody>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.input"}}</th><td>{{t $L "ui.guide.cmp.dt.input"}}</td><td>{{t $L "ui.guide.cmp.oc.input"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.versions"}}</th><td>{{t $L "ui.guide.cmp.dt.versions"}}</td><td>{{t $L "ui.guide.cmp.oc.versions"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.alerts"}}</th><td>{{t $L "ui.guide.cmp.dt.alerts"}}</td><td>{{t $L "ui.guide.cmp.oc.alerts"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.evidence"}}</th><td>{{t $L "ui.guide.cmp.dt.evidence"}}</td><td>{{t $L "ui.guide.cmp.oc.evidence"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.status"}}</th><td><span class="tag ok">{{t $L "ui.guide.supported"}}</span></td><td><span class="tag plan">{{t $L "ui.guide.planned"}}</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="signals">{{t $L "ui.guide.enrich"}}</h2>
+<p class="muted">{{t $L "ui.guide.enrich_lead"}}</p>
+<ul class="list">
+  <li><strong>CISA KEV</strong> <span class="tag ok">{{t $L "ui.guide.supported"}}</span><div class="meta">{{rich (t $L "ui.guide.kev")}} <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" rel="noopener">cisa.gov ↗</a></div></li>
+  <li><strong>EPSS</strong> <span class="tag ok">{{t $L "ui.guide.supported"}}</span><div class="meta">{{t $L "ui.guide.epss"}} <a href="https://www.first.org/epss/" rel="noopener">first.org ↗</a></div></li>
+</ul>
+
+<h2 id="loop">{{t $L "ui.guide.loop"}}</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>{{t $L "ui.guide.col.tool"}}</th><th>{{t $L "ui.guide.col.role"}}</th><th>{{t $L "ui.guide.col.status"}}</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap"><a href="https://docs.renovatebot.com/" rel="noopener">Renovate ↗</a></td><td>{{rich (t $L "ui.guide.renovate")}}</td><td class="nowrap"><span class="tag ok">{{t $L "ui.guide.supported"}}</span></td></tr>
+    <tr><td class="nowrap"><a href="https://api.slack.com/apps" rel="noopener">Slack ↗</a></td><td>{{rich (t $L "ui.guide.slack")}}</td><td class="nowrap"><span class="tag ok">{{t $L "ui.guide.supported"}}</span></td></tr>
+    <tr><td class="nowrap">Console</td><td>{{t $L "ui.guide.console"}}</td><td class="nowrap"><span class="tag ok">{{t $L "ui.guide.supported"}}</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="guides">{{t $L "ui.guide.docs"}}</h2>
+<p class="muted">{{t $L "ui.guide.docs_lead"}}</p>
+<ul class="list">
+  <li><a href="{{.Docs}}integrations/dependency-track{{.DocExt}}" rel="noopener">Dependency-Track ↗</a><div class="meta">{{t $L "ui.guide.doc.dt"}}</div></li>
+  <li><a href="{{.Docs}}integrations/sbom-ci{{.DocExt}}" rel="noopener">SBOM in CI ↗</a><div class="meta">{{t $L "ui.guide.doc.sbom"}}</div></li>
+  <li><a href="{{.Docs}}integrations/renovate{{.DocExt}}" rel="noopener">Renovate ↗</a><div class="meta">{{t $L "ui.guide.doc.renovate"}}</div></li>
+  <li><a href="{{.Docs}}integrations/git-webhooks{{.DocExt}}" rel="noopener">Gitea / Forgejo / GitHub ↗</a><div class="meta">{{t $L "ui.guide.doc.git"}}</div></li>
+  <li><a href="{{.Docs}}integrations/slack{{.DocExt}}" rel="noopener">Slack ↗</a><div class="meta">{{t $L "ui.guide.doc.slack"}}</div></li>
+  <li><a href="{{.Docs}}integrations/kev-epss{{.DocExt}}" rel="noopener">CISA KEV · EPSS ↗</a><div class="meta">{{t $L "ui.guide.doc.kev"}}</div></li>
+</ul>
+
+<h2 id="more">{{t $L "ui.guide.more"}}</h2>
+<p>{{t $L "ui.guide.more_text"}} <a href="https://github.com/rha6780/patchline/issues" rel="noopener">GitHub Issues ↗</a></p>
+{{end}}
