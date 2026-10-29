@@ -102,7 +102,8 @@ patchline/
 │   ├── job/                # scheduled jobs: SLA evaluation, reminders, KEV refresh
 │   └── web/                # server-rendered pages + embedded CSS
 ├── examples/               # sample inventory, policy, SBOM
-└── deploy/compose/         # docker compose demo
+├── deploy/compose/         # docker compose demo
+└── docs/                   # integration guides
 ```
 
 ## Getting started
@@ -113,6 +114,7 @@ make demo-up                      # Dependency-Track + Patchline via docker comp
 ```
 
 The demo walkthrough (API key, webhook, sample SBOM) is in [deploy/compose/README.md](deploy/compose/README.md).
+Setting up each tool — Dependency-Track, SBOMs in CI, Renovate, Gitea / Forgejo / GitHub, Slack, CISA KEV and EPSS — is covered in [docs/](docs/README.md).
 Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082` (change them in `deploy/compose/.env`).
 
 ### Web UI

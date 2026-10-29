@@ -102,7 +102,8 @@ patchline/
 │   ├── job/                # 스케줄 작업: SLA 평가, 재알림, KEV 갱신
 │   └── web/                # 서버 렌더링 화면 + 내장 CSS
 ├── examples/               # 샘플 인벤토리, 정책, SBOM
-└── deploy/compose/         # docker compose 데모
+├── deploy/compose/         # docker compose 데모
+└── docs/                   # 도구별 연동 가이드
 ```
 
 ## 시작하기
@@ -113,6 +114,7 @@ make demo-up                      # docker compose로 Dependency-Track + Patchli
 ```
 
 데모 진행 순서(API 키, Webhook 설정, 샘플 SBOM 업로드)는 [deploy/compose/README.md](deploy/compose/README.md)에 있습니다.
+도구별 연동 방법(Dependency-Track, CI의 SBOM 생성, Renovate, Gitea / Forgejo / GitHub, Slack, CISA KEV·EPSS)은 [docs/](docs/README.ko.md)에 정리했습니다.
 데모 포트는 Patchline `18080`, Dependency-Track API `18081`, UI `18082`입니다(`deploy/compose/.env`에서 변경).
 
 ### 웹 UI
