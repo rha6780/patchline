@@ -40,7 +40,15 @@ make demo-up
 
 Then follow [deploy/compose/README.md](deploy/compose/README.md) to create the API key, point Dependency-Track at Patchline and upload a sample SBOM. Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082`.
 
-To run Patchline on its own, build the binary (Go, see [`go.mod`](go.mod)) or the container image:
+To run it on a server or your own machine, use [deploy/self-hosted](deploy/self-hosted/README.md): Patchline with your existing Dependency-Track, or both together, with your inventory and settings in `.env`.
+
+```sh
+cd deploy/self-hosted
+cp .env.example .env               # set PATCHLINE_WEBHOOK_TOKEN and the Dependency-Track URL and key
+docker compose up -d --build
+```
+
+Or run the binary (Go, see [`go.mod`](go.mod)) or the container image directly:
 
 ```sh
 make build && ./bin/patchline       # http://localhost:8080, SQLite in data/

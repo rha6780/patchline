@@ -9,6 +9,9 @@
 *.db-shm
 /data/
 
+# Self-hosted config (inventory, policy) lives with each installation
+/deploy/self-hosted/config/
+
 # Env / secrets
 .env
 .env.*

@@ -3,6 +3,7 @@
 bin
 dist
 data
+deploy/self-hosted/config
 docs
 *.db*
 .env*

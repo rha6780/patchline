@@ -37,4 +37,4 @@ Renovate ── 수정 PR ──▶ Gitea / Forgejo / GitHub ─ webhook ┘   �
 | 저장소 전체 이름(`owner/name`) | `repositories[].repo` |
 | PR의 base 브랜치 | PR을 연결할 환경(`default`도 포함) |
 
-로컬에서 전체 흐름을 돌려 보려면 [Compose 데모](../deploy/compose/README.md)를 참고하세요.
+로컬에서 전체 흐름을 돌려 보려면 [Compose 데모](../deploy/compose/README.md)를, 서버나 로컬 PC에 설치하려면 [deploy/self-hosted](../deploy/self-hosted/README.ko.md)를 참고하세요.

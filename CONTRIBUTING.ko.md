@@ -78,6 +78,7 @@ patchline/
 │   └── web/                # 서버 렌더링 화면 + 내장 CSS
 ├── examples/               # 샘플 인벤토리, 정책, SBOM
 ├── deploy/compose/         # docker compose 데모
+├── deploy/self-hosted/     # 직접 설치용 docker compose(온프렘, 로컬)
 └── docs/                   # 동작 방식, 설정, 연동 가이드
 ```
 

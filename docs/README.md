@@ -37,4 +37,4 @@ Every integration meets in the **inventory** (`PATCHLINE_INVENTORY_PATH`): it ma
 | Repository full name (`owner/name`) | `repositories[].repo` |
 | Pull request base branch | Environment the PR is matched in (and `default`) |
 
-For a local end-to-end run, see the [compose demo](../deploy/compose/README.md).
+For a local end-to-end run, see the [compose demo](../deploy/compose/README.md). To install Patchline on a server or your machine, see [deploy/self-hosted](../deploy/self-hosted/README.md).

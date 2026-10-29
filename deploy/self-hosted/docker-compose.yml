@@ -1,0 +1,97 @@
+# Patchline for on-premises or local use.
+#
+#   cd deploy/self-hosted
+#   cp .env.example .env                       # then set the secrets
+#   cp -r ../../examples/inventory config/     # then describe your services
+#   docker compose up -d --build                                   # Patchline only
+#   docker compose --profile dependency-track up -d --build        # + Dependency-Track
+#
+# See README.md in this directory.
+
+name: patchline
+
+services:
+  patchline:
+    image: ${PATCHLINE_IMAGE:-patchline:local}
+    build:
+      context: ../..
+    env_file: .env
+    environment:
+      # Paths inside the container; the rest comes from .env.
+      PATCHLINE_ADDR: ":8080"
+      PATCHLINE_DB_PATH: /data/patchline.db
+      PATCHLINE_INVENTORY_PATH: /etc/patchline/inventory
+      # Without a token the webhooks would accept anything.
+      PATCHLINE_WEBHOOK_TOKEN: ${PATCHLINE_WEBHOOK_TOKEN:?set PATCHLINE_WEBHOOK_TOKEN in .env}
+    volumes:
+      - patchline-data:/data
+      - ${PATCHLINE_CONFIG_DIR:-./config}:/etc/patchline:ro
+    ports:
+      # The UI has no login: keep it on localhost, or behind an
+      # authenticating proxy when PATCHLINE_BIND is opened up.
+      - "${PATCHLINE_BIND:-127.0.0.1}:${PATCHLINE_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  # --- Optional: Dependency-Track (docker compose --profile dependency-track) ---
+
+  postgres:
+    profiles: [dependency-track]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: dtrack
+      POSTGRES_USER: dtrack
+      POSTGRES_PASSWORD: ${DT_DB_PASSWORD:-}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dtrack -d dtrack"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  dtrack-apiserver:
+    profiles: [dependency-track]
+    image: dependencytrack/apiserver:4.14.6
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ALPINE_DATABASE_MODE: external
+      ALPINE_DATABASE_URL: jdbc:postgresql://postgres:5432/dtrack
+      ALPINE_DATABASE_DRIVER: org.postgresql.Driver
+      ALPINE_DATABASE_USERNAME: dtrack
+      ALPINE_DATABASE_PASSWORD: ${DT_DB_PASSWORD:-}
+    volumes:
+      - dtrack-data:/data
+    ports:
+      - "${DT_BIND:-127.0.0.1}:${DT_API_PORT:-8081}:8080"
+    restart: unless-stopped
+
+  dtrack-frontend:
+    profiles: [dependency-track]
+    image: dependencytrack/frontend:4.14.0
+    depends_on:
+      - dtrack-apiserver
+    environment:
+      # The browser calls the API directly, so this is the URL users reach.
+      API_BASE_URL: ${DT_API_BASE_URL:-http://localhost:8081}
+    ports:
+      - "${DT_BIND:-127.0.0.1}:${DT_UI_PORT:-8082}:8080"
+    restart: unless-stopped
+
+volumes:
+  patchline-data:
+  postgres-data:
+  dtrack-data:

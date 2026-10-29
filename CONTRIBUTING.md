@@ -78,6 +78,7 @@ patchline/
 │   └── web/                # server-rendered pages + embedded CSS
 ├── examples/               # sample inventory, policy, SBOM
 ├── deploy/compose/         # docker compose demo
+├── deploy/self-hosted/     # docker compose for on-premises / local use
 └── docs/                   # how it works, configuration, integration guides
 ```
 

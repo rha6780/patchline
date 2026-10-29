@@ -40,7 +40,15 @@ make demo-up
 
 이어서 [deploy/compose/README.md](deploy/compose/README.md)를 따라 API 키를 만들고, Dependency-Track이 Patchline으로 알림을 보내도록 설정하고, 샘플 SBOM을 올립니다. 데모 포트는 Patchline `18080`, Dependency-Track API `18081`, UI `18082`입니다.
 
-Patchline만 실행하려면 바이너리(Go 버전은 [`go.mod`](go.mod) 참고)나 컨테이너 이미지를 빌드합니다.
+서버나 로컬 PC에 설치하려면 [deploy/self-hosted](deploy/self-hosted/README.ko.md)를 쓰세요. 이미 있는 Dependency-Track에 연결하거나 둘을 함께 띄울 수 있고, 인벤토리와 설정은 `.env`로 지정합니다.
+
+```sh
+cd deploy/self-hosted
+cp .env.example .env               # PATCHLINE_WEBHOOK_TOKEN, Dependency-Track 주소와 키 설정
+docker compose up -d --build
+```
+
+또는 바이너리(Go 버전은 [`go.mod`](go.mod) 참고)나 컨테이너 이미지를 직접 실행할 수도 있습니다.
 
 ```sh
 make build && ./bin/patchline       # http://localhost:8080, SQLite는 data/에 저장
