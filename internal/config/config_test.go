@@ -42,6 +42,7 @@ func TestFromLookupOverrides(t *testing.T) {
 		"PATCHLINE_SLACK_BOT_TOKEN":       "xoxb-1",
 		"PATCHLINE_SLACK_DEFAULT_CHANNEL": "#security",
 		"PATCHLINE_NOTIFY_MIN_SEVERITY":   "HIGH",
+		"PATCHLINE_NOTIFY_LANG":           "KO",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +67,7 @@ func TestFromLookupOverrides(t *testing.T) {
 		SlackBotToken:       "xoxb-1",
 		SlackDefaultChannel: "#security",
 		NotifyMinSeverity:   "high",
+		NotifyLang:          "ko",
 	}
 	if cfg != want {
 		t.Fatalf("got %+v, want %+v", cfg, want)
@@ -78,6 +80,7 @@ func TestFromLookupInvalid(t *testing.T) {
 		{"PATCHLINE_LOG_FORMAT": "xml"},
 		{"PATCHLINE_SHUTDOWN_TIMEOUT": "soon"},
 		{"PATCHLINE_NOTIFY_MIN_SEVERITY": "urgent"},
+		{"PATCHLINE_NOTIFY_LANG": "fr"},
 		{"PATCHLINE_DT_RECONCILE_DELAY": "-1m"},
 	} {
 		if _, err := FromLookup(lookupFrom(tc)); err == nil {

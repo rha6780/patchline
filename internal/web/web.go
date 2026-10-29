@@ -11,7 +11,6 @@ import (
 	"context"
 	"database/sql"
 	"embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/finding"
+	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/store"
@@ -94,13 +94,23 @@ func New(o Options) (*UI, error) {
 	u.mux.HandleFunc("GET /findings/{id}", u.finding)
 	u.mux.HandleFunc("GET /services/{name}", u.service)
 	u.mux.HandleFunc("GET /integrations", u.integrations)
+	u.mux.HandleFunc("GET /prefs", u.prefs)
 	return u, nil
 }
 
 func (u *UI) ServeHTTP(w http.ResponseWriter, r *http.Request) { u.mux.ServeHTTP(w, r) }
 
-func (u *UI) render(w http.ResponseWriter, page, title string, data map[string]any) {
-	data["Title"] = title
+func (u *UI) render(w http.ResponseWriter, r *http.Request, page, titleKey string, data map[string]any) {
+	l := langOf(r)
+	data["L"] = l
+	data["Langs"] = i18n.Supported
+	data["Theme"] = themeOf(r)
+	data["Themes"] = themes
+	data["Path"] = r.URL.RequestURI()
+	data["Title"] = titleKey
+	if i18n.Has(titleKey) {
+		data["Title"] = l.T(titleKey)
+	}
 	data["Page"] = page
 	data["Version"] = u.o.Version
 	data["DTUIURL"] = u.o.DTUIURL
@@ -111,7 +121,61 @@ func (u *UI) render(w http.ResponseWriter, page, title string, data map[string]a
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Language", string(l))
+	w.Header().Set("Vary", "Accept-Language, Cookie")
 	_, _ = w.Write([]byte(buf.String()))
+}
+
+// ---- preferences ------------------------------------------------------
+
+const (
+	cookieLang  = "patchline_lang"
+	cookieTheme = "patchline_theme"
+)
+
+var themes = []string{"system", "light", "dark"}
+
+func langOf(r *http.Request) i18n.Lang {
+	if c, err := r.Cookie(cookieLang); err == nil {
+		if l, ok := i18n.Parse(c.Value); ok {
+			return l
+		}
+	}
+	return i18n.Negotiate(r.Header.Get("Accept-Language"))
+}
+
+func themeOf(r *http.Request) string {
+	if c, err := r.Cookie(cookieTheme); err == nil {
+		for _, t := range themes {
+			if c.Value == t {
+				return t
+			}
+		}
+	}
+	return "system"
+}
+
+// prefs stores the language or theme in a cookie and returns to "next".
+// It works without JavaScript: the header links point here.
+func (u *UI) prefs(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	set := func(name, value string) {
+		http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", MaxAge: 365 * 24 * 3600,
+			HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
+	}
+	if l, ok := i18n.Parse(q.Get("lang")); ok {
+		set(cookieLang, string(l))
+	}
+	for _, t := range themes {
+		if q.Get("theme") == t {
+			set(cookieTheme, t)
+		}
+	}
+	next := q.Get("next")
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
+		next = "/"
+	}
+	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
 func (u *UI) fail(w http.ResponseWriter, err error) {
@@ -213,9 +277,9 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 
 	mttr := "—"
 	if mttrN > 0 {
-		mttr = humanDuration(mttrSum / time.Duration(mttrN))
+		mttr = humanDuration(langOf(r), mttrSum/time.Duration(mttrN))
 	}
-	u.render(w, "overview", "Overview", map[string]any{
+	u.render(w, r, "overview", "ui.overview", map[string]any{
 		"Open": open, "CritHigh": critHigh, "Awaiting": awaiting, "Resolved30": resolved30, "MTTR": mttr,
 		"Overdue": overdue, "DueWeek": dueWeek, "Now": nowS,
 		"Services": services, "Severities": severities,
@@ -245,7 +309,7 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 		u.fail(w, err)
 		return
 	}
-	u.render(w, "findings", "Findings", map[string]any{
+	u.render(w, r, "findings", "ui.findings", map[string]any{
 		"Findings": list, "Filter": f, "Severities": severities, "States": states, "Due": due,
 		"Now": store.FormatTime(u.o.Now()),
 	})
@@ -287,13 +351,13 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 	}
 	var timeline []timelineItem
 	for _, e := range events {
-		timeline = append(timeline, timelineItem{Kind: e.Kind, At: e.OccurredAt, Text: describe(e), Icon: eventIcon(e.Kind)})
+		timeline = append(timeline, timelineItem{Kind: e.Kind, At: e.OccurredAt, Text: notify.Describe(langOf(r), e), Icon: eventIcon(e.Kind)})
 	}
 	var svc *inventory.Service
 	if f.Registered {
 		svc, _ = u.o.Inventory.Service(f.Service)
 	}
-	u.render(w, "finding", f.VulnID, map[string]any{
+	u.render(w, r, "finding", f.VulnID, map[string]any{
 		"F": f, "Service": svc, "Timeline": timeline, "PRs": prs, "DTLink": u.dtLink(f),
 		"Now": store.FormatTime(u.o.Now()),
 	})
@@ -369,7 +433,7 @@ func (u *UI) service(w http.ResponseWriter, r *http.Request) {
 			gaps++
 		}
 	}
-	u.render(w, "service", name, map[string]any{
+	u.render(w, r, "service", name, map[string]any{
 		"Name": name, "Service": svc, "Registered": registered, "Envs": envs, "Rows": table,
 		"Open": open, "Gaps": gaps,
 	})
@@ -415,7 +479,7 @@ func (u *UI) integrations(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	u.render(w, "integrations", "Integrations", map[string]any{
+	u.render(w, r, "integrations", "ui.integrations", map[string]any{
 		"Projects": projects, "Missing": missing, "Inbox": inbox, "Notifications": notes,
 		"Stale": staleBefore(u.o.Now()),
 	})
@@ -433,6 +497,7 @@ var states = []finding.State{
 func (u *UI) funcs() template.FuncMap {
 	return template.FuncMap{
 		"stateLabel": notify.StateLabel,
+		"t":          func(l i18n.Lang, key string, args ...any) string { return l.T(key, args...) },
 		"stateClass": func(s string) string { return "state-" + strings.ReplaceAll(s, "_", "-") },
 		"sevClass":   func(s string) string { return "sev-" + s },
 		"component":  notify.Component,
@@ -454,7 +519,7 @@ func (u *UI) funcs() template.FuncMap {
 		"staleBOM":  func(lastBOM, before string) bool { return lastBOM == "" || lastBOM < before },
 		"dtProject": func(uuid string) string { return u.dtProjectLink(uuid) },
 		"rich":      rich,
-		"dueText":   func(due string) string { return notify.DueText(due, u.o.Now()) },
+		"dueText":   func(l i18n.Lang, due string) string { return notify.DueText(l, due, u.o.Now()) },
 		"sevText":   notify.SeverityText,
 		"overdue":   func(f store.Finding, now string) bool { return f.Overdue(now) },
 		"epss":      func(v *float64) string { return fmt.Sprintf("%.2f", *v) },
@@ -479,27 +544,6 @@ func (u *UI) dtLink(f store.Finding) string {
 		return l + "/findings"
 	}
 	return ""
-}
-
-func describe(e store.FindingEvent) string {
-	if t := notify.EventText(e); t != "" {
-		return t
-	}
-	switch e.Kind {
-	case finding.EventDetected:
-		return "Detected by Dependency-Track"
-	case finding.EventNotified:
-		var ev struct {
-			Sink    string `json:"sink"`
-			Channel string `json:"channel"`
-		}
-		_ = json.Unmarshal(e.Evidence, &ev)
-		if ev.Sink != "" {
-			return strings.TrimSpace("Posted to " + ev.Sink + " " + ev.Channel)
-		}
-		return "Notification posted"
-	}
-	return e.Kind
 }
 
 var (
@@ -591,14 +635,14 @@ func staleBefore(now time.Time) string {
 	return now.Add(-7 * 24 * time.Hour).UTC().Format(storeTimeLayout)
 }
 
-func humanDuration(d time.Duration) string {
+func humanDuration(l i18n.Lang, d time.Duration) string {
 	switch {
 	case d >= 48*time.Hour:
-		return fmt.Sprintf("%.1f days", d.Hours()/24)
+		return l.T("ui.mttr.days", d.Hours()/24)
 	case d >= time.Hour:
-		return fmt.Sprintf("%.1f hours", d.Hours())
+		return l.T("ui.mttr.hours", d.Hours())
 	default:
-		return fmt.Sprintf("%d min", int(d.Minutes()))
+		return l.T("ui.mttr.minutes", int(d.Minutes()))
 	}
 }
 

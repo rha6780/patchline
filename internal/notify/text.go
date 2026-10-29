@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/finding"
+	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -27,26 +28,21 @@ func SeverityEmoji(sev string) string {
 }
 
 // StateLabel returns a short human label for a state.
-func StateLabel(s string) string {
-	switch finding.State(s) {
-	case finding.StateNeedsReview:
-		return "❓ Needs review"
-	case finding.StateNew:
-		return "🆕 New"
-	case finding.StateInProgress:
-		return "🛠️ In progress"
-	case finding.StateAwaitingVerification:
-		return "⏳ Awaiting verification"
-	case finding.StateResolved:
-		return "✅ Resolved"
-	case finding.StateNotAffected:
-		return "⚪ Not affected"
-	case finding.StateRiskAccepted:
-		return "⚠️ Risk accepted"
-	case finding.StateReopened:
-		return "🔁 Reopened"
+func StateLabel(l i18n.Lang, s string) string {
+	key := "state." + s
+	if !i18n.Has(key) {
+		return s
 	}
-	return s
+	return l.T(key)
+}
+
+// VerdictLabel describes a fix verdict.
+func VerdictLabel(l i18n.Lang, v string) string {
+	switch v {
+	case store.VerdictFixes, store.VerdictInsufficient:
+		return l.T("verdict." + v)
+	}
+	return l.T("verdict.unknown")
 }
 
 // Component returns name@version.
@@ -61,9 +57,14 @@ func Component(f store.Finding) string {
 	return name
 }
 
+// PRRef renders "owner/repo#12".
+func PRRef(repo string, number int) string {
+	return fmt.Sprintf("%s#%d", repo, number)
+}
+
 // DueText describes a due date relative to now: "due 2026-11-05 (in 6
 // days)" or "overdue by 2 days (due 2026-11-05)".
-func DueText(due string, now time.Time) string {
+func DueText(l i18n.Lang, due string, now time.Time) string {
 	t, err := time.Parse(store.TimeLayout, due)
 	if err != nil {
 		return due
@@ -72,37 +73,52 @@ func DueText(due string, now time.Time) string {
 	d := t.Sub(now)
 	switch {
 	case d < 0:
-		return fmt.Sprintf("overdue by %s (due %s)", days(-d), day)
+		return l.T("due.overdue", Days(l, -d), day)
 	case d < 24*time.Hour:
-		return fmt.Sprintf("due %s (today)", day)
+		return l.T("due.today", day)
 	default:
-		return fmt.Sprintf("due %s (in %s)", day, days(d))
+		return l.T("due.in", day, Days(l, d))
 	}
 }
 
-func days(d time.Duration) string {
+// Days renders a duration as hours (under a day) or rounded days.
+func Days(l i18n.Lang, d time.Duration) string {
 	if d < 24*time.Hour {
-		return fmt.Sprintf("%d hours", int(d.Hours()))
+		return l.T("dur.hours", int(d.Hours()))
 	}
 	n := int(math.Round(d.Hours() / 24))
 	if n == 1 {
-		return "1 day"
+		return l.T("dur.day")
 	}
-	return fmt.Sprintf("%d days", n)
+	return l.T("dur.days", n)
 }
 
-// SeverityText is the effective severity, with the scanner's when they differ:
-// "critical (high, in CISA KEV)".
-func SeverityText(f store.Finding) string {
+// Reason translates a stored escalation reason ("in CISA KEV",
+// "EPSS 0.94", "internet exposure").
+func Reason(l i18n.Lang, r string) string {
+	switch {
+	case r == "in CISA KEV":
+		return l.T("reason.kev")
+	case strings.HasSuffix(r, " exposure"):
+		return l.T("reason.exposure", strings.TrimSuffix(r, " exposure"))
+	}
+	return r
+}
+
+// SeverityText is the effective severity, with the scanner's when they
+// differ: "critical (scanner: high, in CISA KEV)".
+func SeverityText(l i18n.Lang, f store.Finding) string {
 	sev := f.DisplaySeverity()
 	if sev == f.Severity && len(f.SLAReasons) == 0 {
 		return sev
 	}
 	var parts []string
 	if sev != f.Severity {
-		parts = append(parts, "scanner: "+f.Severity)
+		parts = append(parts, l.T("sev.scanner", f.Severity))
 	}
-	parts = append(parts, f.SLAReasons...)
+	for _, r := range f.SLAReasons {
+		parts = append(parts, Reason(l, r))
+	}
 	return sev + " (" + strings.Join(parts, ", ") + ")"
 }
 
@@ -110,13 +126,13 @@ func SeverityText(f store.Finding) string {
 // fallback text and by the console sink.
 func Summary(m Message) string {
 	f := m.Finding
-	return fmt.Sprintf("[%s] %s in %s (%s/%s) — %s",
-		strings.ToUpper(f.DisplaySeverity()), f.VulnID, Component(f), f.Service, f.Environment, StateLabel(f.State))
+	return m.Lang.T("summary", strings.ToUpper(f.DisplaySeverity()), f.VulnID, Component(f),
+		f.Service, f.Environment, StateLabel(m.Lang, f.State))
 }
 
 // EventText describes an event for a thread reply. Events that are already
 // part of the message (detection, the notification itself) return "".
-func EventText(e store.FindingEvent) string {
+func EventText(l i18n.Lang, e store.FindingEvent) string {
 	var ev map[string]any
 	_ = json.Unmarshal(e.Evidence, &ev)
 	str := func(k string) string {
@@ -128,53 +144,83 @@ func EventText(e store.FindingEvent) string {
 
 	switch e.Kind {
 	case finding.EventStateChanged:
-		from, to := "", ""
-		if e.FromState != nil {
-			from = StateLabel(*e.FromState)
-		}
-		if e.ToState != nil {
-			to = StateLabel(*e.ToState)
-		}
-		text := fmt.Sprintf("State: %s → %s", from, to)
+		text := stateChange(l, e)
 		switch str("reason") {
-		case "absent_from_latest_bom":
+		case store.ReasonAbsentFromSnapshot:
 			snap, _ := ev["snapshot"].(map[string]any)
-			return text + " — no longer reported for the latest BOM" + commitSuffix(snap)
-		case "seen_again":
+			return text + l.T("ev.absent") + commitSuffix(l, snap)
+		case store.ReasonSeenAgain:
 			obs, _ := ev["observation"].(map[string]any)
-			return text + " — reported again after it was resolved" + commitSuffix(obs)
+			return text + l.T("ev.seen_again") + commitSuffix(l, obs)
 		}
 		if a := str("analysis_state"); a != "" {
-			text += fmt.Sprintf(" (Dependency-Track analysis: %s", a)
+			text += l.T("ev.analysis", a)
 			if s, _ := ev["suppressed"].(bool); s {
-				text += ", suppressed"
+				text += l.T("ev.suppressed")
 			}
 			text += ")"
 		}
 		return text
 	case finding.EventSeverityChanged:
-		return fmt.Sprintf("Severity: %s → %s", str("from"), str("to"))
+		return l.T("ev.severity", str("from"), str("to"))
 	case finding.EventPRLinked, finding.EventPRUpdated, finding.EventPRMerged, finding.EventPRClosed:
-		return prText(e, ev)
+		return prText(l, e, ev)
 	case finding.EventSLAChanged:
-		return slaText(ev)
+		return slaText(l, ev)
 	case finding.EventReminder:
-		return reminderText(str("kind"), str("due"))
+		if str("kind") == store.ReminderOverdue {
+			return l.T("rem.overdue", dateOnly(str("due")))
+		}
+		return l.T("rem.soon", dateOnly(str("due")))
 	case finding.EventDetected, finding.EventNotified:
 		return ""
 	}
-	return "Event: " + e.Kind
+	return l.T("ev.other", e.Kind)
+}
+
+// Describe is EventText for timelines: it also describes detection and
+// notification events.
+func Describe(l i18n.Lang, e store.FindingEvent) string {
+	if t := EventText(l, e); t != "" {
+		return t
+	}
+	switch e.Kind {
+	case finding.EventDetected:
+		return l.T("ev.detected")
+	case finding.EventNotified:
+		var ev struct {
+			Sink    string `json:"sink"`
+			Channel string `json:"channel"`
+		}
+		_ = json.Unmarshal(e.Evidence, &ev)
+		if ev.Sink != "" {
+			return strings.TrimSpace(l.T("ev.notified", ev.Sink, ev.Channel))
+		}
+		return l.T("ev.notified_plain")
+	}
+	return e.Kind
+}
+
+func stateChange(l i18n.Lang, e store.FindingEvent) string {
+	from, to := "", ""
+	if e.FromState != nil {
+		from = StateLabel(l, *e.FromState)
+	}
+	if e.ToState != nil {
+		to = StateLabel(l, *e.ToState)
+	}
+	return l.T("ev.state", from, to)
 }
 
 // commitSuffix renders " (commit `abc` on `ref`)" from evidence, or "".
-func commitSuffix(m map[string]any) string {
+func commitSuffix(l i18n.Lang, m map[string]any) string {
 	c, _ := m["commit"].(string)
 	if c == "" {
 		return ""
 	}
-	out := " (commit `" + shortSHA(c) + "`"
+	out := l.T("ev.commit", shortSHA(c))
 	if r, _ := m["ref"].(string); r != "" {
-		out += " on `" + r + "`"
+		out += l.T("ev.on_ref", r)
 	}
 	return out + ")"
 }
@@ -186,23 +232,7 @@ func shortSHA(s string) string {
 	return s
 }
 
-// VerdictLabel describes a fix verdict.
-func VerdictLabel(v string) string {
-	switch v {
-	case store.VerdictFixes:
-		return "✅ leaves the affected range"
-	case store.VerdictInsufficient:
-		return "⚠️ still affected"
-	}
-	return "❔ not verified"
-}
-
-// PRRef renders "owner/repo#12".
-func PRRef(repo string, number int) string {
-	return fmt.Sprintf("%s#%d", repo, number)
-}
-
-func prText(e store.FindingEvent, ev map[string]any) string {
+func prText(l i18n.Lang, e store.FindingEvent, ev map[string]any) string {
 	str := func(k string) string { v, _ := ev[k].(string); return v }
 	num := 0
 	if f, ok := ev["number"].(float64); ok {
@@ -216,72 +246,65 @@ func prText(e store.FindingEvent, ev map[string]any) string {
 	var text string
 	switch e.Kind {
 	case finding.EventPRLinked, finding.EventPRUpdated:
-		verb := "Fix PR opened"
+		key := "pr.opened"
 		if e.Kind == finding.EventPRUpdated {
-			verb = "Fix PR updated"
+			key = "pr.updated"
 		}
 		change := str("to_version")
 		if from := str("from_version"); from != "" {
 			change = from + " → " + change
 		}
-		text = fmt.Sprintf("🔧 %s: %s — %s %s · %s", verb, ref, str("package"), change, VerdictLabel(str("verdict")))
+		text = l.T(key, ref, str("package"), change, VerdictLabel(l, str("verdict")))
 		if d := str("verdict_detail"); d != "" && str("verdict") != store.VerdictUnknown {
 			text += " (" + d + ")"
 		}
 	case finding.EventPRMerged:
-		text = "🔀 Fix PR merged: " + ref
+		text = l.T("pr.merged", ref)
 		if sha := str("merge_sha"); sha != "" {
-			text += " (commit `" + shortSHA(sha) + "`)"
+			text += l.T("pr.merge_commit", shortSHA(sha))
 		}
-		text += " — waiting for a rescan to confirm"
+		text += l.T("pr.wait")
 	case finding.EventPRClosed:
-		text = "🚫 Fix PR closed without merging: " + ref
+		text = l.T("pr.closed", ref)
 	}
 	if e.FromState != nil && e.ToState != nil {
-		text += fmt.Sprintf("\nState: %s → %s", StateLabel(*e.FromState), StateLabel(*e.ToState))
+		text += "\n" + stateChange(l, e)
 	}
 	return text
 }
 
-func slaText(ev map[string]any) string {
+func slaText(l i18n.Lang, ev map[string]any) string {
 	str := func(k string) string { v, _ := ev[k].(string); return v }
 	from, to := str("from_severity"), str("to_severity")
 	var reasons []string
 	if rs, ok := ev["reasons"].([]any); ok {
 		for _, r := range rs {
 			if s, ok := r.(string); ok {
-				reasons = append(reasons, s)
+				reasons = append(reasons, Reason(l, s))
 			}
 		}
 	}
 	var text string
 	switch {
-	case from != to && SeverityRank(to) < SeverityRank(from):
-		text = fmt.Sprintf("⏫ Escalated: %s → %s", from, to)
+	case from != to && finding.SeverityRank(to) < finding.SeverityRank(from):
+		text = l.T("sla.escalated", from, to)
 	case from != to:
-		text = fmt.Sprintf("⏬ Severity for the SLA: %s → %s", from, to)
+		text = l.T("sla.lowered", from, to)
 	default:
-		text = "📅 Due date updated"
+		text = l.T("sla.due_updated")
 	}
 	if len(reasons) > 0 {
 		text += " (" + strings.Join(reasons, ", ") + ")"
 	}
 	if d := str("to_due"); d != "" {
-		text += " · due " + dateOnly(d)
+		text += l.T("sla.due", dateOnly(d))
 		if f := str("from_due"); f != "" && f != d {
-			text += " (was " + dateOnly(f) + ")"
+			text += l.T("sla.was", dateOnly(f))
 		}
 	} else if str("from_due") != "" {
-		text += " · no due date"
+		text += l.T("sla.no_due")
 	}
 	return text
-}
-
-func reminderText(kind, due string) string {
-	if kind == store.ReminderOverdue {
-		return "🚨 Overdue — the SLA ended " + dateOnly(due)
-	}
-	return "⏰ Due soon — " + dateOnly(due)
 }
 
 func dateOnly(ts string) string {
@@ -290,6 +313,3 @@ func dateOnly(ts string) string {
 	}
 	return ts
 }
-
-// SeverityRank orders severities: 0 is most severe.
-func SeverityRank(s string) int { return finding.SeverityRank(s) }

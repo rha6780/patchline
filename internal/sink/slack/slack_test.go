@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/store"
@@ -150,5 +151,16 @@ func TestBlocksDueAndEscalation(t *testing.T) {
 	m.Finding.State = "resolved"
 	if b, _ := json.Marshal(Blocks(m)); strings.Contains(string(b), "overdue") {
 		t.Error("closed findings should not show a due date")
+	}
+}
+
+func TestBlocksKorean(t *testing.T) {
+	m := message()
+	m.Lang = i18n.KO
+	b, _ := json.Marshal(Blocks(m))
+	for _, want := range []string{"*서비스*", "*구성요소*", "🆕 신규", "Dependency-Track에서 열기", "최초 탐지"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("missing %q in %s", want, b)
+		}
 	}
 }

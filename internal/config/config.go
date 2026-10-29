@@ -58,6 +58,9 @@ type Config struct {
 	// SlackDefaultChannel receives findings whose service has no
 	// slack_channel (PATCHLINE_SLACK_DEFAULT_CHANNEL).
 	SlackDefaultChannel string
+	// NotifyLang is the language of chat messages (PATCHLINE_NOTIFY_LANG):
+	// en or ko.
+	NotifyLang string
 	// NotifyMinSeverity is the lowest severity that is posted
 	// (PATCHLINE_NOTIFY_MIN_SEVERITY): critical, high, medium, low, info.
 	NotifyMinSeverity string
@@ -79,6 +82,7 @@ func Default() Config {
 		ShutdownTimeout: 10 * time.Second,
 
 		NotifyMinSeverity:             "medium",
+		NotifyLang:                    "en",
 		KEVURL:                        "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
 		DependencyTrackReconcileDelay: 2 * time.Minute,
 	}
@@ -142,6 +146,14 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	}
 	cfg.SlackBotToken, _ = lookup("PATCHLINE_SLACK_BOT_TOKEN")
 	cfg.SlackDefaultChannel, _ = lookup("PATCHLINE_SLACK_DEFAULT_CHANNEL")
+	if v, ok := lookup("PATCHLINE_NOTIFY_LANG"); ok && v != "" {
+		switch strings.ToLower(v) {
+		case "en", "ko":
+			cfg.NotifyLang = strings.ToLower(v)
+		default:
+			return Config{}, fmt.Errorf("PATCHLINE_NOTIFY_LANG: want en or ko, got %q", v)
+		}
+	}
 	if v, ok := lookup("PATCHLINE_NOTIFY_MIN_SEVERITY"); ok && v != "" {
 		v = strings.ToLower(v)
 		switch v {

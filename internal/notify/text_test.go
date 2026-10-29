@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -60,7 +61,7 @@ func TestEventText(t *testing.T) {
 			"🚫 Fix PR closed without merging: acme/api#12"},
 	}
 	for _, tc := range tests {
-		if got := EventText(tc.e); got != tc.want {
+		if got := EventText(i18n.EN, tc.e); got != tc.want {
 			t.Errorf("EventText(%s)\n got %q\nwant %q", tc.e.Kind, got, tc.want)
 		}
 	}
@@ -75,15 +76,49 @@ func TestDueAndSeverityText(t *testing.T) {
 		"2026-11-28T23:59:00.000Z": "due 2026-11-28 (in 30 days)",
 		"2026-10-31T00:00:00.000Z": "due 2026-10-31 (in 1 day)",
 	} {
-		if got := DueText(due, now); got != want {
+		if got := DueText(i18n.EN, due, now); got != want {
 			t.Errorf("DueText(%s) = %q, want %q", due, got, want)
 		}
 	}
 	f := store.Finding{Severity: "high", EffectiveSeverity: "critical", SLAReasons: []string{"in CISA KEV"}}
-	if got := SeverityText(f); got != "critical (scanner: high, in CISA KEV)" {
+	if got := SeverityText(i18n.EN, f); got != "critical (scanner: high, in CISA KEV)" {
 		t.Errorf("SeverityText = %q", got)
 	}
-	if got := SeverityText(store.Finding{Severity: "low"}); got != "low" {
+	if got := SeverityText(i18n.EN, store.Finding{Severity: "low"}); got != "low" {
 		t.Errorf("plain = %q", got)
+	}
+}
+
+func TestKorean(t *testing.T) {
+	ev := func(m map[string]any) json.RawMessage { b, _ := json.Marshal(m); return b }
+	tests := []struct {
+		e    store.FindingEvent
+		want string
+	}{
+		{store.FindingEvent{Kind: "state_changed", FromState: ptr("in_progress"), ToState: ptr("resolved"),
+			Evidence: ev(map[string]any{"reason": "absent_from_latest_bom",
+				"snapshot": map[string]any{"commit": "3f2a9c1e0b7d4a6f8e5c", "ref": "refs/heads/main"}})},
+			"상태: 🛠️ 조치중 → ✅ 해결 — 최신 BOM에서 더 이상 보고되지 않음 (커밋 `3f2a9c1e0b7d`, `refs/heads/main`)"},
+		{store.FindingEvent{Kind: "sla_changed", Evidence: ev(map[string]any{"from_severity": "high", "to_severity": "critical",
+			"reasons": []string{"in CISA KEV", "internet exposure"}, "to_due": "2026-11-05T00:00:00.000Z"})},
+			"⏫ 상향: high → critical (CISA KEV 등재, internet 노출) · 기한 2026-11-05"},
+		{store.FindingEvent{Kind: "reminder", Evidence: ev(map[string]any{"kind": "overdue", "due": "2026-11-05T00:00:00.000Z"})},
+			"🚨 기한 초과 — SLA 종료일 2026-11-05"},
+	}
+	for _, tc := range tests {
+		if got := EventText(i18n.KO, tc.e); got != tc.want {
+			t.Errorf("ko %s:\n got %q\nwant %q", tc.e.Kind, got, tc.want)
+		}
+	}
+	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	if got := DueText(i18n.KO, "2026-11-05T00:00:00.000Z", now); got != "기한 2026-11-05 (6일 남음)" {
+		t.Errorf("due ko = %q", got)
+	}
+	if got := Describe(i18n.KO, store.FindingEvent{Kind: "notified", Evidence: ev(map[string]any{"sink": "slack", "channel": "C1"})}); got != "slack C1에 알림 전송" {
+		t.Errorf("describe ko = %q", got)
+	}
+	m := Message{Lang: i18n.KO, Finding: store.Finding{Severity: "high", VulnID: "CVE-1", ComponentName: "x", Service: "s", Environment: "main", State: "new"}}
+	if got := Summary(m); got != "[HIGH] CVE-1 · x (s/main) — 🆕 신규" {
+		t.Errorf("summary ko = %q", got)
 	}
 }

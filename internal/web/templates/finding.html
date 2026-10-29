@@ -1,35 +1,35 @@
 {{define "content"}}
-{{$f := .F}}
-<p class="crumbs"><a href="/findings?open=1">Findings</a> / <a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / #{{$f.ID}}</p>
+{{$f := .F}}{{$L := .L}}
+<p class="crumbs"><a href="/findings?open=1">{{t $L "ui.findings"}}</a> / <a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / #{{$f.ID}}</p>
 <h1><span class="pill big {{sevClass $f.DisplaySeverity}}">{{$f.DisplaySeverity}}</span> {{$f.VulnID}}{{if $f.KEV}} <span class="tag kev">CISA KEV</span>{{end}}</h1>
 {{if $f.Title}}<p class="lead">{{$f.Title}}</p>{{end}}
 
 <dl class="facts">
-  <div><dt>State</dt><dd><span class="state {{stateClass $f.State}}">{{stateLabel $f.State}}</span></dd></div>
-  <div><dt>Due</dt><dd>{{if and $f.DueAt (isOpen $f.State)}}<span class="{{if overdue $f .Now}}late{{end}}">{{dueText (deref $f.DueAt)}}</span>{{else}}—{{end}}</dd></div>
-  <div><dt>Severity</dt><dd>{{sevText $f}}{{if $f.EPSS}}<div class="meta">EPSS {{epss $f.EPSS}}</div>{{end}}</dd></div>
-  <div><dt>Service</dt><dd><a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / {{$f.Environment}}{{if not $f.Registered}} <span class="tag warn">not in inventory</span>{{end}}</dd></div>
-  <div><dt>Component</dt><dd><code>{{component $f}}</code><div class="meta">{{$f.ComponentRef}}</div></dd></div>
-  {{if $f.Repository}}<div><dt>Repository</dt><dd>{{$f.Repository}}</dd></div>{{end}}
-  <div><dt>Owners</dt><dd>{{if .Service}}{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}{{if .Service.SlackChannel}} · {{.Service.SlackChannel}}{{end}}{{else}}—{{end}}</dd></div>
-  {{if $f.Aliases}}<div><dt>Aliases</dt><dd>{{join $f.Aliases ", "}}</dd></div>{{end}}
-  <div><dt>First seen</dt><dd>{{ts $f.FirstSeenAt}}</dd></div>
-  {{if $f.ResolvedAt}}<div><dt>Resolved</dt><dd>{{ts (deref $f.ResolvedAt)}}</dd></div>{{end}}
+  <div><dt>{{t $L "ui.fact.state"}}</dt><dd><span class="state {{stateClass $f.State}}">{{stateLabel $L $f.State}}</span></dd></div>
+  <div><dt>{{t $L "ui.fact.due"}}</dt><dd>{{if and $f.DueAt (isOpen $f.State)}}<span class="{{if overdue $f .Now}}late{{end}}">{{dueText $L (deref $f.DueAt)}}</span>{{else}}—{{end}}</dd></div>
+  <div><dt>{{t $L "ui.fact.severity"}}</dt><dd>{{sevText $L $f}}{{if $f.EPSS}}<div class="meta">EPSS {{epss $f.EPSS}}</div>{{end}}</dd></div>
+  <div><dt>{{t $L "ui.fact.service"}}</dt><dd><a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / {{$f.Environment}}{{if not $f.Registered}} <span class="tag warn">{{t $L "ui.not_in_inventory"}}</span>{{end}}</dd></div>
+  <div><dt>{{t $L "ui.fact.component"}}</dt><dd><code>{{component $f}}</code><div class="meta">{{$f.ComponentRef}}</div></dd></div>
+  {{if $f.Repository}}<div><dt>{{t $L "ui.fact.repository"}}</dt><dd>{{$f.Repository}}</dd></div>{{end}}
+  <div><dt>{{t $L "ui.fact.owners"}}</dt><dd>{{if .Service}}{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}{{if .Service.SlackChannel}} · {{.Service.SlackChannel}}{{end}}{{else}}—{{end}}</dd></div>
+  {{if $f.Aliases}}<div><dt>{{t $L "ui.fact.aliases"}}</dt><dd>{{join $f.Aliases ", "}}</dd></div>{{end}}
+  <div><dt>{{t $L "ui.fact.first_seen"}}</dt><dd>{{ts $f.FirstSeenAt}}</dd></div>
+  {{if $f.ResolvedAt}}<div><dt>{{t $L "ui.fact.resolved"}}</dt><dd>{{ts (deref $f.ResolvedAt)}}</dd></div>{{end}}
 </dl>
-{{if .DTLink}}<p><a class="button" href="{{.DTLink}}">Open in Dependency-Track ↗</a> <span class="muted">to record an analysis decision</span></p>{{end}}
+{{if .DTLink}}<p><a class="button" href="{{.DTLink}}">{{t $L "ui.open_dt"}}</a> <span class="muted">{{t $L "ui.open_dt_hint"}}</span></p>{{end}}
 
 {{if .PRs}}
-<h2>Fix pull requests</h2>
+<h2>{{t $L "ui.fix_prs"}}</h2>
 <div class="scroll">
 <table>
-  <thead><tr><th>Pull request</th><th>Change</th><th>Verdict</th><th>State</th></tr></thead>
+  <thead><tr><th>{{t $L "ui.col.pr"}}</th><th>{{t $L "ui.col.change"}}</th><th>{{t $L "ui.col.verdict"}}</th><th>{{t $L "ui.col.state"}}</th></tr></thead>
   <tbody>
   {{range .PRs}}
   <tr>
     <td><a href="{{.URL}}">{{prRef .Repository .Number}}</a><div class="meta">{{.Title}}</div></td>
     <td><code>{{.Package}}</code> {{if .FromVersion}}{{.FromVersion}} → {{end}}{{.ToVersion}}</td>
-    <td>{{verdict .Verdict}}{{if .VerdictDetail}}<div class="meta">{{.VerdictDetail}}</div>{{end}}</td>
-    <td>{{.State}}{{if .MergeSHA}}<div class="meta">commit <code>{{short .MergeSHA}}</code></div>{{end}}</td>
+    <td>{{verdict $L .Verdict}}{{if .VerdictDetail}}<div class="meta">{{.VerdictDetail}}</div>{{end}}</td>
+    <td>{{.State}}{{if .MergeSHA}}<div class="meta">{{t $L "ui.commit"}} <code>{{short .MergeSHA}}</code></div>{{end}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -37,7 +37,7 @@
 </div>
 {{end}}
 
-<h2>Timeline</h2>
+<h2>{{t $L "ui.timeline"}}</h2>
 <ol class="timeline">
 {{range .Timeline}}
   <li class="ev-{{.Kind}}"><span class="icon" aria-hidden="true">{{.Icon}}</span>

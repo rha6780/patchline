@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/finding"
+	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -34,6 +35,8 @@ type Message struct {
 	Link string
 	// PullRequests are the pull requests linked to the finding.
 	PullRequests []store.PullRequestLink
+	// Lang is the language of the message text.
+	Lang i18n.Lang
 }
 
 // Sink delivers messages to a chat system.
@@ -78,6 +81,8 @@ type Notifier struct {
 	MinSeverity string
 	// DTUIURL, when set, adds a Dependency-Track link to messages.
 	DTUIURL string
+	// Lang is the language of messages (default English).
+	Lang i18n.Lang
 
 	PollInterval time.Duration // default 10s
 	BatchSize    int           // default 20
@@ -93,6 +98,9 @@ func (n *Notifier) init() {
 		}
 		if n.Inventory == nil {
 			n.Inventory = inventory.Empty()
+		}
+		if n.Lang == "" {
+			n.Lang = i18n.Default
 		}
 		if n.MinSeverity == "" {
 			n.MinSeverity = finding.SeverityMedium
@@ -212,7 +220,7 @@ func (n *Notifier) deliver(ctx context.Context, w store.NotificationWork) error 
 		return err
 	}
 	for i, e := range w.NewEvents {
-		text := EventText(e)
+		text := EventText(n.Lang, e)
 		if text == "" {
 			continue
 		}
@@ -231,7 +239,7 @@ func (n *Notifier) deliver(ctx context.Context, w store.NotificationWork) error 
 }
 
 func (n *Notifier) message(f store.Finding) Message {
-	m := Message{Finding: f}
+	m := Message{Finding: f, Lang: n.Lang}
 	if f.Registered {
 		if s, ok := n.Inventory.Service(f.Service); ok {
 			m.Service = s

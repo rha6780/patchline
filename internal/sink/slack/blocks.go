@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/finding"
+	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -16,35 +17,39 @@ var now = time.Now
 // Blocks renders a finding as Block Kit blocks.
 func Blocks(m notify.Message) []map[string]any {
 	f := m.Finding
+	l := m.Lang
+	if l == "" {
+		l = i18n.Default
+	}
 
 	sev := f.DisplaySeverity()
 	header := fmt.Sprintf("%s %s · %s", notify.SeverityEmoji(sev), strings.ToUpper(sev), f.VulnID)
 	fields := []map[string]any{
-		mrkdwn(fmt.Sprintf("*Service*\n%s (%s)", escape(f.Service), escape(f.Environment))),
-		mrkdwn(fmt.Sprintf("*Component*\n`%s`", escape(notify.Component(f)))),
-		mrkdwn("*State*\n" + notify.StateLabel(f.State)),
-		mrkdwn("*Owners*\n" + owners(m)),
+		field(l, "blk.service", fmt.Sprintf("%s (%s)", escape(f.Service), escape(f.Environment))),
+		field(l, "blk.component", "`"+escape(notify.Component(f))+"`"),
+		field(l, "blk.state", notify.StateLabel(l, f.State)),
+		field(l, "blk.owners", owners(m)),
 	}
 	if len(f.Aliases) > 0 {
-		fields = append(fields, mrkdwn("*Aliases*\n"+escape(strings.Join(f.Aliases, ", "))))
+		fields = append(fields, field(l, "blk.aliases", escape(strings.Join(f.Aliases, ", "))))
 	}
 	if f.DueAt != nil && finding.State(f.State).Open() {
-		due := notify.DueText(*f.DueAt, now())
+		due := notify.DueText(l, *f.DueAt, now())
 		if f.Overdue(store.FormatTime(now())) {
 			due = "🚨 " + due
 		}
-		fields = append(fields, mrkdwn("*Due*\n"+escape(due)))
+		fields = append(fields, field(l, "blk.due", escape(due)))
 	}
 	if sev != f.Severity || len(f.SLAReasons) > 0 {
-		fields = append(fields, mrkdwn("*Severity*\n"+escape(notify.SeverityText(f))))
+		fields = append(fields, field(l, "blk.severity", escape(notify.SeverityText(l, f))))
 	}
 	if len(m.PullRequests) > 0 {
 		var lines []string
 		for _, pr := range m.PullRequests {
 			lines = append(lines, fmt.Sprintf("<%s|%s> %s · %s", pr.URL, escape(notify.PRRef(pr.Repository, pr.Number)),
-				pr.State, notify.VerdictLabel(pr.Verdict)))
+				pr.State, notify.VerdictLabel(l, pr.Verdict)))
 		}
-		fields = append(fields, mrkdwn("*Fix PR*\n"+strings.Join(lines, "\n")))
+		fields = append(fields, field(l, "blk.fix_pr", strings.Join(lines, "\n")))
 	}
 
 	blocks := []map[string]any{
@@ -57,14 +62,14 @@ func Blocks(m notify.Message) []map[string]any {
 
 	var ctx []string
 	if f.Repository != "" {
-		ctx = append(ctx, "Repository `"+escape(f.Repository)+"`")
+		ctx = append(ctx, l.T("blk.repository")+" `"+escape(f.Repository)+"`")
 	}
 	if !f.Registered {
-		ctx = append(ctx, "⚠️ Project not in inventory")
+		ctx = append(ctx, l.T("blk.unregistered"))
 	}
-	ctx = append(ctx, fmt.Sprintf("Finding #%d · first seen %s", f.ID, escape(f.FirstSeenAt)))
+	ctx = append(ctx, l.T("blk.finding", f.ID, escape(f.FirstSeenAt)))
 	if m.Link != "" {
-		ctx = append(ctx, "<"+m.Link+"|Open in Dependency-Track>")
+		ctx = append(ctx, "<"+m.Link+"|"+l.T("blk.open_dt")+">")
 	}
 	blocks = append(blocks, map[string]any{
 		"type":     "context",
@@ -78,6 +83,10 @@ func owners(m notify.Message) string {
 		return "—"
 	}
 	return escape(strings.Join(m.Service.Owners, ", "))
+}
+
+func field(l i18n.Lang, key, value string) map[string]any {
+	return mrkdwn("*" + l.T(key) + "*\n" + value)
 }
 
 func mrkdwn(text string) map[string]any {

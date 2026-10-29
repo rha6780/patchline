@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/config"
+	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/intake"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/job"
@@ -112,6 +113,7 @@ func run() error {
 		DefaultChannel: cfg.SlackDefaultChannel,
 		MinSeverity:    cfg.NotifyMinSeverity,
 		DTUIURL:        cfg.DependencyTrackUIURL,
+		Lang:           i18n.Lang(cfg.NotifyLang),
 	}
 	sla := &job.SLA{Store: st, Policy: pol, Inventory: inv, Logger: logger, KEVURL: cfg.KEVURL, OnChange: notifier.Wake}
 	// New findings are posted once the policy has evaluated them, so the

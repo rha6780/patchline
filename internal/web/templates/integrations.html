@@ -1,47 +1,48 @@
 {{define "content"}}
-<h1>Integrations</h1>
+{{$L := .L}}
+<h1>{{t $L "ui.integrations"}}</h1>
 
-<h2>Dependency-Track projects</h2>
+<h2>{{t $L "ui.dt_projects"}}</h2>
 {{if .Projects}}
 <div class="scroll">
 <table>
-  <thead><tr><th>Project</th><th>Service</th><th>Last BOM</th><th>Commit</th></tr></thead>
+  <thead><tr><th>{{t $L "ui.col.project"}}</th><th>{{t $L "ui.col.service"}}</th><th>{{t $L "ui.col.last_bom"}}</th><th>{{t $L "ui.col.commit"}}</th></tr></thead>
   <tbody>
   {{range .Projects}}
   <tr>
     <td>{{if dtProject .ProjectID}}<a href="{{dtProject .ProjectID}}">{{.Name}}</a>{{else}}{{.Name}}{{end}} <span class="muted">@ {{if .Version}}{{.Version}}{{else}}—{{end}}</span></td>
-    <td>{{if .Registered}}<a href="/services/{{pathEscape .Service}}">{{.Service}}</a>{{else}}<span class="tag warn">not in inventory</span>{{end}}</td>
-    <td class="nowrap">{{if .LastBOMAt}}{{ts .LastBOMAt}}{{if staleBOM .LastBOMAt $.Stale}} <span class="tag warn">over 7 days</span>{{end}}{{else}}<span class="muted">never</span>{{end}}</td>
+    <td>{{if .Registered}}<a href="/services/{{pathEscape .Service}}">{{.Service}}</a>{{else}}<span class="tag warn">{{t $L "ui.not_in_inventory"}}</span>{{end}}</td>
+    <td class="nowrap">{{if .LastBOMAt}}{{ts .LastBOMAt}}{{if staleBOM .LastBOMAt $.Stale}} <span class="tag warn">{{t $L "ui.stale"}}</span>{{end}}{{else}}<span class="muted">{{t $L "ui.never"}}</span>{{end}}</td>
     <td>{{if .Commit}}<code>{{short .Commit}}</code>{{if .Ref}} <span class="meta">{{.Ref}}</span>{{end}}{{else}}<span class="muted">—</span>{{end}}</td>
   </tr>
   {{end}}
   </tbody>
 </table>
 </div>
-{{else}}<p class="empty">No project has reported yet. Point a Dependency-Track notification rule at <code>/webhooks/dependency-track</code>.</p>{{end}}
+{{else}}<p class="empty">{{t $L "ui.empty.projects"}}</p>{{end}}
 
-<h2>Inventory projects without a BOM</h2>
+<h2>{{t $L "ui.missing"}}</h2>
 {{if .Missing}}
 <ul class="list">{{range .Missing}}<li><code>{{.Project}}</code> <span class="meta">{{.Service}} · {{.Repository}}</span></li>{{end}}</ul>
-{{else}}<p class="empty">Every inventory project has reported.</p>{{end}}
+{{else}}<p class="empty">{{t $L "ui.empty.missing"}}</p>{{end}}
 
-<h2>Webhook processing failures</h2>
+<h2>{{t $L "ui.inbox_failures"}}</h2>
 {{if .Inbox}}
 <div class="scroll">
 <table>
-  <thead><tr><th>#</th><th>Source</th><th>Event</th><th>Attempts</th><th>Last error</th><th>Next attempt</th></tr></thead>
+  <thead><tr><th>#</th><th>{{t $L "ui.col.source"}}</th><th>{{t $L "ui.col.event"}}</th><th class="num">{{t $L "ui.col.attempts"}}</th><th>{{t $L "ui.col.last_error"}}</th><th>{{t $L "ui.col.next_attempt"}}</th></tr></thead>
   <tbody>{{range .Inbox}}<tr><td>{{.ID}}</td><td>{{.Source}}</td><td>{{.EventType}}</td><td class="num">{{.Attempts}}</td><td class="err">{{.LastError}}</td><td class="nowrap">{{ts .NextAttemptAt}}</td></tr>{{end}}</tbody>
 </table>
 </div>
-{{else}}<p class="empty">None.</p>{{end}}
+{{else}}<p class="empty">{{t $L "ui.none"}}</p>{{end}}
 
-<h2>Notification failures</h2>
+<h2>{{t $L "ui.notification_failures"}}</h2>
 {{if .Notifications}}
 <div class="scroll">
 <table>
-  <thead><tr><th>Finding</th><th>Sink</th><th>Attempts</th><th>Last error</th><th>Next attempt</th></tr></thead>
+  <thead><tr><th>{{t $L "ui.col.finding"}}</th><th>{{t $L "ui.col.sink"}}</th><th class="num">{{t $L "ui.col.attempts"}}</th><th>{{t $L "ui.col.last_error"}}</th><th>{{t $L "ui.col.next_attempt"}}</th></tr></thead>
   <tbody>{{range .Notifications}}<tr><td><a href="/findings/{{.FindingID}}">#{{.FindingID}}</a></td><td>{{.Sink}}</td><td class="num">{{.Attempts}}</td><td class="err">{{.LastError}}</td><td class="nowrap">{{ts .NextAttemptAt}}</td></tr>{{end}}</tbody>
 </table>
 </div>
-{{else}}<p class="empty">None.</p>{{end}}
+{{else}}<p class="empty">{{t $L "ui.none"}}</p>{{end}}
 {{end}}

@@ -1,43 +1,43 @@
 {{define "content"}}
-<h1>Findings</h1>
+<h1>{{t .L "ui.findings"}}</h1>
 <form class="filters" method="get" action="/findings">
-  <label>Service <input name="service" value="{{.Filter.Service}}" placeholder="any"></label>
-  <label>Environment <input name="environment" value="{{.Filter.Environment}}" placeholder="any"></label>
-  <label>Severity
-    <select name="severity"><option value="">any</option>
+  <label>{{t .L "ui.filter.service"}} <input name="service" value="{{.Filter.Service}}" placeholder="{{t .L "ui.filter.any"}}"></label>
+  <label>{{t .L "ui.filter.environment"}} <input name="environment" value="{{.Filter.Environment}}" placeholder="{{t .L "ui.filter.any"}}"></label>
+  <label>{{t .L "ui.filter.severity"}}
+    <select name="severity"><option value="">{{t .L "ui.filter.any"}}</option>
       {{range .Severities}}<option value="{{.}}" {{if eq . $.Filter.Severity}}selected{{end}}>{{.}}</option>{{end}}
     </select></label>
-  <label>State
-    <select name="state"><option value="">any</option>
-      {{range .States}}<option value="{{.}}" {{if eq (print .) $.Filter.State}}selected{{end}}>{{stateLabel (print .)}}</option>{{end}}
+  <label>{{t .L "ui.filter.state"}}
+    <select name="state"><option value="">{{t .L "ui.filter.any"}}</option>
+      {{range .States}}<option value="{{.}}" {{if eq (print .) $.Filter.State}}selected{{end}}>{{stateLabel $.L (print .)}}</option>{{end}}
     </select></label>
-  <label>Due
-    <select name="due"><option value="">any</option>
-      <option value="overdue" {{if eq .Due "overdue"}}selected{{end}}>overdue</option>
-      <option value="week" {{if eq .Due "week"}}selected{{end}}>within 7 days</option>
+  <label>{{t .L "ui.filter.due"}}
+    <select name="due"><option value="">{{t .L "ui.filter.any"}}</option>
+      <option value="overdue" {{if eq .Due "overdue"}}selected{{end}}>{{t .L "ui.filter.overdue"}}</option>
+      <option value="week" {{if eq .Due "week"}}selected{{end}}>{{t .L "ui.filter.week"}}</option>
     </select></label>
-  <label class="check"><input type="checkbox" name="open" value="1" {{if .Filter.Open}}checked{{end}}> open only</label>
-  <button type="submit">Filter</button>
-  <a href="/findings">Reset</a>
+  <label class="check"><input type="checkbox" name="open" value="1" {{if .Filter.Open}}checked{{end}}> {{t .L "ui.filter.open_only"}}</label>
+  <button type="submit">{{t .L "ui.filter.apply"}}</button>
+  <a href="/findings">{{t .L "ui.filter.reset"}}</a>
 </form>
 {{if .Findings}}
 <div class="scroll">
 <table>
-  <thead><tr><th>Severity</th><th>Vulnerability</th><th>Component</th><th>Service / env</th><th>State</th><th>Due</th></tr></thead>
+  <thead><tr><th>{{t .L "ui.col.severity"}}</th><th>{{t .L "ui.col.vulnerability"}}</th><th>{{t .L "ui.col.component"}}</th><th>{{t .L "ui.col.service_env"}}</th><th>{{t .L "ui.col.state"}}</th><th>{{t .L "ui.col.due"}}</th></tr></thead>
   <tbody>
   {{range .Findings}}
   <tr>
     <td><span class="pill {{sevClass .DisplaySeverity}}">{{.DisplaySeverity}}</span>{{if .KEV}} <span class="tag kev">KEV</span>{{end}}</td>
     <td><a href="/findings/{{.ID}}">{{.VulnID}}</a>{{if .Aliases}}<div class="meta">{{join .Aliases ", "}}</div>{{end}}</td>
     <td><code>{{component .}}</code></td>
-    <td><a href="/services/{{pathEscape .Service}}">{{.Service}}</a> / {{.Environment}}{{if not .Registered}} <span class="tag warn">unregistered</span>{{end}}</td>
-    <td><span class="state {{stateClass .State}}">{{stateLabel .State}}</span></td>
-    <td class="nowrap">{{if and .DueAt (isOpen .State)}}<span class="{{if overdue . $.Now}}late{{end}}">{{dueText (deref .DueAt)}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+    <td><a href="/services/{{pathEscape .Service}}">{{.Service}}</a> / {{.Environment}}{{if not .Registered}} <span class="tag warn">{{t $.L "ui.unregistered"}}</span>{{end}}</td>
+    <td><span class="state {{stateClass .State}}">{{stateLabel $.L .State}}</span></td>
+    <td class="nowrap">{{if and .DueAt (isOpen .State)}}<span class="{{if overdue . $.Now}}late{{end}}">{{dueText $.L (deref .DueAt)}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
   </tr>
   {{end}}
   </tbody>
 </table>
 </div>
-<p class="muted">{{len .Findings}} finding(s){{if eq (len .Findings) 500}}, showing the first 500{{end}}.</p>
-{{else}}<p class="empty">No findings match.</p>{{end}}
+<p class="muted">{{if eq (len .Findings) 500}}{{t .L "ui.count_capped" (len .Findings)}}{{else}}{{t .L "ui.count" (len .Findings)}}{{end}}</p>
+{{else}}<p class="empty">{{t .L "ui.empty.findings"}}</p>{{end}}
 {{end}}

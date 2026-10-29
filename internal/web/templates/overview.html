@@ -1,24 +1,24 @@
 {{define "content"}}
-<h1>Overview</h1>
+<h1>{{t .L "ui.overview"}}</h1>
 <section class="tiles">
-  <a class="tile" href="/findings?open=1"><span class="label">Open findings</span><span class="value">{{.Open}}</span></a>
-  <div class="tile"><span class="label">Open critical + high</span><span class="value">{{.CritHigh}}</span></div>
-  <a class="tile {{if .Overdue}}alert{{end}}" href="/findings?due=overdue"><span class="label">Overdue</span><span class="value">{{.Overdue}}</span></a>
-  <a class="tile" href="/findings?due=week"><span class="label">Due within 7 days</span><span class="value">{{.DueWeek}}</span></a>
-  <a class="tile" href="/findings?state=awaiting_verification"><span class="label">Awaiting verification</span><span class="value">{{.Awaiting}}</span></a>
-  <div class="tile"><span class="label">Resolved, last 30 days</span><span class="value">{{.Resolved30}}</span></div>
-  <div class="tile"><span class="label">Mean time to resolve</span><span class="value small">{{.MTTR}}</span></div>
+  <a class="tile" href="/findings?open=1"><span class="label">{{t .L "ui.tile.open"}}</span><span class="value">{{.Open}}</span></a>
+  <div class="tile"><span class="label">{{t .L "ui.tile.crit_high"}}</span><span class="value">{{.CritHigh}}</span></div>
+  <a class="tile {{if .Overdue}}alert{{end}}" href="/findings?due=overdue"><span class="label">{{t .L "ui.tile.overdue"}}</span><span class="value">{{.Overdue}}</span></a>
+  <a class="tile" href="/findings?due=week"><span class="label">{{t .L "ui.tile.due_week"}}</span><span class="value">{{.DueWeek}}</span></a>
+  <a class="tile" href="/findings?state=awaiting_verification"><span class="label">{{t .L "ui.tile.awaiting"}}</span><span class="value">{{.Awaiting}}</span></a>
+  <div class="tile"><span class="label">{{t .L "ui.tile.resolved30"}}</span><span class="value">{{.Resolved30}}</span></div>
+  <div class="tile"><span class="label">{{t .L "ui.tile.mttr"}}</span><span class="value small">{{.MTTR}}</span></div>
 </section>
 
-<h2>Open findings by service</h2>
+<h2>{{t .L "ui.by_service"}}</h2>
 {{if .Services}}
 <div class="scroll">
 <table>
-  <thead><tr><th>Service</th>{{range .Severities}}<th class="num">{{.}}</th>{{end}}<th class="num">Total</th></tr></thead>
+  <thead><tr><th>{{t .L "ui.col.service"}}</th>{{range .Severities}}<th class="num">{{.}}</th>{{end}}<th class="num">{{t .L "ui.col.total"}}</th></tr></thead>
   <tbody>
   {{range $row := .Services}}
     <tr>
-      <td><a href="/services/{{pathEscape $row.Name}}">{{$row.Name}}</a>{{if not $row.Registered}} <span class="tag warn">not in inventory</span>{{end}}</td>
+      <td><a href="/services/{{pathEscape $row.Name}}">{{$row.Name}}</a>{{if not $row.Registered}} <span class="tag warn">{{t $.L "ui.not_in_inventory"}}</span>{{end}}</td>
       {{range $.Severities}}{{$n := count $row.Counts .}}<td class="num">{{if $n}}<a class="pill {{sevClass .}}" href="/findings?open=1&service={{query $row.Name}}&severity={{.}}">{{$n}}</a>{{else}}<span class="muted">·</span>{{end}}</td>{{end}}
       <td class="num"><strong>{{$row.Open}}</strong></td>
     </tr>
@@ -27,33 +27,33 @@
 </table>
 </div>
 {{else}}
-<p class="empty">No open findings{{if .Total}} — everything tracked is closed{{else}} yet. Connect Dependency-Track to start{{end}}.</p>
+<p class="empty">{{if .Total}}{{t .L "ui.empty.no_open_closed"}}{{else}}{{t .L "ui.empty.no_open_start"}}{{end}}</p>
 {{end}}
 
 <div class="cols">
 <section>
-  <h2>Needs attention</h2>
+  <h2>{{t .L "ui.attention"}}</h2>
   {{if .Attention}}
   <ul class="list">
   {{range .Attention}}
     <li><span class="pill {{sevClass .DisplaySeverity}}">{{.DisplaySeverity}}</span>{{if .KEV}} <span class="tag kev">KEV</span>{{end}}
-      <a href="/findings/{{.ID}}">{{.VulnID}}</a> <span class="muted">in</span> <code>{{component .}}</code>
-      <div class="meta">{{.Service}} / {{.Environment}} · {{stateLabel .State}} · {{if .DueAt}}<span class="{{if overdue . $.Now}}late{{end}}">{{dueText (deref .DueAt)}}</span>{{else}}since {{ts .FirstSeenAt}}{{end}}</div></li>
+      <a href="/findings/{{.ID}}">{{.VulnID}}</a> <span class="muted">{{t $.L "ui.in"}}</span> <code>{{component .}}</code>
+      <div class="meta">{{.Service}} / {{.Environment}} · {{stateLabel $.L .State}} · {{if .DueAt}}<span class="{{if overdue . $.Now}}late{{end}}">{{dueText $.L (deref .DueAt)}}</span>{{else}}{{t $.L "ui.since" (ts .FirstSeenAt)}}{{end}}</div></li>
   {{end}}
   </ul>
-  {{else}}<p class="empty">No open critical or high findings.</p>{{end}}
+  {{else}}<p class="empty">{{t .L "ui.empty.attention"}}</p>{{end}}
 </section>
 <section>
-  <h2>Recently resolved</h2>
+  <h2>{{t .L "ui.recent"}}</h2>
   {{if .Recent}}
   <ul class="list">
   {{range .Recent}}
-    <li><span class="pill {{sevClass .Severity}}">{{.Severity}}</span>
-      <a href="/findings/{{.ID}}">{{.VulnID}}</a> <span class="muted">in</span> <code>{{component .}}</code>
-      <div class="meta">{{.Service}} / {{.Environment}} · resolved {{ts (deref .ResolvedAt)}}</div></li>
+    <li><span class="pill {{sevClass .DisplaySeverity}}">{{.DisplaySeverity}}</span>
+      <a href="/findings/{{.ID}}">{{.VulnID}}</a> <span class="muted">{{t $.L "ui.in"}}</span> <code>{{component .}}</code>
+      <div class="meta">{{.Service}} / {{.Environment}} · {{t $.L "ui.resolved_at" (ts (deref .ResolvedAt))}}</div></li>
   {{end}}
   </ul>
-  {{else}}<p class="empty">Nothing resolved yet.</p>{{end}}
+  {{else}}<p class="empty">{{t .L "ui.empty.recent"}}</p>{{end}}
 </section>
 </div>
 {{end}}

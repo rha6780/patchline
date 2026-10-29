@@ -62,13 +62,13 @@ func (s *Sink) Reply(_ context.Context, ref notify.Ref, text string) error {
 
 func (s *Sink) printDue(m notify.Message) {
 	if m.Finding.DueAt != nil {
-		s.printf("    %s · severity %s\n", notify.DueText(*m.Finding.DueAt, time.Now()), notify.SeverityText(m.Finding))
+		s.printf("    %s · %s\n", notify.DueText(m.Lang, *m.Finding.DueAt, time.Now()), notify.SeverityText(m.Lang, m.Finding))
 	}
 }
 
 func (s *Sink) printPRs(m notify.Message) {
 	for _, pr := range m.PullRequests {
-		s.printf("    fix PR: %s %s · %s\n", notify.PRRef(pr.Repository, pr.Number), pr.State, notify.VerdictLabel(pr.Verdict))
+		s.printf("    fix PR: %s %s · %s\n", notify.PRRef(pr.Repository, pr.Number), pr.State, notify.VerdictLabel(m.Lang, pr.Verdict))
 	}
 }
 

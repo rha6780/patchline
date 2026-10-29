@@ -75,6 +75,7 @@ services:
       PATCHLINE_SLACK_BOT_TOKEN: ${PATCHLINE_SLACK_BOT_TOKEN:-}
       PATCHLINE_SLACK_DEFAULT_CHANNEL: ${PATCHLINE_SLACK_DEFAULT_CHANNEL:-}
       PATCHLINE_NOTIFY_MIN_SEVERITY: ${PATCHLINE_NOTIFY_MIN_SEVERITY:-medium}
+      PATCHLINE_NOTIFY_LANG: ${PATCHLINE_NOTIFY_LANG:-en}
     volumes:
       - patchline-data:/data
       - ../../examples/inventory:/etc/patchline/inventory:ro

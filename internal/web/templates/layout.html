@@ -1,24 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{.L}}"{{if ne .Theme "system"}} data-theme="{{.Theme}}"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="{{if eq .Theme "light"}}light{{else if eq .Theme "dark"}}dark{{else}}light dark{{end}}">
 <title>{{.Title}} · Patchline</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/">Patchline</a>
-  <nav>
-    <a href="/" {{if eq .Page "overview"}}aria-current="page"{{end}}>Overview</a>
-    <a href="/findings?open=1" {{if or (eq .Page "findings") (eq .Page "finding")}}aria-current="page"{{end}}>Findings</a>
-    <a href="/integrations" {{if eq .Page "integrations"}}aria-current="page"{{end}}>Integrations</a>
+  <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>Patchline</a>
+  <nav aria-label="Main">
+    <a href="/" {{if eq .Page "overview"}}aria-current="page"{{end}}>{{t .L "ui.nav.overview"}}</a>
+    <a href="/findings?open=1" {{if or (eq .Page "findings") (eq .Page "finding")}}aria-current="page"{{end}}>{{t .L "ui.nav.findings"}}</a>
+    <a href="/integrations" {{if eq .Page "integrations"}}aria-current="page"{{end}}>{{t .L "ui.nav.integrations"}}</a>
     {{if .DTUIURL}}<a href="{{.DTUIURL}}" class="ext">Dependency-Track ↗</a>{{end}}
   </nav>
+  <div class="prefs">
+    <div class="seg" role="group" aria-label="{{t .L "ui.theme"}}">
+      {{range .Themes}}<a href="/prefs?theme={{.}}&next={{query $.Path}}" {{if eq . $.Theme}}aria-current="true"{{end}}>{{t $.L (print "ui.theme." .)}}</a>{{end}}
+    </div>
+    <div class="seg" role="group" aria-label="{{t .L "ui.language"}}">
+      {{range .Langs}}<a href="/prefs?lang={{.}}&next={{query $.Path}}" lang="{{.}}" {{if eq . $.L}}aria-current="true"{{end}}>{{.Name}}</a>{{end}}
+    </div>
+  </div>
 </header>
 <main>
 {{template "content" .}}
 </main>
-<footer>Patchline {{.Version}} · read-only view; decisions live in Dependency-Track, configuration in Git.</footer>
+<footer>{{t .L "ui.footer" .Version}}</footer>
 </body>
 </html>

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -172,6 +173,73 @@ func TestDueDisplay(t *testing.T) {
 			if !strings.Contains(body, w) {
 				t.Errorf("%s: missing %q", path, w)
 			}
+		}
+	}
+}
+
+func TestPreferences(t *testing.T) {
+	u, _ := setup(t)
+
+	// Language from Accept-Language.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept-Language", "ko-KR,ko;q=0.9,en;q=0.8")
+	rec := httptest.NewRecorder()
+	u.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	for _, want := range []string{`<html lang="ko">`, "열린 Finding", "서비스별 열린 Finding", "조치 필요", "한국어"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("ko via header: missing %q", want)
+		}
+	}
+
+	// /prefs sets cookies and redirects back; unsafe "next" values go home.
+	for next, want := range map[string]string{"/findings?open=1": "/findings?open=1", "//evil.example": "/", "https://evil.example": "/"} {
+		rec = httptest.NewRecorder()
+		u.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/prefs?lang=ko&theme=dark&next="+url.QueryEscape(next), nil))
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != want {
+			t.Errorf("next=%q: %d %q", next, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 2 {
+		t.Fatalf("cookies = %v", cookies)
+	}
+
+	// Cookies win over the header.
+	req = httptest.NewRequest(http.MethodGet, "/findings/1", nil)
+	req.Header.Set("Accept-Language", "en")
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec = httptest.NewRecorder()
+	u.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	for _, want := range []string{`<html lang="ko" data-theme="dark">`, "타임라인", "Dependency-Track에서 탐지", "수정 PR 병합", "최신 BOM에서 더 이상 보고되지 않음", "✅ 해결"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("ko via cookie: missing %q", want)
+		}
+	}
+
+	// Invalid values are ignored.
+	rec = httptest.NewRecorder()
+	u.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/prefs?lang=xx&theme=neon", nil))
+	if len(rec.Result().Cookies()) != 0 {
+		t.Error("invalid preferences should not set cookies")
+	}
+}
+
+func TestEveryPageInKorean(t *testing.T) {
+	u, _ := setup(t)
+	for _, p := range []string{"/", "/findings?open=1", "/findings/1", "/services/storefront", "/services/stray-app", "/integrations"} {
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		req.AddCookie(&http.Cookie{Name: cookieLang, Value: "ko"})
+		rec := httptest.NewRecorder()
+		u.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Errorf("%s: %d", p, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "ui.") {
+			t.Errorf("%s: untranslated key in output", p)
 		}
 	}
 }
