@@ -108,7 +108,24 @@ func New(o Options) http.Handler {
 		mux.Handle("/", o.UI)
 	}
 	o.Auth.Routes(mux)
-	return o.Auth.Middleware(mux)
+	return securityHeaders(o.Auth.Middleware(mux))
+}
+
+// contentSecurityPolicy fits the UI: server-rendered pages, one stylesheet,
+// no scripts, forms that post to Patchline only, and no framing (the
+// approve buttons must not be clickable from another site).
+const contentSecurityPolicy = "default-src 'none'; style-src 'self'; img-src 'self' data:; " +
+	"form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
 }
 
 type handler struct{ o Options }

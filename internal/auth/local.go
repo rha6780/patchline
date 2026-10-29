@@ -96,7 +96,7 @@ func (a *Authenticator) localLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	user, password := strings.TrimSpace(r.PostForm.Get("username")), r.PostForm.Get("password")
-	next := safeNext(r.PostForm.Get("next"))
+	next := SafeNext(r.PostForm.Get("next"))
 
 	acct, err := a.store.GetLocalAccount(ctx, user)
 	if errors.Is(err, sql.ErrNoRows) {

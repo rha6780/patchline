@@ -331,9 +331,10 @@ func TestGroupsFrom(t *testing.T) {
 func TestSafeNext(t *testing.T) {
 	for in, want := range map[string]string{
 		"/findings?x=1": "/findings?x=1", "": "/", "https://evil": "/", "//evil": "/", "/\\evil": "/",
+		"/\t/evil.example": "/", "/\n/evil.example": "/", "/a\\b": "/", "/%2F/x": "/%2F/x",
 	} {
-		if got := safeNext(in); got != want {
-			t.Errorf("safeNext(%q) = %q", in, got)
+		if got := SafeNext(in); got != want {
+			t.Errorf("SafeNext(%q) = %q", in, got)
 		}
 	}
 }

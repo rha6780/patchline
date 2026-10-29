@@ -317,7 +317,7 @@ func validCSRF(r *http.Request, want string) bool {
 func (a *Authenticator) login(w http.ResponseWriter, r *http.Request) {
 	state, nonce, verifier := randomToken(), randomToken(), oauth2.GenerateVerifier()
 	if err := a.store.SaveAuthState(r.Context(), store.AuthState{
-		State: state, Nonce: nonce, Verifier: verifier, Next: safeNext(r.URL.Query().Get("next")),
+		State: state, Nonce: nonce, Verifier: verifier, Next: SafeNext(r.URL.Query().Get("next")),
 		ExpiresAt: a.store.TimeFromNow(loginTTL),
 	}); err != nil {
 		a.logger.Error("save login state", "err", err)
@@ -442,9 +442,20 @@ func groupsFrom(claims map[string]any, names []string) []string {
 	return out
 }
 
-// safeNext keeps redirects on this site.
-func safeNext(next string) string {
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
+// SafeNext returns next when it is a path on this site, else "/". Browsers
+// drop tabs and newlines and read "\\" as "/", so "/\t/evil.example" and
+// "/\\evil.example" would leave the site: any control character or
+// backslash is refused, as is "//".
+func SafeNext(next string) string {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+		return "/"
+	}
+	for _, c := range next {
+		if c < 0x20 || c == 0x7f || c == '\\' {
+			return "/"
+		}
+	}
+	if u, err := url.Parse(next); err != nil || u.Scheme != "" || u.Host != "" {
 		return "/"
 	}
 	return next

@@ -299,3 +299,12 @@ func TestFindingsFilters(t *testing.T) {
 		t.Error("all preset active, no active filters")
 	}
 }
+
+func TestPrefsLinksKeepThePage(t *testing.T) {
+	u, _ := setup(t)
+	_, body := get(t, u, "/findings?open=1&service=storefront")
+	if !strings.Contains(body, `/prefs?lang=ko&next=%2ffindings%3fopen%3d1%26service%3dstorefront`) {
+		i := strings.Index(body, "/prefs?lang=ko")
+		t.Fatalf("language link: %s", body[i:i+90])
+	}
+}

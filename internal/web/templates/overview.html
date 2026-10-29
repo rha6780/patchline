@@ -19,7 +19,7 @@
   {{range $row := .Services}}
     <tr>
       <td><a href="/services/{{pathEscape $row.Name}}">{{$row.Name}}</a>{{if not $row.Registered}} <span class="tag warn">{{t $.L "ui.not_in_inventory"}}</span>{{end}}</td>
-      {{range $.Severities}}{{$n := count $row.Counts .}}<td class="num">{{if $n}}<a class="pill {{sevClass .}}" href="/findings?open=1&service={{query $row.Name}}&severity={{.}}">{{$n}}</a>{{else}}<span class="muted">·</span>{{end}}</td>{{end}}
+      {{range $.Severities}}{{$n := count $row.Counts .}}<td class="num">{{if $n}}<a class="pill {{sevClass .}}" href="/findings?open=1&service={{$row.Name}}&severity={{.}}">{{$n}}</a>{{else}}<span class="muted">·</span>{{end}}</td>{{end}}
       <td class="num"><strong>{{$row.Open}}</strong></td>
     </tr>
   {{end}}

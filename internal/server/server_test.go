@@ -228,3 +228,12 @@ func TestRotatedWebhookToken(t *testing.T) {
 		t.Fatalf("new token rejected: %d", code)
 	}
 }
+
+func TestSecurityHeaders(t *testing.T) {
+	rec := httptest.NewRecorder()
+	New(Options{DB: pingFunc(func(context.Context) error { return nil }), Logger: quiet}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if !strings.Contains(rec.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") || rec.Header().Get("X-Frame-Options") != "DENY" ||
+		rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("headers = %v", rec.Header())
+	}
+}

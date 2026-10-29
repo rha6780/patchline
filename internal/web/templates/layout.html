@@ -22,10 +22,10 @@
   {{end}}
   <div class="prefs">
     <div class="seg" role="group" aria-label="{{t .L "ui.theme"}}">
-      {{range .Themes}}<a href="/prefs?theme={{.}}&next={{query $.Path}}" {{if eq . $.Theme}}aria-current="true"{{end}}>{{t $.L (print "ui.theme." .)}}</a>{{end}}
+      {{range .Themes}}<a href="/prefs?theme={{.}}&next={{$.Path}}" {{if eq . $.Theme}}aria-current="true"{{end}}>{{t $.L (print "ui.theme." .)}}</a>{{end}}
     </div>
     <div class="seg" role="group" aria-label="{{t .L "ui.language"}}">
-      {{range .Langs}}<a href="/prefs?lang={{.}}&next={{query $.Path}}" lang="{{.}}" {{if eq . $.L}}aria-current="true"{{end}}>{{.Name}}</a>{{end}}
+      {{range .Langs}}<a href="/prefs?lang={{.}}&next={{$.Path}}" lang="{{.}}" {{if eq . $.L}}aria-current="true"{{end}}>{{.Name}}</a>{{end}}
     </div>
     {{if and .AuthEnabled .P.Authenticated}}
     <form class="user" method="post" action="/auth/logout">

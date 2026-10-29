@@ -231,6 +231,9 @@ func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, l
 	if cfg.AllowAnonymous {
 		logger.Warn("PATCHLINE_ALLOW_ANONYMOUS=true: anyone who can reach Patchline can read findings")
 	}
+	if cfg.PublicURL == "" {
+		logger.Info("PATCHLINE_PUBLIC_URL not set: session cookies are Secure only on direct TLS; set it to the https URL when a proxy terminates TLS")
+	}
 	return a, nil
 }
 

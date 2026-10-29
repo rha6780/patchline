@@ -210,7 +210,7 @@ func (u *UI) prefs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	set := func(name, value string) {
 		http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", MaxAge: 365 * 24 * 3600,
-			HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
+			HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || strings.HasPrefix(u.o.PublicURL, "https://")})
 	}
 	if l, ok := i18n.Parse(q.Get("lang")); ok {
 		set(cookieLang, string(l))
@@ -220,11 +220,7 @@ func (u *UI) prefs(w http.ResponseWriter, r *http.Request) {
 			set(cookieTheme, t)
 		}
 	}
-	next := q.Get("next")
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
-		next = "/"
-	}
-	http.Redirect(w, r, next, http.StatusSeeOther)
+	http.Redirect(w, r, auth.SafeNext(q.Get("next")), http.StatusSeeOther)
 }
 
 func (u *UI) fail(w http.ResponseWriter, err error) {
@@ -659,11 +655,7 @@ func (u *UI) signedOut(w http.ResponseWriter, r *http.Request) {
 
 // login offers single sign-on and the local admin form.
 func (u *UI) login(w http.ResponseWriter, r *http.Request) {
-	next := r.URL.Query().Get("next")
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
-		next = "/"
-	}
-	u.render(w, r, "login", "ui.sign_in", map[string]any{"Next": next, "SSO": u.o.SSO, "LocalAdmin": u.o.LocalAdmin})
+	u.render(w, r, "login", "ui.sign_in", map[string]any{"Next": auth.SafeNext(r.URL.Query().Get("next")), "SSO": u.o.SSO, "LocalAdmin": u.o.LocalAdmin})
 }
 
 func (u *UI) password(w http.ResponseWriter, r *http.Request) {
@@ -703,7 +695,6 @@ func (u *UI) funcs() template.FuncMap {
 		"short":      shortSHA,
 		"join":       strings.Join,
 		"hasPrefix":  strings.HasPrefix,
-		"query":      url.QueryEscape,
 		"pathEscape": url.PathEscape,
 		"count":      func(m map[string]int, k string) int { return m[k] },
 		"cell": func(m map[string]store.Finding, k string) *store.Finding {
