@@ -14,8 +14,9 @@ Dependency-Track 4.14로 확인했습니다.
 |---|---|
 | `VIEW_VULNERABILITY` | `BOM_PROCESSED` 이후 프로젝트의 현재 Finding 조회(`GET /api/v1/finding/project/{uuid}`) |
 | `VIEW_PORTFOLIO` | 수정 PR 판정에 쓰는 취약점 상세(취약 버전 범위) 조회(`GET /api/v1/vulnerability/source/{source}/vuln/{id}`) |
+| `VULNERABILITY_ANALYSIS` | [로그인](../access-control.ko.md)을 쓸 때만: 승인된 위험 수용 기록(`PUT /api/v1/analysis`) |
 
-CI 업로드용 키는 별도 팀(`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`)으로 분리하세요. 그러면 Patchline이 가진 키로는 아무것도 바꿀 수 없습니다.
+CI 업로드용 키는 별도 팀(`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`)으로 분리하세요. `VULNERABILITY_ANALYSIS`를 주지 않으면 Patchline이 가진 키로는 아무것도 바꿀 수 없습니다.
 
 ## 2. 알림 규칙
 

@@ -30,6 +30,9 @@ func Blocks(m notify.Message) []map[string]any {
 		field(l, "blk.state", notify.StateLabel(l, f.State)),
 		field(l, "blk.owners", owners(m)),
 	}
+	if f.Assignee != "" {
+		fields = append(fields, field(l, "blk.assignee", escape(f.Assignee)))
+	}
 	if len(f.Aliases) > 0 {
 		fields = append(fields, field(l, "blk.aliases", escape(strings.Join(f.Aliases, ", "))))
 	}

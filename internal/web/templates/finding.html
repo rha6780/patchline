@@ -11,12 +11,100 @@
   <div><dt>{{t $L "ui.fact.service"}}</dt><dd><a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / {{$f.Environment}}{{if not $f.Registered}} <span class="tag warn">{{t $L "ui.not_in_inventory"}}</span>{{end}}</dd></div>
   <div><dt>{{t $L "ui.fact.component"}}</dt><dd><code>{{component $f}}</code><div class="meta">{{$f.ComponentRef}}</div></dd></div>
   {{if $f.Repository}}<div><dt>{{t $L "ui.fact.repository"}}</dt><dd>{{$f.Repository}}</dd></div>{{end}}
+  <div><dt>{{t $L "ui.fact.assignee"}}</dt><dd>{{if $f.Assignee}}👤 {{$f.Assignee}}{{else}}<span class="muted">{{t $L "ui.unassigned"}}</span>{{end}}</dd></div>
   <div><dt>{{t $L "ui.fact.owners"}}</dt><dd>{{if .Service}}{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}{{if .Service.SlackChannel}} · {{.Service.SlackChannel}}{{end}}{{else}}—{{end}}</dd></div>
   {{if $f.Aliases}}<div><dt>{{t $L "ui.fact.aliases"}}</dt><dd>{{join $f.Aliases ", "}}</dd></div>{{end}}
   <div><dt>{{t $L "ui.fact.first_seen"}}</dt><dd>{{ts $f.FirstSeenAt}}</dd></div>
   {{if $f.ResolvedAt}}<div><dt>{{t $L "ui.fact.resolved"}}</dt><dd>{{ts (deref $f.ResolvedAt)}}</dd></div>{{end}}
 </dl>
 {{if .DTLink}}<p><a class="button" href="{{.DTLink}}">{{t $L "ui.open_dt"}}</a> <span class="muted">{{t $L "ui.open_dt_hint"}}</span></p>{{end}}
+{{$P := .P}}{{$csrf := .P.CSRF}}
+{{if .Pending}}
+<h2>{{t $L "ui.pending_requests"}}</h2>
+{{range .Pending}}
+<div class="request">
+  <div><strong>{{kindLabel $L .Kind}}</strong>{{if .RequestedDue}} → {{dayPtr .RequestedDue}}{{end}}
+    <span class="meta">· {{t $L "ui.requested_by" (or .RequestedByName .RequestedBy) (ts .RequestedAt)}}</span></div>
+  <blockquote>{{.Reason}}</blockquote>
+  {{if and (can $P "exceptions.approve") (ne .RequestedBy $P.Subject)}}
+  <form class="form" method="post" action="/requests/{{.ID}}">
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <label><span>{{t $L "ui.decision_note"}}</span><input type="text" name="note" maxlength="2000"></label>
+    <div class="row">
+      <button class="btn primary" type="submit" name="action" value="approve">{{t $L "ui.approve"}}</button>
+      <button class="btn danger" type="submit" name="action" value="reject">{{t $L "ui.reject"}}</button>
+      {{if eq .Kind "risk_acceptance"}}<span class="meta">{{t $L "ui.approve_dt_hint"}}</span>{{end}}
+    </div>
+  </form>
+  {{else if eq .RequestedBy $P.Subject}}
+  <form class="row" method="post" action="/requests/{{.ID}}">
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <span class="meta">{{t $L "ui.waiting_approval"}}</span>
+    <button class="btn ghost small" type="submit" name="action" value="cancel">{{t $L "ui.withdraw"}}</button>
+  </form>
+  {{else}}<p class="meta">{{t $L "ui.waiting_approval"}}</p>{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{if and (isOpen $f.State) (or (can $P "findings.assign") (can $P "exceptions.request"))}}
+<h2>{{t $L "ui.actions"}}</h2>
+<div class="actions">
+  {{if can $P "findings.assign"}}
+  <form class="card form" method="post" action="/findings/{{$f.ID}}/assign">
+    <h3>{{t $L "ui.assign"}}</h3>
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <label><span>{{t $L "ui.assignee"}}</span><input type="text" name="assignee" value="{{$f.Assignee}}" maxlength="254" placeholder="name@example.com"></label>
+    <div class="row">
+      <button class="btn primary" type="submit">{{t $L "ui.save"}}</button>
+      {{if $P.Authenticated}}<button class="btn ghost" type="submit" name="me" value="1">{{t $L "ui.assign_me"}}</button>{{end}}
+    </div>
+    <p class="meta">{{t $L "ui.assign_hint"}}</p>
+  </form>
+  {{end}}
+  {{if can $P "exceptions.request"}}
+  {{if not (index .PendingKinds "due_extension")}}
+  <form class="card form" method="post" action="/findings/{{$f.ID}}/requests">
+    <h3>{{t $L "req.kind.due_extension"}}</h3>
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <input type="hidden" name="kind" value="due_extension">
+    <label><span>{{t $L "ui.new_due"}}</span><input type="date" name="due" min="{{.MinDue}}" required></label>
+    <label><span>{{t $L "ui.reason"}}</span><textarea name="reason" maxlength="2000" required placeholder="{{t $L "ui.reason_due_hint"}}"></textarea></label>
+    <div class="row"><button class="btn primary" type="submit">{{t $L "ui.request"}}</button></div>
+  </form>
+  {{end}}
+  {{if not (index .PendingKinds "risk_acceptance")}}
+  <form class="card form" method="post" action="/findings/{{$f.ID}}/requests">
+    <h3>{{t $L "req.kind.risk_acceptance"}}</h3>
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <input type="hidden" name="kind" value="risk_acceptance">
+    <label><span>{{t $L "ui.reason"}}</span><textarea name="reason" maxlength="2000" required placeholder="{{t $L "ui.reason_risk_hint"}}"></textarea></label>
+    <div class="row"><button class="btn primary" type="submit" {{if not .CanAccept}}disabled{{end}}>{{t $L "ui.request"}}</button></div>
+    <p class="meta">{{if .CanAccept}}{{t $L "ui.risk_hint"}}{{else}}{{t $L "ui.risk_no_dt"}}{{end}}</p>
+  </form>
+  {{end}}
+  {{end}}
+</div>
+{{end}}
+
+{{if .Decided}}
+<h2>{{t $L "ui.past_requests"}}</h2>
+<div class="scroll">
+<table class="compact">
+  <thead><tr><th>{{t $L "ui.col.request"}}</th><th>{{t $L "ui.col.status"}}</th><th>{{t $L "ui.col.by"}}</th><th>{{t $L "ui.col.note"}}</th></tr></thead>
+  <tbody>
+  {{range .Decided}}
+  <tr>
+    <td>{{kindLabel $L .Kind}}{{if .RequestedDue}} → {{dayPtr .RequestedDue}}{{end}}<div class="meta">{{or .RequestedByName .RequestedBy}} · {{ts .RequestedAt}}</div><div class="meta">{{.Reason}}</div></td>
+    <td>{{statusLabel $L .Status}}</td>
+    <td>{{or .DecidedByName .DecidedBy}}{{if .DecidedAt}}<div class="meta">{{ts (deref .DecidedAt)}}</div>{{end}}</td>
+    <td>{{.DecisionNote}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}
 
 {{if .PRs}}
 <h2>{{t $L "ui.fix_prs"}}</h2>

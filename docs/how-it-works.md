@@ -27,10 +27,10 @@ Renovate ── fix PRs ── Gitea / Forgejo / GitHub webhook ─────�
 | `awaiting_verification` | Fix PR merged, or analysis marked resolved |
 | `resolved` | No longer reported for the project's latest BOM |
 | `not_affected` | Analysis `NOT_AFFECTED` / `FALSE_POSITIVE` |
-| `risk_accepted` | Finding suppressed in Dependency-Track |
+| `risk_accepted` | Finding suppressed in Dependency-Track, or a risk acceptance approved in Patchline (which suppresses it there) |
 | `reopened` | A resolved finding is reported again |
 
-Human decisions are made in **one place**: Dependency-Track analysis.
+Human decisions end up in **one place**, the Dependency-Track analysis. Either people triage there, or an approved risk acceptance in Patchline writes the analysis there ([Sign-in and permissions](access-control.md)).
 
 ## Intake
 
@@ -72,6 +72,7 @@ The policy ([example](../examples/policy/policy.yaml)) turns risk signals into a
 3. Add the service's exposure adjustment (default: `internet` +1).
 4. A CVE in the CISA KEV catalog is raised to at least `kev` (default critical).
 5. The due date is the SLA for that severity (default critical 7d, high 30d, medium 90d, low 180d), counted from first detection or from reopening.
+6. An approved due date extension replaces it while the effective severity stays at or below the level it was approved at; an escalation or a reopening drops the extension.
 
 The SLA job re-evaluates open findings every 5 minutes and right after intake, so a CVE added to KEV escalates findings that are already open (the thread says why and moves the due date). It records one reminder before the due date and repeats while overdue. New findings are posted after their first evaluation, so the first message already shows the due date, and the notification threshold uses the effective severity.
 

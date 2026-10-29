@@ -31,6 +31,9 @@ const (
 	EventPRClosed        = "pr_closed"
 	EventSLAChanged      = "sla_changed"
 	EventReminder        = "reminder"
+	EventAssigned        = "assigned"
+	EventExceptionAsked  = "exception_requested"
+	EventExceptionDone   = "exception_decided"
 )
 
 // Severity levels, normalized to lower case.

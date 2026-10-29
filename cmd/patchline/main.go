@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/config"
 	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/intake"
@@ -90,8 +91,10 @@ func run() error {
 	st := store.New(db)
 
 	proc := &intake.Processor{Store: st, Inventory: inv, Logger: logger, ReconcileDelay: cfg.DependencyTrackReconcileDelay}
+	var dt *dependencytrack.Client
 	if cfg.DependencyTrackEnabled() {
-		proc.DT = dependencytrack.NewClient(cfg.DependencyTrackURL, cfg.DependencyTrackAPIKey, nil)
+		dt = dependencytrack.NewClient(cfg.DependencyTrackURL, cfg.DependencyTrackAPIKey, nil)
+		proc.DT = dt
 	} else {
 		logger.Warn("PATCHLINE_DT_URL or PATCHLINE_DT_API_KEY not set: BOM_PROCESSED events will not fetch findings")
 	}
@@ -126,7 +129,32 @@ func run() error {
 	go func() { defer workers.Done(); sla.Run(ctx) }()
 	go func() { defer workers.Done(); notifier.Run(ctx) }()
 
-	ui, err := web.New(web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger})
+	var authn *auth.Authenticator
+	webOpts := web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger,
+		OnChange: func() { sla.Wake(); notifier.Wake() }, PublicURL: cfg.PublicURL,
+		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret}
+	if cfg.OIDCEnabled() {
+		policy, err := auth.LoadPolicy(cfg.AccessPolicyPath)
+		if err != nil {
+			return err
+		}
+		authn, err = auth.New(ctx, auth.Config{
+			Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret,
+			PublicURL: cfg.PublicURL, Scopes: cfg.OIDCScopes, GroupsClaims: cfg.OIDCGroupsClaims, SessionTTL: cfg.SessionTTL,
+		}, policy, st, logger)
+		if err != nil {
+			return err
+		}
+		logger.Info("sign-in enabled", "issuer", cfg.OIDCIssuer, "groups_claims", cfg.OIDCGroupsClaims,
+			"access_policy", cfg.AccessPolicyPath, "policy", policy.Summary())
+		webOpts.Actions, webOpts.AuthEnabled = st, true
+		if dt != nil {
+			webOpts.DT = dt
+		}
+	} else {
+		logger.Info("PATCHLINE_OIDC_ISSUER not set: the web UI is open and read-only")
+	}
+	ui, err := web.New(webOpts)
 	if err != nil {
 		return err
 	}
@@ -140,6 +168,8 @@ func run() error {
 			Inventory:    inv,
 			WebhookToken: cfg.WebhookToken,
 			GiteaSecret:  cfg.GiteaWebhookSecret,
+			Secrets:      store.WebhookSecrets{Store: st, EnvToken: cfg.WebhookToken, EnvGitea: cfg.GiteaWebhookSecret}.Current,
+			Auth:         authn,
 			UI:           ui,
 			OnInbox:      proc.Wake,
 			Logger:       logger,

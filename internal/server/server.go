@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/source/gitea"
@@ -54,6 +55,13 @@ type Options struct {
 	// Forgejo / GitHub; requests must carry a valid HMAC signature. When
 	// empty, the Gitea webhook falls back to WebhookToken.
 	GiteaSecret string
+	// Secrets, when set, returns the token and Git webhook secret in
+	// effect for each request (settings changed in the UI replace
+	// WebhookToken and GiteaSecret).
+	Secrets func(ctx context.Context) (token, giteaSecret string, err error)
+	// Auth signs people in and guards the UI and the API. Nil leaves them
+	// open and read-only. Webhooks authenticate with their own secrets.
+	Auth *auth.Authenticator
 	// UI, when set, serves every path not handled above (the web pages).
 	UI http.Handler
 	// OnInbox is called after a new delivery is stored (to wake the processor).
@@ -67,7 +75,7 @@ type Options struct {
 //	GET  /readyz                       readiness: the database answers
 //	POST /webhooks/dependency-track    Dependency-Track outbound webhook
 //	POST /webhooks/gitea               Gitea / Forgejo / GitHub pull_request webhook
-//	GET  /api/v1/findings              findings with owners (?service=&environment=&state=&limit=)
+//	GET  /api/v1/findings              findings with owners (?service=&environment=&state=&assignee=&limit=)
 //	GET  /api/v1/findings/{id}/events  a finding's timeline
 //	GET  /api/v1/findings/{id}/pull-requests  linked pull requests
 func New(o Options) http.Handler {
@@ -99,7 +107,8 @@ func New(o Options) http.Handler {
 	if o.UI != nil {
 		mux.Handle("/", o.UI)
 	}
-	return mux
+	o.Auth.Routes(mux)
+	return o.Auth.Middleware(mux)
 }
 
 type handler struct{ o Options }
@@ -114,8 +123,15 @@ func (h *handler) readyz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "database": "ok"})
 }
 
-func (h *handler) authorized(r *http.Request) bool {
-	want := h.o.WebhookToken
+// secrets returns the webhook token and Git webhook secret in effect.
+func (h *handler) secrets(r *http.Request) (token, gitea string, err error) {
+	if h.o.Secrets == nil {
+		return h.o.WebhookToken, h.o.GiteaSecret, nil
+	}
+	return h.o.Secrets(r.Context())
+}
+
+func (h *handler) authorized(r *http.Request, want string) bool {
 	if want == "" {
 		return true
 	}
@@ -127,7 +143,13 @@ func (h *handler) authorized(r *http.Request) bool {
 }
 
 func (h *handler) dependencyTrackWebhook(w http.ResponseWriter, r *http.Request) {
-	if !h.authorized(r) {
+	token, _, err := h.secrets(r)
+	if err != nil {
+		h.o.Logger.Error("load webhook secrets", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not load webhook settings")
+		return
+	}
+	if !h.authorized(r, token) {
 		writeError(w, http.StatusUnauthorized, "invalid or missing webhook token")
 		return
 	}
@@ -174,12 +196,18 @@ func (h *handler) giteaWebhook(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if h.o.GiteaSecret != "" {
-		if !gitea.VerifySignature(r.Header, body, h.o.GiteaSecret) {
+	token, secret, err := h.secrets(r)
+	if err != nil {
+		h.o.Logger.Error("load webhook secrets", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not load webhook settings")
+		return
+	}
+	if secret != "" {
+		if !gitea.VerifySignature(r.Header, body, secret) {
 			writeError(w, http.StatusUnauthorized, "invalid or missing webhook signature")
 			return
 		}
-	} else if !h.authorized(r) {
+	} else if !h.authorized(r, token) {
 		writeError(w, http.StatusUnauthorized, "invalid or missing webhook token")
 		return
 	}
@@ -239,7 +267,7 @@ func (h *handler) listFindings(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	list, err := h.o.Findings.ListFindings(r.Context(), store.FindingFilter{
-		Service: q.Get("service"), Environment: q.Get("environment"), State: q.Get("state"), Limit: limit,
+		Service: q.Get("service"), Environment: q.Get("environment"), State: q.Get("state"), Assignee: q.Get("assignee"), Limit: limit,
 	})
 	if err != nil {
 		h.o.Logger.Error("list findings", "err", err)

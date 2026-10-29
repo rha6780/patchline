@@ -1,0 +1,53 @@
+{{define "content"}}
+{{$L := .L}}{{$P := .P}}
+<div class="page-head">
+  <h1>{{t $L "ui.approvals"}} <span class="count-badge">{{len .Pending}}</span></h1>
+</div>
+<p class="lead">{{t $L "ui.approvals_lead"}}</p>
+
+<h2>{{t $L "ui.pending_requests"}}</h2>
+{{if .Pending}}
+{{range .Pending}}
+<div class="request">
+  <div><span class="pill {{sevClass .Severity}}">{{.Severity}}</span>
+    <a href="/findings/{{.FindingID}}">{{.VulnID}}</a> · {{.Service}} / {{.Environment}}</div>
+  <div><strong>{{kindLabel $L .Kind}}</strong>{{if .RequestedDue}} → {{dayPtr .RequestedDue}}{{end}}
+    <span class="meta">· {{t $L "ui.requested_by" (or .RequestedByName .RequestedBy) (ts .RequestedAt)}}</span></div>
+  <blockquote>{{.Reason}}</blockquote>
+  {{if and (can $P "exceptions.approve") (ne .RequestedBy $P.Subject)}}
+  <form class="form" method="post" action="/requests/{{.ID}}">
+    <input type="hidden" name="csrf" value="{{$P.CSRF}}">
+    <input type="hidden" name="from" value="approvals">
+    <label><span>{{t $L "ui.decision_note"}}</span><input type="text" name="note" maxlength="2000"></label>
+    <div class="row">
+      <button class="btn primary" type="submit" name="action" value="approve">{{t $L "ui.approve"}}</button>
+      <button class="btn danger" type="submit" name="action" value="reject">{{t $L "ui.reject"}}</button>
+      {{if eq .Kind "risk_acceptance"}}<span class="meta">{{t $L "ui.approve_dt_hint"}}</span>{{end}}
+    </div>
+  </form>
+  {{else if eq .RequestedBy $P.Subject}}<p class="meta">{{t $L "ui.own_request"}}</p>
+  {{else}}<p class="meta">{{t $L "ui.waiting_approval"}}</p>{{end}}
+</div>
+{{end}}
+{{else}}<p class="empty">{{t $L "ui.empty.requests"}}</p>{{end}}
+
+{{if .Decided}}
+<h2>{{t $L "ui.recent_decisions"}}</h2>
+<div class="scroll">
+<table class="compact">
+  <thead><tr><th>{{t $L "ui.col.vulnerability"}}</th><th>{{t $L "ui.col.request"}}</th><th>{{t $L "ui.col.status"}}</th><th>{{t $L "ui.col.by"}}</th><th>{{t $L "ui.col.note"}}</th></tr></thead>
+  <tbody>
+  {{range .Decided}}
+  <tr>
+    <td><a href="/findings/{{.FindingID}}">{{.VulnID}}</a><div class="meta">{{.Service}} / {{.Environment}}</div></td>
+    <td>{{kindLabel $L .Kind}}{{if .RequestedDue}} → {{dayPtr .RequestedDue}}{{end}}<div class="meta">{{or .RequestedByName .RequestedBy}}</div></td>
+    <td>{{statusLabel $L .Status}}</td>
+    <td>{{or .DecidedByName .DecidedBy}}{{if .DecidedAt}}<div class="meta">{{ts (deref .DecidedAt)}}</div>{{end}}</td>
+    <td>{{.DecisionNote}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}
+{{end}}

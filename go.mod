@@ -3,9 +3,12 @@ module github.com/rha6780/patchline
 go 1.26.0
 
 require (
+	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/ncruces/go-sqlite3 v0.35.6
 	github.com/pressly/goose/v3 v3.29.0
 	go.yaml.in/yaml/v3 v3.0.5
+	golang.org/x/oauth2 v0.37.0
 )
 
 require (

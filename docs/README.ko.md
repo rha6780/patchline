@@ -4,6 +4,7 @@
 
 - [동작 방식](how-it-works.ko.md): Finding 상태, 수집, 해결 판정, PR 연결, 기한, 알림
 - [설정](configuration.ko.md): 환경변수, 엔드포인트, 웹 UI
+- [로그인과 권한](access-control.ko.md): OIDC(FusionAuth, Keycloak 등), 그룹 → 권한 매핑, 담당자 지정, 승인
 
 ## 연동
 

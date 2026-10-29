@@ -1,10 +1,11 @@
-// Package web serves Patchline's read-only UI: an overview, per-service
-// environment comparison, finding timelines and integration health.
+// Package web serves Patchline's UI: an overview, per-service environment
+// comparison, finding timelines and integration health.
 //
 // Pages are rendered on the server with html/template; there is no
-// JavaScript. Decisions stay in Dependency-Track and configuration stays
-// in Git, so the UI only links out to them. Put it behind your
-// authenticating proxy: it has no login of its own.
+// JavaScript. With sign-in configured (package auth), people with the
+// right permissions also assign findings, request and approve risk
+// acceptances and due date extensions, and rotate webhook secrets.
+// Without it the UI is read-only.
 package web
 
 import (
@@ -25,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/inventory"
@@ -60,6 +62,23 @@ type Options struct {
 	Logger  *slog.Logger
 	// Now returns the current time (default time.Now).
 	Now func() time.Time
+
+	// Actions enables the pages and forms that change things. Nil keeps
+	// the UI read-only.
+	Actions Actions
+	// DT writes approved risk acceptances to Dependency-Track.
+	DT AnalysisWriter
+	// OnChange is called after a change (to wake the notifier).
+	OnChange func()
+	// AuthEnabled shows the signed-in user and the sign-out button.
+	AuthEnabled bool
+	// PublicURL is where users reach Patchline, for webhook URLs.
+	PublicURL string
+	// EnvWebhookToken and EnvGiteaSecret are the environment's values,
+	// shown (as hints) on the settings page when the UI has not replaced
+	// them.
+	EnvWebhookToken string
+	EnvGiteaSecret  string
 }
 
 // UI is the web handler.
@@ -80,8 +99,11 @@ func New(o Options) (*UI, error) {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
+	if o.OnChange == nil {
+		o.OnChange = func() {}
+	}
 	u := &UI{o: o, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide"} {
+	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide", "approvals", "settings", "signedout"} {
 		t, err := template.New("layout.html").Funcs(u.funcs()).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -98,6 +120,15 @@ func New(o Options) (*UI, error) {
 	u.mux.HandleFunc("GET /integrations", u.integrations)
 	u.mux.HandleFunc("GET /docs/integrations", u.guide)
 	u.mux.HandleFunc("GET /prefs", u.prefs)
+	u.mux.HandleFunc("GET /signed-out", u.signedOut)
+	if o.Actions != nil {
+		u.mux.HandleFunc("POST /findings/{id}/assign", u.assign)
+		u.mux.HandleFunc("POST /findings/{id}/requests", u.request)
+		u.mux.HandleFunc("POST /requests/{id}", u.decide)
+		u.mux.HandleFunc("GET /approvals", u.approvals)
+		u.mux.HandleFunc("GET /settings", u.settings)
+		u.mux.HandleFunc("POST /settings/webhooks", u.saveSecret)
+	}
 	return u, nil
 }
 
@@ -115,6 +146,10 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page, titleKey strin
 		data["Title"] = l.T(titleKey)
 	}
 	data["Page"] = page
+	data["P"] = auth.FromContext(r.Context())
+	data["AuthEnabled"] = u.o.AuthEnabled
+	data["Writable"] = u.o.Actions != nil
+	data["Notice"], data["Error"] = notice(l, r)
 	data["Version"] = u.o.Version
 	data["DTUIURL"] = u.o.DTUIURL
 	// Documentation lives in the repository; Korean pages end in .ko.md.
@@ -299,7 +334,7 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 // ---- findings list ----------------------------------------------------
 
 // filterParams are the query parameters the findings page understands.
-var filterParams = []string{"service", "environment", "severity", "state", "due", "open"}
+var filterParams = []string{"service", "environment", "severity", "state", "due", "assignee", "open"}
 
 type preset struct {
 	Key    string // i18n key
@@ -336,7 +371,7 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 	q := canonical(r.URL.Query())
 	f := store.FindingFilter{
 		Service: q.Get("service"), Environment: q.Get("environment"),
-		State: q.Get("state"), Severity: q.Get("severity"), Open: q.Get("open") == "1", Limit: 500,
+		State: q.Get("state"), Severity: q.Get("severity"), Assignee: q.Get("assignee"), Open: q.Get("open") == "1", Limit: 500,
 	}
 	due := q.Get("due")
 	switch due {
@@ -367,14 +402,19 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 
 	current := q.Encode()
 	var presets []preset
-	for _, p := range []struct{ key, query string }{
+	quick := []struct{ key, query string }{
 		{"ui.preset.open", "open=1"},
 		{"ui.preset.overdue", "due=overdue"},
 		{"ui.preset.week", "due=week"},
 		{"ui.preset.critical", "open=1&severity=critical"},
 		{"ui.preset.awaiting", "state=awaiting_verification"},
 		{"ui.preset.all", ""},
-	} {
+	}
+	if p := auth.FromContext(r.Context()); p.Authenticated {
+		mine := struct{ key, query string }{"ui.preset.mine", "open=1&assignee=" + url.QueryEscape(p.Identity())}
+		quick = append([]struct{ key, query string }{mine}, quick...)
+	}
+	for _, p := range quick {
 		pq, _ := url.ParseQuery(p.query)
 		enc := canonical(pq).Encode()
 		presets = append(presets, preset{Key: p.key, URL: findingsURL(canonical(pq)), Active: enc == current})
@@ -449,10 +489,38 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 	if f.Registered {
 		svc, _ = u.o.Inventory.Service(f.Service)
 	}
-	u.render(w, r, "finding", f.VulnID, map[string]any{
+	data := map[string]any{
 		"F": f, "Service": svc, "Timeline": timeline, "PRs": prs, "DTLink": u.dtLink(f),
 		"Now": store.FormatTime(u.o.Now()),
-	})
+	}
+	if u.o.Actions != nil {
+		reqs, err := u.o.Actions.ListRequests(r.Context(), store.RequestFilter{FindingID: id})
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		pendingKinds := map[string]bool{}
+		var pending, decided []store.ExceptionRequest
+		for _, rq := range reqs {
+			if rq.Status == store.RequestPending {
+				pending = append(pending, rq)
+				pendingKinds[rq.Kind] = true
+			} else {
+				decided = append(decided, rq)
+			}
+		}
+		// The earliest date a due extension may ask for.
+		minDue := u.o.Now()
+		if f.DueAt != nil {
+			if t, err := parseTime(*f.DueAt); err == nil && t.After(minDue) {
+				minDue = t
+			}
+		}
+		data["Pending"], data["Decided"], data["PendingKinds"] = pending, decided, pendingKinds
+		data["MinDue"] = minDue.Add(24 * time.Hour).UTC().Format("2006-01-02")
+		data["CanAccept"] = u.o.DT != nil && f.DTComponentUUID != "" && f.DTVulnerabilityUUID != ""
+	}
+	u.render(w, r, "finding", f.VulnID, data)
 }
 
 // ---- service ----------------------------------------------------------
@@ -580,6 +648,10 @@ func (u *UI) integrations(w http.ResponseWriter, r *http.Request) {
 // docsURL is where the Markdown documentation is published.
 const docsURL = "https://github.com/rha6780/patchline/blob/main/docs/"
 
+func (u *UI) signedOut(w http.ResponseWriter, r *http.Request) {
+	u.render(w, r, "signedout", "ui.signed_out", map[string]any{})
+}
+
 // guide introduces the tools Patchline can take alerts from and how to
 // connect them. It is static: connection health is on /integrations.
 func (u *UI) guide(w http.ResponseWriter, r *http.Request) {
@@ -607,6 +679,7 @@ func (u *UI) funcs() template.FuncMap {
 		"ts":         formatTS,
 		"short":      shortSHA,
 		"join":       strings.Join,
+		"hasPrefix":  strings.HasPrefix,
 		"query":      url.QueryEscape,
 		"pathEscape": url.PathEscape,
 		"count":      func(m map[string]int, k string) int { return m[k] },
@@ -616,7 +689,19 @@ func (u *UI) funcs() template.FuncMap {
 			}
 			return nil
 		},
-		"isOpen":    func(s string) bool { return finding.State(s).Open() },
+		"isOpen": func(s string) bool { return finding.State(s).Open() },
+		"can": func(p *auth.Principal, perm string) bool {
+			return u.o.Actions != nil && p.Can(auth.Permission(perm))
+		},
+		"kindLabel":   notify.RequestKindLabel,
+		"statusLabel": notify.RequestStatusLabel,
+		"day":         func(s string) string { return dateOnly(s) },
+		"dayPtr": func(s *string) string {
+			if s == nil {
+				return ""
+			}
+			return dateOnly(*s)
+		},
 		"staleBOM":  func(lastBOM, before string) bool { return lastBOM == "" || lastBOM < before },
 		"dtProject": func(uuid string) string { return u.dtProjectLink(uuid) },
 		"rich":      rich,
@@ -745,6 +830,13 @@ func humanDuration(l i18n.Lang, d time.Duration) string {
 	default:
 		return l.T("ui.mttr.minutes", int(d.Minutes()))
 	}
+}
+
+func dateOnly(s string) string {
+	if len(s) >= 10 {
+		return s[:10]
+	}
+	return s
 }
 
 func shortSHA(s string) string {

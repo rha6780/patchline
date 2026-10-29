@@ -64,7 +64,29 @@ type Config struct {
 	// NotifyMinSeverity is the lowest severity that is posted
 	// (PATCHLINE_NOTIFY_MIN_SEVERITY): critical, high, medium, low, info.
 	NotifyMinSeverity string
+
+	// PublicURL is where users reach Patchline (PATCHLINE_PUBLIC_URL), used
+	// for the OIDC redirect URI.
+	PublicURL string
+	// OIDCIssuer enables sign-in with OpenID Connect (PATCHLINE_OIDC_ISSUER).
+	// Empty keeps the UI open and read-only.
+	OIDCIssuer       string
+	OIDCClientID     string // PATCHLINE_OIDC_CLIENT_ID
+	OIDCClientSecret string // PATCHLINE_OIDC_CLIENT_SECRET
+	// OIDCScopes are requested besides openid (PATCHLINE_OIDC_SCOPES).
+	OIDCScopes []string
+	// OIDCGroupsClaims are the ID token claims read as groups
+	// (PATCHLINE_OIDC_GROUPS_CLAIM, comma-separated).
+	OIDCGroupsClaims []string
+	// SessionTTL is how long a sign-in lasts (PATCHLINE_SESSION_TTL).
+	SessionTTL time.Duration
+	// AccessPolicyPath maps groups and users to permissions
+	// (PATCHLINE_ACCESS_POLICY_PATH). Empty lets everyone who signs in read.
+	AccessPolicyPath string
 }
+
+// OIDCEnabled reports whether sign-in is configured.
+func (c Config) OIDCEnabled() bool { return c.OIDCIssuer != "" }
 
 // DependencyTrackEnabled reports whether findings can be fetched from the
 // Dependency-Track API (both URL and API key are set).
@@ -85,6 +107,10 @@ func Default() Config {
 		NotifyLang:                    "en",
 		KEVURL:                        "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
 		DependencyTrackReconcileDelay: 2 * time.Minute,
+
+		OIDCScopes:       []string{"profile", "email"},
+		OIDCGroupsClaims: []string{"groups"},
+		SessionTTL:       12 * time.Hour,
 	}
 }
 
@@ -161,6 +187,38 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			cfg.NotifyMinSeverity = v
 		default:
 			return Config{}, fmt.Errorf("PATCHLINE_NOTIFY_MIN_SEVERITY: want critical, high, medium, low or info, got %q", v)
+		}
+	}
+
+	cfg.PublicURL, _ = lookup("PATCHLINE_PUBLIC_URL")
+	cfg.OIDCIssuer, _ = lookup("PATCHLINE_OIDC_ISSUER")
+	cfg.OIDCClientID, _ = lookup("PATCHLINE_OIDC_CLIENT_ID")
+	cfg.OIDCClientSecret, _ = lookup("PATCHLINE_OIDC_CLIENT_SECRET")
+	cfg.AccessPolicyPath, _ = lookup("PATCHLINE_ACCESS_POLICY_PATH")
+	if v, ok := lookup("PATCHLINE_OIDC_SCOPES"); ok && v != "" {
+		cfg.OIDCScopes = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
+	}
+	if v, ok := lookup("PATCHLINE_OIDC_GROUPS_CLAIM"); ok && v != "" {
+		cfg.OIDCGroupsClaims = nil
+		for _, c := range strings.Split(v, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				cfg.OIDCGroupsClaims = append(cfg.OIDCGroupsClaims, c)
+			}
+		}
+	}
+	if v, ok := lookup("PATCHLINE_SESSION_TTL"); ok && v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return Config{}, fmt.Errorf("PATCHLINE_SESSION_TTL: want a positive duration such as 12h, got %q", v)
+		}
+		cfg.SessionTTL = d
+	}
+	if cfg.OIDCEnabled() {
+		switch {
+		case cfg.OIDCClientID == "":
+			return Config{}, fmt.Errorf("PATCHLINE_OIDC_CLIENT_ID is required with PATCHLINE_OIDC_ISSUER")
+		case cfg.PublicURL == "":
+			return Config{}, fmt.Errorf("PATCHLINE_PUBLIC_URL is required with PATCHLINE_OIDC_ISSUER (the redirect URI is PATCHLINE_PUBLIC_URL/auth/callback)")
 		}
 	}
 	return cfg, nil

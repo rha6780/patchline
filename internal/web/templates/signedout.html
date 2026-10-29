@@ -1,0 +1,6 @@
+{{define "content"}}
+{{$L := .L}}
+<h1>{{t $L "ui.signed_out"}}</h1>
+<p>{{t $L "ui.signed_out_lead"}}</p>
+<p><a class="button" href="/auth/login">{{t $L "ui.sign_in"}}</a></p>
+{{end}}

@@ -14,8 +14,9 @@ Tested with Dependency-Track 4.14.
 |---|---|
 | `VIEW_VULNERABILITY` | Reading a project's current findings after `BOM_PROCESSED` (`GET /api/v1/finding/project/{uuid}`) |
 | `VIEW_PORTFOLIO` | Reading vulnerability details, used for the affected version ranges when judging fix PRs (`GET /api/v1/vulnerability/source/{source}/vuln/{id}`) |
+| `VULNERABILITY_ANALYSIS` | Only with [sign-in](../access-control.md): writing approved risk acceptances (`PUT /api/v1/analysis`) |
 
-Keep CI uploads on a separate team (`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`), so the key Patchline holds cannot change anything.
+Keep CI uploads on a separate team (`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`). Without `VULNERABILITY_ANALYSIS`, the key Patchline holds cannot change anything.
 
 ## 2. Notification rule
 

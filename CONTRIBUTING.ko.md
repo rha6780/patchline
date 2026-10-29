@@ -62,6 +62,7 @@ Dependency-Track까지 포함한 전체 흐름은 [Compose 데모](deploy/compos
 patchline/
 ├── cmd/patchline/          # 진입점
 ├── internal/
+│   ├── auth/               # OIDC 로그인, 세션, 접근 정책
 │   ├── config/             # 환경변수
 │   ├── server/             # HTTP: Webhook Inbox, 내부 API, UI 라우트
 │   ├── finding/            # 모델, 상태 전이, 이벤트 로그
@@ -76,7 +77,7 @@ patchline/
 │   ├── version/            # 생태계 공통 버전 비교(best-effort)
 │   ├── job/                # 스케줄 작업: SLA 평가, 재알림, KEV 갱신
 │   └── web/                # 서버 렌더링 화면 + 내장 CSS
-├── examples/               # 샘플 인벤토리, 정책, SBOM
+├── examples/               # 샘플 인벤토리, 정책, 접근 정책, SBOM
 ├── deploy/compose/         # docker compose 데모
 ├── deploy/self-hosted/     # 직접 설치용 docker compose(온프렘, 로컬)
 └── docs/                   # 동작 방식, 설정, 연동 가이드

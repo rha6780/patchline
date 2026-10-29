@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/policy"
 	"github.com/rha6780/patchline/internal/source/kev"
@@ -24,6 +25,7 @@ type SLAStore interface {
 	KEVSet(ctx context.Context) (map[string]bool, error)
 	ReplaceKEV(ctx context.Context, entries []store.KEVEntry, version string) error
 	Setting(ctx context.Context, key string) (string, error)
+	ClearDueOverride(ctx context.Context, id int64) error
 }
 
 // SLA evaluates the policy for open findings, keeps due dates current and
@@ -126,6 +128,20 @@ func (j *SLA) RunOnce(ctx context.Context) error {
 		if !res.Due.IsZero() {
 			d := res.Due.UTC()
 			due = &d
+		}
+		if f.DueOverride != nil {
+			if finding.SeverityRank(res.EffectiveSeverity) < finding.SeverityRank(f.DueOverrideSeverity) {
+				// The extension was approved for a lower severity (for
+				// example before the CVE entered KEV): the policy's due date
+				// applies again.
+				if err := j.Store.ClearDueOverride(ctx, f.ID); err != nil {
+					return err
+				}
+				j.Logger.Info("due date extension dropped", "finding", f.ID, "approved_for", f.DueOverrideSeverity, "severity", res.EffectiveSeverity)
+			} else if t, err := time.Parse(store.TimeLayout, *f.DueOverride); err == nil {
+				t = t.UTC()
+				due = &t
+			}
 		}
 		if differs(f.Finding, res, inKEV, due) {
 			silent := f.EffectiveSeverity == ""

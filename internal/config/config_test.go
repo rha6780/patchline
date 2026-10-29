@@ -2,6 +2,8 @@ package config
 
 import (
 	"log/slog"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,7 +20,7 @@ func TestFromLookupDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg != Default() {
+	if !reflect.DeepEqual(cfg, Default()) {
 		t.Fatalf("got %+v, want defaults %+v", cfg, Default())
 	}
 }
@@ -69,7 +71,9 @@ func TestFromLookupOverrides(t *testing.T) {
 		NotifyMinSeverity:   "high",
 		NotifyLang:          "ko",
 	}
-	if cfg != want {
+	d := Default()
+	want.OIDCScopes, want.OIDCGroupsClaims, want.SessionTTL = d.OIDCScopes, d.OIDCGroupsClaims, d.SessionTTL
+	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
 }
@@ -97,6 +101,37 @@ func TestDependencyTrackEnabled(t *testing.T) {
 		c := Config{DependencyTrackURL: tc.url, DependencyTrackAPIKey: tc.key}
 		if got := c.DependencyTrackEnabled(); got != tc.want {
 			t.Errorf("url=%q key=%q: got %v, want %v", tc.url, tc.key, got, tc.want)
+		}
+	}
+}
+
+func TestOIDC(t *testing.T) {
+	cfg, err := FromLookup(lookupFrom(map[string]string{
+		"PATCHLINE_OIDC_ISSUER":       "https://id.example.com",
+		"PATCHLINE_OIDC_CLIENT_ID":    "patchline",
+		"PATCHLINE_PUBLIC_URL":        "https://patchline.example.com",
+		"PATCHLINE_OIDC_GROUPS_CLAIM": "groups, roles",
+		"PATCHLINE_OIDC_SCOPES":       "profile email groups",
+		"PATCHLINE_SESSION_TTL":       "8h",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.OIDCEnabled() || cfg.SessionTTL != 8*time.Hour ||
+		!reflect.DeepEqual(cfg.OIDCGroupsClaims, []string{"groups", "roles"}) ||
+		!reflect.DeepEqual(cfg.OIDCScopes, []string{"profile", "email", "groups"}) {
+		t.Fatalf("got %+v", cfg)
+	}
+
+	for name, env := range map[string]map[string]string{
+		"client id":  {"PATCHLINE_OIDC_ISSUER": "https://id", "PATCHLINE_PUBLIC_URL": "https://p"},
+		"public url": {"PATCHLINE_OIDC_ISSUER": "https://id", "PATCHLINE_OIDC_CLIENT_ID": "c"},
+		"ttl":        {"PATCHLINE_SESSION_TTL": "forever"},
+	} {
+		if _, err := FromLookup(lookupFrom(env)); err == nil {
+			t.Errorf("%s: want an error", name)
+		} else if name != "ttl" && !strings.Contains(err.Error(), "required") {
+			t.Errorf("%s: %v", name, err)
 		}
 	}
 }

@@ -59,7 +59,7 @@
     <td><a href="/findings/{{.ID}}">{{.VulnID}}</a>{{if .Aliases}}<div class="meta">{{join .Aliases ", "}}</div>{{end}}</td>
     <td><code>{{component .}}</code></td>
     <td><a href="/services/{{pathEscape .Service}}">{{.Service}}</a> / {{.Environment}}{{if not .Registered}} <span class="tag warn">{{t $L "ui.unregistered"}}</span>{{end}}</td>
-    <td><span class="state {{stateClass .State}}">{{stateLabel $L .State}}</span></td>
+    <td><span class="state {{stateClass .State}}">{{stateLabel $L .State}}</span>{{if .Assignee}}<div class="meta">👤 {{.Assignee}}</div>{{end}}</td>
     <td class="nowrap">{{if and .DueAt (isOpen .State)}}<span class="{{if overdue . $.Now}}late{{end}}">{{dueText $L (deref .DueAt)}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
   </tr>
   {{end}}

@@ -62,6 +62,7 @@ Documentation and UI text are kept in English and Korean.
 patchline/
 ├── cmd/patchline/          # main entrypoint
 ├── internal/
+│   ├── auth/               # OIDC sign-in, sessions, access policy
 │   ├── config/             # environment variables
 │   ├── server/             # HTTP: webhook inbox, internal API, UI routes
 │   ├── finding/            # model, state transitions, event log
@@ -76,7 +77,7 @@ patchline/
 │   ├── version/            # best-effort cross-ecosystem version comparison
 │   ├── job/                # scheduled jobs: SLA evaluation, reminders, KEV refresh
 │   └── web/                # server-rendered pages + embedded CSS
-├── examples/               # sample inventory, policy, SBOM
+├── examples/               # sample inventory, policy, access policy, SBOM
 ├── deploy/compose/         # docker compose demo
 ├── deploy/self-hosted/     # docker compose for on-premises / local use
 └── docs/                   # how it works, configuration, integration guides

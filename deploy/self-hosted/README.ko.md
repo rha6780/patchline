@@ -72,7 +72,9 @@ Dependency-Track API 서버는 메모리를 몇 GB 사용하므로 Docker에 8 G
 
 ## 외부에 공개하기
 
-포트는 기본으로 `127.0.0.1`에만 열립니다. 웹 UI에는 로그인이 없으므로, `PATCHLINE_BIND=0.0.0.0`으로 바꾸기 전에 사용자를 인증하고 TLS를 처리하는 리버스 프록시(예: oauth2-proxy, 사내 SSO 프록시) 뒤에 두세요. Webhook 경로(`/webhooks/*`)는 자체 인증이 있으므로 로그인 없이 통과시켜도 됩니다.
+포트는 기본으로 `127.0.0.1`에만 열립니다. `PATCHLINE_BIND=0.0.0.0`으로 바꾸기 전에 [OIDC 로그인](../../docs/access-control.ko.md)을 켜거나, 사용자를 인증하는 리버스 프록시(예: oauth2-proxy) 뒤에 두세요. 어느 쪽이든 앞단에서 TLS를 처리하세요. Webhook 경로(`/webhooks/*`)는 자체 인증이 있습니다.
+
+로그인을 쓰려면 접근 정책을 `config/access-policy.yaml`에 두고([예시](../../examples/access/access-policy.yaml)에서 시작), `.env`에 `PATCHLINE_OIDC_*` 변수를 설정하세요.
 
 ## 인터넷이 막힌 서버
 

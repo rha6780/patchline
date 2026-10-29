@@ -66,6 +66,7 @@ docker run -p 8080:8080 -v patchline-data:/data patchline
 
 - [동작 방식](docs/how-it-works.ko.md) — Finding 상태, 해결 판정, PR 연결, 기한, 알림
 - [설정](docs/configuration.ko.md) — 환경변수, 엔드포인트, 웹 UI
+- [로그인과 권한](docs/access-control.ko.md) — OIDC 로그인, 그룹별 권한(담당자 지정, 예외 요청·승인, Webhook 설정)
 - [연동 가이드](docs/README.ko.md) — Dependency-Track, CI의 SBOM 생성, Renovate, Gitea / Forgejo / GitHub, Slack, CISA KEV·EPSS
 
 ## 기여하기

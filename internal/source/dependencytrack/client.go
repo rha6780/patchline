@@ -20,7 +20,8 @@ type Client struct {
 
 // NewClient returns a client for the API server at baseURL (for example
 // http://dtrack-apiserver:8080). The API key needs VIEW_PORTFOLIO and
-// VIEW_VULNERABILITY.
+// VIEW_VULNERABILITY, and VULNERABILITY_ANALYSIS for approved risk
+// acceptances.
 func NewClient(baseURL, apiKey string, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
@@ -117,4 +118,49 @@ func (c *Client) Vulnerability(ctx context.Context, source, vulnID string) (Vuln
 		return VulnerabilityDetail{}, fmt.Errorf("dependency-track: decode vulnerability: %w", err)
 	}
 	return v, nil
+}
+
+// AnalysisUpdate is an analysis decision written to Dependency-Track
+// (PUT /api/v1/analysis). Every field is sent: Dependency-Track treats a
+// missing state or response as NOT_SET.
+type AnalysisUpdate struct {
+	ProjectUUID       string `json:"project"`
+	ComponentUUID     string `json:"component"`
+	VulnerabilityUUID string `json:"vulnerability"`
+	State             string `json:"analysisState"`
+	Response          string `json:"analysisResponse"`
+	Details           string `json:"analysisDetails"`
+	Comment           string `json:"comment"`
+	Suppressed        bool   `json:"isSuppressed"`
+}
+
+// SetAnalysis records an analysis decision. The API key needs
+// VULNERABILITY_ANALYSIS. Dependency-Track then sends PROJECT_AUDIT_CHANGE,
+// which Patchline receives like a decision made in its own UI.
+func (c *Client) SetAnalysis(ctx context.Context, a AnalysisUpdate) error {
+	body, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/api/v1/analysis", strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Api-Key", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("dependency-track: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		hint := ""
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			hint = " (the API key needs VULNERABILITY_ANALYSIS)"
+		}
+		return fmt.Errorf("dependency-track: PUT analysis: %s%s: %s", resp.Status, hint, strings.TrimSpace(string(msg)))
+	}
+	return nil
 }

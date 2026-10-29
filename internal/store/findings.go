@@ -33,12 +33,22 @@ type Finding struct {
 	DTProjectUUID    string   `json:"dt_project_uuid,omitempty"`
 	DTVulnSource     string   `json:"dt_vuln_source,omitempty"`
 	DTVulnID         string   `json:"dt_vuln_id,omitempty"`
+	// Dependency-Track identifiers for writing an analysis back.
+	DTComponentUUID     string `json:"dt_component_uuid,omitempty"`
+	DTVulnerabilityUUID string `json:"dt_vulnerability_uuid,omitempty"`
 
 	EPSS              *float64 `json:"epss,omitempty"`
 	KEV               bool     `json:"kev"`
 	EffectiveSeverity string   `json:"effective_severity,omitempty"`
 	SLAReasons        []string `json:"sla_reasons,omitempty"`
 	SLAStartedAt      *string  `json:"sla_started_at,omitempty"`
+
+	// Assignee is the person working on the finding (email or subject).
+	Assignee string `json:"assignee,omitempty"`
+	// DueOverride is an approved due date that replaces the policy's while
+	// the effective severity stays at or below DueOverrideSeverity.
+	DueOverride         *string `json:"due_override,omitempty"`
+	DueOverrideSeverity string  `json:"due_override_severity,omitempty"`
 }
 
 // Overdue reports whether the finding is open and past its due date.
@@ -93,7 +103,8 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 			}
 			if _, err = tx.ExecContext(ctx, `
 				UPDATE findings SET state = ?, resolved_at = NULL, sla_started_at = ?,
-				       reminded_due_soon_at = NULL, reminded_overdue_at = NULL
+				       reminded_due_soon_at = NULL, reminded_overdue_at = NULL,
+				       due_override = NULL, due_override_severity = ''
 				WHERE id = ?`, finding.StateReopened, now, id); err != nil {
 				return 0, false, err
 			}
@@ -329,6 +340,7 @@ type FindingFilter struct {
 	Environment string
 	State       string
 	Severity    string
+	Assignee    string
 	// Open limits the result to findings that still need action.
 	Open bool
 	// DueBefore limits the result to open findings due before this time.
@@ -342,6 +354,7 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 	var args []any
 	for _, c := range []struct{ col, v string }{
 		{"service", f.Service}, {"environment", f.Environment}, {"state", f.State}, {"severity", f.Severity},
+		{"assignee", f.Assignee},
 	} {
 		if c.v != "" {
 			where = append(where, c.col+" = ?")
@@ -392,7 +405,8 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 const findingColumns = `SELECT id, service, registered, repository, environment, component_purl,
 	component_name, component_version, vuln_id, aliases, severity, title,
 	state, due_at, first_seen_at, resolved_at, updated_at, dt_project_uuid, dt_vuln_source, dt_vuln_id,
-	epss, kev, effective_severity, sla_reasons, sla_started_at`
+	epss, kev, effective_severity, sla_reasons, sla_started_at,
+	dt_component_uuid, dt_vulnerability_uuid, assignee, due_override, due_override_severity`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -405,11 +419,13 @@ func scanFinding(sc scanner) (Finding, error) {
 		epss     sql.NullFloat64
 		reasons  string
 		started  sql.NullString
+		override sql.NullString
 	)
 	if err := sc.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
 		&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
 		&r.State, &due, &r.FirstSeenAt, &resolved, &r.UpdatedAt, &r.DTProjectUUID, &r.DTVulnSource, &r.DTVulnID,
-		&epss, &r.KEV, &r.EffectiveSeverity, &reasons, &started); err != nil {
+		&epss, &r.KEV, &r.EffectiveSeverity, &reasons, &started,
+		&r.DTComponentUUID, &r.DTVulnerabilityUUID, &r.Assignee, &override, &r.DueOverrideSeverity); err != nil {
 		return Finding{}, err
 	}
 	if epss.Valid {
@@ -417,6 +433,9 @@ func scanFinding(sc scanner) (Finding, error) {
 	}
 	if started.Valid {
 		r.SLAStartedAt = &started.String
+	}
+	if override.Valid {
+		r.DueOverride = &override.String
 	}
 	if err := json.Unmarshal([]byte(reasons), &r.SLAReasons); err != nil {
 		return Finding{}, fmt.Errorf("finding %d: sla_reasons: %w", r.ID, err)

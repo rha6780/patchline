@@ -4,6 +4,7 @@ English | [한국어](README.ko.md)
 
 - [How it works](how-it-works.md): finding states, intake, resolution, PR linking, due dates, notifications
 - [Configuration](configuration.md): environment variables, endpoints, web UI
+- [Sign-in and permissions](access-control.md): OIDC (FusionAuth, Keycloak, ...), group → permission mapping, assignment, approvals
 
 ## Integrations
 

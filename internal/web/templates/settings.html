@@ -1,0 +1,58 @@
+{{define "content"}}
+{{$L := .L}}{{$P := .P}}
+<h1>{{t $L "ui.settings"}}</h1>
+
+{{if .Secrets}}
+<h2>{{t $L "ui.webhooks"}}</h2>
+<p class="lead">{{t $L "ui.webhooks_lead"}}</p>
+{{if .GeneratedValue}}
+<div class="request">
+  <strong>{{t $L "ui.generated_once"}}</strong>
+  <div class="secret">{{.GeneratedValue}}</div>
+  <p class="meta">{{t $L "ui.generated_hint"}}</p>
+</div>
+{{end}}
+<div class="actions">
+  {{range .Secrets}}
+  <div class="card form">
+    <h3>{{if eq .Field "token"}}{{t $L "ui.secret.token"}}{{else}}{{t $L "ui.secret.gitea"}}{{end}}</h3>
+    <p class="meta">{{if eq .Field "token"}}{{t $L "ui.secret.token_hint" $.PublicURL}}{{else}}{{t $L "ui.secret.gitea_hint" $.PublicURL}}{{end}}</p>
+    <dl class="kv">
+      <div><dt>{{t $L "ui.secret.current"}}</dt><dd>{{if .Hint}}<code>{{.Hint}}</code>{{else}}<span class="muted">{{t $L "ui.secret.none"}}</span>{{end}}</dd></div>
+      <div><dt>{{t $L "ui.secret.source"}}</dt><dd>{{if eq .Source "ui"}}{{t $L "ui.secret.from_ui" (ts .UpdatedAt)}}{{else if eq .Source "env"}}{{t $L "ui.secret.from_env" .Env}}{{else}}—{{end}}</dd></div>
+    </dl>
+    <form class="row" method="post" action="/settings/webhooks">
+      <input type="hidden" name="csrf" value="{{$P.CSRF}}"><input type="hidden" name="field" value="{{.Field}}">
+      <button class="btn primary" type="submit" name="action" value="generate">{{t $L "ui.secret.generate"}}</button>
+      {{if eq .Source "ui"}}<button class="btn ghost" type="submit" name="action" value="reset">{{t $L "ui.secret.reset" .Env}}</button>{{end}}
+    </form>
+    <form class="form" method="post" action="/settings/webhooks">
+      <input type="hidden" name="csrf" value="{{$P.CSRF}}"><input type="hidden" name="field" value="{{.Field}}">
+      <label><span>{{t $L "ui.secret.set"}}</span><input type="password" name="value" minlength="16" maxlength="256" autocomplete="off" required></label>
+      <div class="row"><button class="btn ghost" type="submit" name="action" value="set">{{t $L "ui.save"}}</button></div>
+    </form>
+  </div>
+  {{end}}
+</div>
+<p class="note">{{t $L "ui.secret.warning"}}</p>
+{{end}}
+
+{{if .Audit}}
+<h2>{{t $L "ui.audit"}}</h2>
+<div class="scroll">
+<table class="compact">
+  <thead><tr><th>{{t $L "ui.col.when"}}</th><th>{{t $L "ui.col.by"}}</th><th>{{t $L "ui.col.action"}}</th><th>{{t $L "ui.col.target"}}</th></tr></thead>
+  <tbody>
+  {{range .Audit}}
+  <tr>
+    <td class="nowrap">{{ts .At}}</td>
+    <td>{{or .ActorName .Actor}}{{if .ActorName}}<div class="meta">{{.Actor}}</div>{{end}}</td>
+    <td><code>{{.Action}}</code></td>
+    <td>{{if hasPrefix .Action "request."}}<a href="/approvals">#{{.Target}}</a>{{else if eq .Action "finding.assign"}}<a href="/findings/{{.Target}}">#{{.Target}}</a>{{else}}<code>{{.Target}}</code>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else if can $P "audit.read"}}<h2>{{t $L "ui.audit"}}</h2><p class="empty">{{t $L "ui.empty.audit"}}</p>{{end}}
+{{end}}

@@ -161,3 +161,60 @@ func TestKEVRefreshFailureKeepsWorking(t *testing.T) {
 		t.Fatalf("finding = %+v", f)
 	}
 }
+
+func TestSLAJobKeepsApprovedExtension(t *testing.T) {
+	ctx := context.Background()
+	st, inv := setup(t)
+	var catalog atomic.Value
+	catalog.Store(`{"catalogVersion":"1","vulnerabilities":[]}`)
+	kevSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(catalog.Load().(string)))
+	}))
+	defer kevSrv.Close()
+
+	id, _, _ := st.UpsertFinding(ctx, finding.Observation{Service: "batch", Registered: true, Environment: "main",
+		ComponentRef: "b", VulnID: "CVE-2024-9", Severity: finding.SeverityHigh}, nil)
+	clock := time.Now().UTC()
+	j := &SLA{Store: st, Policy: policy.Default(), Inventory: inv, KEVURL: kevSrv.URL, KEVRefresh: time.Nanosecond,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return clock }}
+	if err := j.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	policyDue := *mustFinding(t, st, id).DueAt
+
+	// Approve an extension: the job keeps it on the next runs.
+	later := store.FormatTime(clock.AddDate(0, 3, 0))
+	rid, _ := st.CreateRequest(ctx, store.ExceptionRequest{FindingID: id, Kind: store.RequestDueExtension, Reason: "r", RequestedDue: &later}, store.Actor{Subject: "a"})
+	if err := st.DecideRequest(ctx, store.Decision{RequestID: rid, Status: store.RequestApproved, By: store.Actor{Subject: "b"}}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := j.RunOnce(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if f := mustFinding(t, st, id); *f.DueAt != later || f.DueOverride == nil {
+		t.Fatalf("extension lost: due %s, override %v", *f.DueAt, f.DueOverride)
+	}
+
+	// The CVE enters KEV: critical is above the approved high, so the
+	// policy's (shorter) due date applies again.
+	catalog.Store(`{"catalogVersion":"2","vulnerabilities":[{"cveID":"CVE-2024-9"}]}`)
+	clock = clock.Add(time.Minute)
+	if err := j.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	f := mustFinding(t, st, id)
+	if f.DueOverride != nil || f.EffectiveSeverity != finding.SeverityCritical || *f.DueAt == later || *f.DueAt >= policyDue {
+		t.Fatalf("after KEV: due %s (policy %s), override %v, severity %s", *f.DueAt, policyDue, f.DueOverride, f.EffectiveSeverity)
+	}
+}
+
+func mustFinding(t *testing.T, st *store.Store, id int64) store.Finding {
+	t.Helper()
+	f, err := st.GetFinding(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}

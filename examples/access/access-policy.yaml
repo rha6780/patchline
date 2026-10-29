@@ -1,0 +1,26 @@
+# Access policy: who may do what once sign-in (OIDC) is on.
+# Set PATCHLINE_ACCESS_POLICY_PATH to this file. Without one, everyone who
+# signs in can read and nothing else.
+#
+# Groups come from the ID token claim(s) in PATCHLINE_OIDC_GROUPS_CLAIM
+# (default "groups"; FusionAuth: "roles"). Permissions add up: a person gets
+# "default" plus everything their groups and their own entry grant.
+#
+#   findings.read        open the web UI and the read API
+#   findings.assign      set or clear a finding's assignee
+#   exceptions.request   request a risk acceptance or a due date extension
+#   exceptions.approve   approve or reject other people's requests
+#   settings.webhooks    view and rotate the webhook token and secret
+#   audit.read           view the audit log
+#   "*"                  everything
+
+default: [findings.read]
+
+groups:
+  developers: [findings.assign, exceptions.request]
+  sec-team: [findings.assign, exceptions.request, exceptions.approve, audit.read]
+  platform-ops: [settings.webhooks, audit.read]
+
+# Individual people, by email or subject, for example a break-glass admin.
+users:
+  # admin@example.com: ["*"]

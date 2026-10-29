@@ -72,7 +72,9 @@ Follow the [integration guides](../../docs/README.md). The webhook URLs depend o
 
 ## Exposing Patchline
 
-Ports are bound to `127.0.0.1` by default. The web UI has no login, so before setting `PATCHLINE_BIND=0.0.0.0`, put Patchline behind a reverse proxy that authenticates users (for example oauth2-proxy, or your SSO's proxy) and terminates TLS. The webhook paths (`/webhooks/*`) authenticate themselves and can be passed through without the login.
+Ports are bound to `127.0.0.1` by default. Before setting `PATCHLINE_BIND=0.0.0.0`, either turn on [OIDC sign-in](../../docs/access-control.md), or put Patchline behind a reverse proxy that authenticates users (for example oauth2-proxy). In both cases, terminate TLS in front of it. The webhook paths (`/webhooks/*`) authenticate themselves.
+
+For sign-in, put the access policy in `config/access-policy.yaml` (start from [the example](../../examples/access/access-policy.yaml)) and set the `PATCHLINE_OIDC_*` variables in `.env`.
 
 ## Air-gapped servers
 

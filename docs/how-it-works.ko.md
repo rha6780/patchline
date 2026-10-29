@@ -27,10 +27,10 @@ Renovate ── 수정 PR ── Gitea / Forgejo / GitHub webhook ────�
 | `awaiting_verification` (검증대기) | 수정 PR Merge, 또는 분석이 Resolved |
 | `resolved` (해결) | 프로젝트의 최신 BOM에서 더 이상 보고되지 않음 |
 | `not_affected` (해당 없음) | 분석 결과 `NOT_AFFECTED` / `FALSE_POSITIVE` |
-| `risk_accepted` (위험 수용) | Dependency-Track에서 Suppress |
+| `risk_accepted` (위험 수용) | Dependency-Track에서 Suppress, 또는 Patchline에서 위험 수용 승인(Dependency-Track에도 Suppress로 기록) |
 | `reopened` (재발) | 해결된 Finding이 다시 보고됨 |
 
-사람의 판정은 **한 곳에서만** 받습니다. Dependency-Track 분석입니다.
+사람의 판정은 **한 곳**, Dependency-Track 분석에 모입니다. Dependency-Track에서 직접 판정하거나, Patchline에서 승인된 위험 수용이 그곳에 기록됩니다([로그인과 권한](access-control.ko.md)).
 
 ## 수집
 
@@ -72,6 +72,7 @@ Finding은 누군가 닫아서가 아니라 증거로 해결됩니다.
 3. 서비스 노출도에 따라 조정합니다(기본: `internet` +1).
 4. CISA KEV에 있는 CVE는 최소 `kev` 심각도(기본 critical)로 올립니다.
 5. 기한은 그 심각도의 SLA(기본 critical 7일, high 30일, medium 90일, low 180일)이고, 처음 탐지된 시각(재발 시 재발 시각)부터 셉니다.
+6. 기한 연장이 승인되면, 실효 심각도가 승인 당시 수준 이하인 동안 그 날짜가 기한이 됩니다. 상향되거나 재발하면 연장은 취소됩니다.
 
 SLA 작업은 5분마다, 그리고 수집 직후에 열린 Finding을 다시 평가합니다. 그래서 어떤 CVE가 KEV에 추가되면 이미 열려 있는 Finding도 상향되고, 스레드에 사유와 바뀐 기한이 남습니다. 기한 전에 한 번 재알림을 남기고, 기한이 지나면 반복합니다. 새 Finding은 첫 평가가 끝난 뒤에 알리므로 첫 메시지부터 기한이 보이고, 알림 기준 심각도도 실효 심각도를 씁니다.
 

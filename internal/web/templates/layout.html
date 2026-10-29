@@ -14,6 +14,8 @@
     <a href="/" {{if eq .Page "overview"}}aria-current="page"{{end}}>{{t .L "ui.nav.overview"}}</a>
     <a href="/findings?open=1" {{if or (eq .Page "findings") (eq .Page "finding")}}aria-current="page"{{end}}>{{t .L "ui.nav.findings"}}</a>
     <a href="/integrations" {{if eq .Page "integrations"}}aria-current="page"{{end}}>{{t .L "ui.nav.integrations"}}</a>
+    {{if or (can .P "exceptions.approve") (can .P "exceptions.request")}}<a href="/approvals" {{if eq .Page "approvals"}}aria-current="page"{{end}}>{{t .L "ui.nav.approvals"}}</a>{{end}}
+    {{if or (can .P "settings.webhooks") (can .P "audit.read")}}<a href="/settings" {{if eq .Page "settings"}}aria-current="page"{{end}}>{{t .L "ui.nav.settings"}}</a>{{end}}
     {{if .DTUIURL}}<a href="{{.DTUIURL}}" class="ext">Dependency-Track ↗</a>{{end}}
   </nav>
   <div class="prefs">
@@ -23,9 +25,18 @@
     <div class="seg" role="group" aria-label="{{t .L "ui.language"}}">
       {{range .Langs}}<a href="/prefs?lang={{.}}&next={{query $.Path}}" lang="{{.}}" {{if eq . $.L}}aria-current="true"{{end}}>{{.Name}}</a>{{end}}
     </div>
+    {{if and .AuthEnabled .P.Authenticated}}
+    <form class="user" method="post" action="/auth/logout">
+      <span title="{{.P.Identity}}{{if .P.Groups}} · {{join .P.Groups ", "}}{{end}}">{{.P.Label}}</span>
+      <input type="hidden" name="csrf" value="{{.P.CSRF}}">
+      <button class="btn ghost small" type="submit">{{t .L "ui.sign_out"}}</button>
+    </form>
+    {{end}}
   </div>
 </header>
 <main>
+{{if .Notice}}<p class="flash ok" role="status">{{.Notice}}</p>{{end}}
+{{if .Error}}<p class="flash bad" role="alert">{{.Error}}</p>{{end}}
 {{template "content" .}}
 </main>
 <footer class="site">

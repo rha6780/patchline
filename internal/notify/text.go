@@ -152,6 +152,8 @@ func EventText(l i18n.Lang, e store.FindingEvent) string {
 		case store.ReasonSeenAgain:
 			obs, _ := ev["observation"].(map[string]any)
 			return text + l.T("ev.seen_again") + commitSuffix(l, obs)
+		case store.ReasonApproved:
+			return text + l.T("ev.approved_by", str("by_name"))
 		}
 		if a := str("analysis_state"); a != "" {
 			text += l.T("ev.analysis", a)
@@ -172,6 +174,26 @@ func EventText(l i18n.Lang, e store.FindingEvent) string {
 			return l.T("rem.overdue", dateOnly(str("due")))
 		}
 		return l.T("rem.soon", dateOnly(str("due")))
+	case finding.EventAssigned:
+		if to := str("to"); to != "" {
+			return l.T("ev.assigned", to, str("by_name"))
+		}
+		return l.T("ev.unassigned", str("by_name"))
+	case finding.EventExceptionAsked:
+		text := l.T("req.asked.risk_acceptance", str("by_name"))
+		if str("kind") == store.RequestDueExtension {
+			text = l.T("req.asked.due_extension", str("by_name"), dateOnly(str("requested_due")))
+		}
+		if r := str("reason"); r != "" {
+			text += "\n> " + r
+		}
+		return text
+	case finding.EventExceptionDone:
+		text := l.T("req."+str("status"), RequestKindLabel(l, str("kind")), str("by_name"))
+		if n := str("note"); n != "" {
+			text += "\n> " + n
+		}
+		return text
 	case finding.EventDetected, finding.EventNotified:
 		return ""
 	}
@@ -296,6 +318,9 @@ func slaText(l i18n.Lang, ev map[string]any) string {
 	if len(reasons) > 0 {
 		text += " (" + strings.Join(reasons, ", ") + ")"
 	}
+	if _, ok := ev["extension"]; ok {
+		text = l.T("sla.extended", str("by_name"))
+	}
 	if d := str("to_due"); d != "" {
 		text += l.T("sla.due", dateOnly(d))
 		if f := str("from_due"); f != "" && f != d {
@@ -305,6 +330,24 @@ func slaText(l i18n.Lang, ev map[string]any) string {
 		text += l.T("sla.no_due")
 	}
 	return text
+}
+
+// RequestKindLabel names a request kind (risk acceptance, due extension).
+func RequestKindLabel(l i18n.Lang, kind string) string {
+	key := "req.kind." + kind
+	if !i18n.Has(key) {
+		return kind
+	}
+	return l.T(key)
+}
+
+// RequestStatusLabel names a request status.
+func RequestStatusLabel(l i18n.Lang, status string) string {
+	key := "req.status." + status
+	if !i18n.Has(key) {
+		return status
+	}
+	return l.T(key)
 }
 
 func dateOnly(ts string) string {

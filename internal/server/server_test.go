@@ -203,3 +203,28 @@ func TestGiteaWebhook(t *testing.T) {
 		t.Fatalf("redelivery should be a duplicate: %s", rec.Body)
 	}
 }
+
+func TestRotatedWebhookToken(t *testing.T) {
+	st := newStore(t)
+	secrets := store.WebhookSecrets{Store: st, EnvToken: "from-env"}
+	h := New(Options{DB: st, Inbox: st, Findings: st, WebhookToken: "from-env", Secrets: secrets.Current, Logger: quiet})
+	send := func(token string) int {
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/dependency-track?token="+token,
+			strings.NewReader(`{"notification":{"group":"BOM_CONSUMED","subject":{}}}`))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := send("from-env"); code == http.StatusUnauthorized {
+		t.Fatalf("env token rejected: %d", code)
+	}
+	if err := st.SetSetting(context.Background(), store.SettingWebhookToken, "rotated-in-the-ui", store.Actor{Subject: "ops"}); err != nil {
+		t.Fatal(err)
+	}
+	if code := send("from-env"); code != http.StatusUnauthorized {
+		t.Fatalf("old token after rotation: %d", code)
+	}
+	if code := send("rotated-in-the-ui"); code == http.StatusUnauthorized {
+		t.Fatalf("new token rejected: %d", code)
+	}
+}

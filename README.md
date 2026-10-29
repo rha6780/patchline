@@ -66,6 +66,7 @@ Next, set up the inventory and connect your tools:
 
 - [How it works](docs/how-it-works.md) — finding states, resolution, PR linking, due dates, notifications
 - [Configuration](docs/configuration.md) — environment variables, endpoints, web UI
+- [Sign-in and permissions](docs/access-control.md) — OIDC sign-in, groups mapped to permissions for assigning, requesting and approving exceptions, and webhook settings
 - [Integration guides](docs/README.md) — Dependency-Track, SBOM in CI, Renovate, Gitea / Forgejo / GitHub, Slack, CISA KEV and EPSS
 
 ## Contributing
