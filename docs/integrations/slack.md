@@ -21,7 +21,7 @@ PATCHLINE_NOTIFY_LANG=en                      # en | ko
 PATCHLINE_DT_UI_URL=https://dtrack.example.com  # adds "Open in Dependency-Track" links
 ```
 
-Without a token, the same messages are printed to Patchline's log, which is handy for trying things out.
+Without a token, the same messages are printed to stdout, which is handy for trying things out.
 
 ## 3. Channels per service
 

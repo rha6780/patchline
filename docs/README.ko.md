@@ -2,6 +2,9 @@
 
 [English](README.md) | 한국어
 
+- [동작 방식](how-it-works.ko.md): Finding 상태, 수집, 해결 판정, PR 연결, 기한, 알림
+- [설정](configuration.ko.md): 환경변수, 엔드포인트, 웹 UI
+
 ## 연동
 
 Patchline은 이미 쓰고 있는 도구들 사이에서 동작합니다. 가이드마다 해당 도구에서 할 일, Patchline 설정, 동작 확인 방법을 정리했습니다.
@@ -32,6 +35,6 @@ Renovate ── 수정 PR ──▶ Gitea / Forgejo / GitHub ─ webhook ┘   �
 | Dependency-Track 프로젝트 이름 | `repositories[].dependency_track_projects`(기본값: `repo`의 마지막 부분) |
 | Dependency-Track 프로젝트 버전 | 환경(예: `main`, `prod`) |
 | 저장소 전체 이름(`owner/name`) | `repositories[].repo` |
-| PR의 base 브랜치 | PR을 연결할 환경 |
+| PR의 base 브랜치 | PR을 연결할 환경(`default`도 포함) |
 
 로컬에서 전체 흐름을 돌려 보려면 [Compose 데모](../deploy/compose/README.md)를 참고하세요.

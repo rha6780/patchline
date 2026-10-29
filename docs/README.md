@@ -2,6 +2,9 @@
 
 English | [한국어](README.ko.md)
 
+- [How it works](how-it-works.md): finding states, intake, resolution, PR linking, due dates, notifications
+- [Configuration](configuration.md): environment variables, endpoints, web UI
+
 ## Integrations
 
 Patchline sits between the tools you already run. Each guide covers what to set up in that tool, what to set in Patchline, and how to check that it works.
@@ -32,6 +35,6 @@ Every integration meets in the **inventory** (`PATCHLINE_INVENTORY_PATH`): it ma
 | Dependency-Track project name | `repositories[].dependency_track_projects` (default: last segment of `repo`) |
 | Dependency-Track project version | Environment, e.g. `main`, `prod` |
 | Repository full name (`owner/name`) | `repositories[].repo` |
-| Pull request base branch | Environment the PR is matched in |
+| Pull request base branch | Environment the PR is matched in (and `default`) |
 
 For a local end-to-end run, see the [compose demo](../deploy/compose/README.md).

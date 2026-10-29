@@ -12,8 +12,8 @@ Tested with Dependency-Track 4.14.
 
 | Permission | Used for |
 |---|---|
-| `VIEW_PORTFOLIO` | Reading project findings and vulnerability details (affected version ranges) |
-| `VIEW_VULNERABILITY` | Reading findings |
+| `VIEW_VULNERABILITY` | Reading a project's current findings after `BOM_PROCESSED` (`GET /api/v1/finding/project/{uuid}`) |
+| `VIEW_PORTFOLIO` | Reading vulnerability details, used for the affected version ranges when judging fix PRs (`GET /api/v1/vulnerability/source/{source}/vuln/{id}`) |
 
 Keep CI uploads on a separate team (`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`), so the key Patchline holds cannot change anything.
 
@@ -80,6 +80,6 @@ Triage in Dependency-Track (finding → **Analysis**). Patchline maps the decisi
 | Symptom | Cause |
 |---|---|
 | Webhook returns `401` | Token in the destination URL differs from `PATCHLINE_WEBHOOK_TOKEN` |
-| Findings arrive, but never resolve | `PATCHLINE_DT_URL` / `PATCHLINE_DT_API_KEY` missing, or the key lacks `VIEW_PORTFOLIO` |
+| Findings arrive, but never resolve | `PATCHLINE_DT_URL` / `PATCHLINE_DT_API_KEY` missing, or the key lacks `VIEW_VULNERABILITY` |
 | Service shows as unregistered | Project name does not match the inventory |
 | Failures listed under **Webhook processing failures** | The last error explains it; items are retried with backoff |

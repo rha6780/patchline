@@ -11,7 +11,7 @@ Renovate proposes *how to fix it*. Patchline does not talk to Renovate directly:
 | The change table in the PR body (`| Package | Change |`, `` `2.14.1` -> `2.17.1` ``) | Package names and versions; several rows per PR are fine |
 | The title (`Update dependency X to vY`), when there is no table | A single package and its target version |
 | Repository full name | Finding's repository (`repo` in the inventory) |
-| Base branch | Environment the PR is matched in (`main` → findings of `...@main`) |
+| Base branch | Environment the PR is matched in (`main` → findings of `...@main`, plus `default` for projects without a version) |
 
 Each package is matched to open findings by name (Maven `group:artifact` equals `group/artifact`). The target version is then compared with the vulnerability's affected ranges from Dependency-Track.
 

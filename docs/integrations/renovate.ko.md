@@ -11,7 +11,7 @@ Renovate는 *어떻게 고칠지*를 제안합니다. Patchline은 Renovate와 �
 | PR 본문의 변경 표(`| Package | Change |`, `` `2.14.1` -> `2.17.1` ``) | 패키지 이름과 버전. PR 하나에 여러 행이 있어도 됨 |
 | 표가 없을 때 제목(`Update dependency X to vY`) | 패키지 하나와 목표 버전 |
 | 저장소 전체 이름 | Finding의 저장소(인벤토리의 `repo`) |
-| base 브랜치 | PR을 연결할 환경(`main` → `...@main`의 Finding) |
+| base 브랜치 | PR을 연결할 환경(`main` → `...@main`의 Finding, 버전이 없는 프로젝트의 `default`도 포함) |
 
 패키지마다 열린 Finding과 이름으로 연결합니다(Maven `group:artifact`는 `group/artifact`와 같게 봄). 이어서 목표 버전을 Dependency-Track의 취약 버전 범위와 비교합니다.
 

@@ -21,7 +21,7 @@ PATCHLINE_NOTIFY_LANG=ko                      # en | ko
 PATCHLINE_DT_UI_URL=https://dtrack.example.com  # "Dependency-Track에서 열기" 링크 추가
 ```
 
-토큰이 없으면 같은 메시지를 Patchline 로그로 출력합니다. 처음 시험해 볼 때 유용합니다.
+토큰이 없으면 같은 메시지를 stdout으로 출력합니다. 처음 시험해 볼 때 유용합니다.
 
 ## 3. 서비스별 채널
 

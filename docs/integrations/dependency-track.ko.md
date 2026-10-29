@@ -12,8 +12,8 @@ Dependency-Track 4.14로 확인했습니다.
 
 | 권한 | 용도 |
 |---|---|
-| `VIEW_PORTFOLIO` | 프로젝트 Finding과 취약점 상세(취약 버전 범위) 조회 |
-| `VIEW_VULNERABILITY` | Finding 조회 |
+| `VIEW_VULNERABILITY` | `BOM_PROCESSED` 이후 프로젝트의 현재 Finding 조회(`GET /api/v1/finding/project/{uuid}`) |
+| `VIEW_PORTFOLIO` | 수정 PR 판정에 쓰는 취약점 상세(취약 버전 범위) 조회(`GET /api/v1/vulnerability/source/{source}/vuln/{id}`) |
 
 CI 업로드용 키는 별도 팀(`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`)으로 분리하세요. 그러면 Patchline이 가진 키로는 아무것도 바꿀 수 없습니다.
 
@@ -80,6 +80,6 @@ PATCHLINE_DT_RECONCILE_DELAY=2m                     # 큰 BOM 분석이 오래 �
 | 증상 | 원인 |
 |---|---|
 | Webhook이 `401` 응답 | Destination URL의 token이 `PATCHLINE_WEBHOOK_TOKEN`과 다름 |
-| Finding은 생기는데 해결되지 않음 | `PATCHLINE_DT_URL` / `PATCHLINE_DT_API_KEY`가 없거나 키에 `VIEW_PORTFOLIO` 권한이 없음 |
+| Finding은 생기는데 해결되지 않음 | `PATCHLINE_DT_URL` / `PATCHLINE_DT_API_KEY`가 없거나 키에 `VIEW_VULNERABILITY` 권한이 없음 |
 | 서비스가 미등록으로 표시됨 | 프로젝트 이름이 인벤토리와 다름 |
 | **Webhook 처리 실패**에 항목이 쌓임 | 마지막 오류에 원인이 표시됨. 간격을 늘려 가며 재시도함 |

@@ -25,7 +25,7 @@ PATCHLINE_KEV_URL=https://www.cisa.gov/sites/default/files/feeds/known_exploited
 # PATCHLINE_KEV_URL=https://mirror.internal/kev.json      # internal mirror
 ```
 
-- Patchline downloads the catalog once a day and matches each finding's CVE id and aliases.
+- Patchline downloads the catalog at most once a day (the last refresh time is stored, so restarts do not download it again) and matches each finding's CVE id and aliases.
 - When a CVE is added to the catalog, open findings for it are escalated at the next evaluation; the Slack thread says why and shows the new due date.
 - Without internet access, mirror the JSON file internally (a scheduled `curl` to a static file server is enough) and point `PATCHLINE_KEV_URL` at it.
 - If a refresh fails, Patchline logs a warning and keeps the catalog it has.
@@ -36,5 +36,5 @@ Patchline stores the EPSS score Dependency-Track returns with each finding and u
 
 ## Check
 
-- Patchline logs `kev catalog refreshed` with the catalog version at startup and daily.
-- A finding in KEV shows a **KEV** tag in the UI, and its severity reads e.g. `critical (scanner: medium, in CISA KEV)`.
+- Patchline logs `kev catalog refreshed` with the catalog version and entry count each time it downloads the catalog: on the first start, then once a day.
+- A finding in KEV shows a **CISA KEV** tag in the UI, and its severity reads e.g. `critical (scanner: medium, in CISA KEV)`.
