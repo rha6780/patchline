@@ -6,7 +6,7 @@ Patchline is configured with environment variables. Services, owners and channel
 
 ## Web UI
 
-Open `http://localhost:8080/` (`:18080` in the demo). Without sign-in the UI is open and read-only, so keep it on a trusted network or behind an authenticating proxy. With OIDC, people sign in and their groups decide what they can change; see [Sign-in and permissions](access-control.md).
+Open `http://localhost:8080/` (`:18080` in the demo). Every page and API call needs a sign-in. On first start, sign in as `admin` / `admin` and choose a new password. With OIDC, people sign in with single sign-on and their groups decide what they can do; see [Sign-in and permissions](access-control.md).
 
 The header switches between English and Korean and between system, light and dark themes. The choice is kept in a cookie; without one, the language follows the browser.
 
@@ -34,9 +34,11 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/api/v1/findings` | Findings with owners and assignee; filters `service`, `environment`, `state`, `assignee`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
-| `GET` | `/auth/login`, `/auth/callback`; `POST /auth/logout` | OIDC sign-in, when configured |
+| `GET` | `/login` | Sign-in page (local admin, single sign-on) |
+| `POST` | `/auth/local`, `/account/password` | Local admin sign-in and password change |
+| `GET` | `/auth/login`, `/auth/callback`; `POST /auth/logout` | OIDC sign-in, when configured; sign-out |
 
-With sign-in configured, `/api/v1/*` needs a session with `findings.read` and answers `401` otherwise.
+`/api/v1/*` needs a session with `findings.read` and answers `401` otherwise (unless `PATCHLINE_ALLOW_ANONYMOUS=true`).
 
 ## Configuration
 
@@ -60,8 +62,10 @@ With sign-in configured, `/api/v1/*` needs a session with `findings.read` and an
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` or `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown limit |
-| `PATCHLINE_PUBLIC_URL` | — | Where users reach Patchline; required with OIDC (redirect URI `/auth/callback`) |
-| `PATCHLINE_OIDC_ISSUER` | — | OIDC issuer URL. Unset = no sign-in, read-only UI |
+| `PATCHLINE_PUBLIC_URL` | — | Where users reach Patchline; required with OIDC (redirect URI `/auth/callback`). `https://` makes the session cookie Secure |
+| `PATCHLINE_LOCAL_ADMIN` | `true` | Built-in `admin` account (starts as `admin` / `admin`, password change forced). `false` needs OIDC |
+| `PATCHLINE_ALLOW_ANONYMOUS` | `false` | Let requests without a session read; only behind an authenticating proxy |
+| `PATCHLINE_OIDC_ISSUER` | — | OIDC issuer URL. Unset = local admin only |
 | `PATCHLINE_OIDC_CLIENT_ID` | — | OIDC client id |
 | `PATCHLINE_OIDC_CLIENT_SECRET` | — | OIDC client secret |
 | `PATCHLINE_OIDC_SCOPES` | `profile,email` | Scopes besides `openid` |

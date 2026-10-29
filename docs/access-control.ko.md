@@ -2,7 +2,10 @@
 
 [English](access-control.md) | 한국어
 
-로그인을 설정하지 않으면 웹 UI와 조회 API는 접속할 수 있는 누구에게나 열려 있고, UI에서는 아무것도 바꿀 수 없습니다. OpenID Connect(FusionAuth, Keycloak, Okta, Entra ID, Google 등)를 연결하면 사용자가 로그인하고, ID 토큰의 그룹이나 역할에 따라 할 수 있는 일이 정해집니다.
+모든 화면과 API에 로그인이 필요합니다. 로그인 방법은 두 가지입니다.
+
+- **로컬 관리자**: 초기 설정용이자 SSO를 쓸 수 없을 때를 위한 내장 `admin` 계정입니다. 모든 권한을 가집니다.
+- **SSO**: 나머지 사람은 OpenID Connect(FusionAuth, Keycloak, Okta, Entra ID, Google 등)로 로그인합니다. ID 토큰의 그룹이나 역할에 따라 할 수 있는 일이 정해집니다.
 
 | 권한 | 할 수 있는 일 |
 |---|---|
@@ -15,6 +18,24 @@
 | `*` | 위 전부 |
 
 Webhook(`/webhooks/*`)과 헬스체크에는 로그인이 필요 없습니다. 각자의 비밀값으로 인증합니다.
+
+## 로컬 관리자
+
+처음 실행하면 Patchline이 `admin` 계정을 비밀번호 `admin`으로 만들고, 바꿀 때까지 경고 로그를 남깁니다.
+
+1. Patchline에 접속해 `admin` / `admin`으로 로그인합니다.
+2. 새 비밀번호를 정합니다(12자 이상, `admin` 불가). 바꾸기 전까지는 모든 화면이 비밀번호 변경 화면으로 이동하고, API는 `403`을 반환합니다.
+
+| | |
+|---|---|
+| 잠금 | 연속 5회 실패하면 15분 동안 잠김 |
+| 비밀번호 변경 | 관리자의 다른 세션이 종료됨 |
+| 비밀번호 분실 | `patchline reset-admin-password`(같은 `PATCHLINE_DB_PATH`로 실행)를 실행하면 `admin`으로 돌아가고(다음 로그인 때 변경 필요) 세션이 종료됩니다. 직접 설치용 compose에서는 `docker compose run --rm patchline reset-admin-password` |
+| 끄기 | SSO가 동작하면 `PATCHLINE_LOCAL_ADMIN=false`. 기존 세션도 종료됨 |
+
+localhost 밖으로 공개하기 **전에** 기본 비밀번호를 바꾸세요. 바꾸기 전에는 로그인 화면에 접속할 수 있는 누구나 이 계정을 가져갈 수 있습니다.
+
+`PATCHLINE_ALLOW_ANONYMOUS=true`로 두면 세션 없는 요청도 조회(UI, API)할 수 있습니다. 인증 프록시가 이미 앞을 막고 있는 경우에만 쓰세요. 변경 작업에는 여전히 로그인이 필요합니다.
 
 ## 1. IdP에 Patchline 등록
 

@@ -55,8 +55,10 @@ func run() error {
 		case "healthcheck":
 			// Used by container health checks: the runtime image has no curl.
 			return healthcheck(cfg.Addr)
+		case "reset-admin-password":
+			return resetAdminPassword(cfg)
 		default:
-			return fmt.Errorf("unknown command %q (want: version, healthcheck)", os.Args[1])
+			return fmt.Errorf("unknown command %q (want: version, healthcheck, reset-admin-password)", os.Args[1])
 		}
 	}
 	logger := newLogger(cfg)
@@ -129,30 +131,16 @@ func run() error {
 	go func() { defer workers.Done(); sla.Run(ctx) }()
 	go func() { defer workers.Done(); notifier.Run(ctx) }()
 
-	var authn *auth.Authenticator
+	authn, err := newAuthenticator(ctx, cfg, st, logger)
+	if err != nil {
+		return err
+	}
 	webOpts := web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger,
 		OnChange: func() { sla.Wake(); notifier.Wake() }, PublicURL: cfg.PublicURL,
-		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret}
-	if cfg.OIDCEnabled() {
-		policy, err := auth.LoadPolicy(cfg.AccessPolicyPath)
-		if err != nil {
-			return err
-		}
-		authn, err = auth.New(ctx, auth.Config{
-			Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret,
-			PublicURL: cfg.PublicURL, Scopes: cfg.OIDCScopes, GroupsClaims: cfg.OIDCGroupsClaims, SessionTTL: cfg.SessionTTL,
-		}, policy, st, logger)
-		if err != nil {
-			return err
-		}
-		logger.Info("sign-in enabled", "issuer", cfg.OIDCIssuer, "groups_claims", cfg.OIDCGroupsClaims,
-			"access_policy", cfg.AccessPolicyPath, "policy", policy.Summary())
-		webOpts.Actions, webOpts.AuthEnabled = st, true
-		if dt != nil {
-			webOpts.DT = dt
-		}
-	} else {
-		logger.Info("PATCHLINE_OIDC_ISSUER not set: the web UI is open and read-only")
+		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret,
+		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local()}
+	if dt != nil {
+		webOpts.DT = dt
 	}
 	ui, err := web.New(webOpts)
 	if err != nil {
@@ -198,6 +186,76 @@ func run() error {
 	err = srv.Shutdown(shutdownCtx)
 	workers.Wait()
 	return err
+}
+
+// newAuthenticator sets up sign-in: the local admin (created as
+// admin/admin on first start) and, when configured, OIDC.
+func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, logger *slog.Logger) (*auth.Authenticator, error) {
+	policy, err := auth.LoadPolicy(cfg.AccessPolicyPath)
+	if err != nil {
+		return nil, err
+	}
+	opts := auth.Options{LocalAdmin: cfg.LocalAdmin, AllowAnonymous: cfg.AllowAnonymous, PublicURL: cfg.PublicURL, SessionTTL: cfg.SessionTTL}
+	if cfg.OIDCEnabled() {
+		opts.OIDC = &auth.Config{Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret,
+			Scopes: cfg.OIDCScopes, GroupsClaims: cfg.OIDCGroupsClaims}
+	}
+	if cfg.LocalAdmin {
+		hash, err := auth.HashPassword(auth.DefaultPassword)
+		if err != nil {
+			return nil, err
+		}
+		created, err := st.EnsureLocalAccount(ctx, auth.AdminUser, hash)
+		if err != nil {
+			return nil, err
+		}
+		acct, err := st.GetLocalAccount(ctx, auth.AdminUser)
+		if err != nil {
+			return nil, err
+		}
+		if created || acct.MustChange {
+			logger.Warn("local admin still has the default password: sign in as admin / admin and change it before exposing Patchline",
+				"created", created)
+		}
+	}
+	a, err := auth.New(ctx, opts, policy, st, logger)
+	if err != nil {
+		return nil, err
+	}
+	summary := policy.Summary()
+	if cfg.LocalAdmin {
+		summary = "admin (local): all permissions; " + summary
+	}
+	logger.Info("sign-in", "local_admin", cfg.LocalAdmin, "oidc_issuer", cfg.OIDCIssuer, "anonymous_read", cfg.AllowAnonymous,
+		"access_policy", cfg.AccessPolicyPath, "policy", summary)
+	if cfg.AllowAnonymous {
+		logger.Warn("PATCHLINE_ALLOW_ANONYMOUS=true: anyone who can reach Patchline can read findings")
+	}
+	return a, nil
+}
+
+// resetAdminPassword sets the local admin back to admin/admin (to be
+// changed at the next sign-in) and ends its sessions. It is the way back in
+// when the password is lost: it needs access to the database.
+func resetAdminPassword(cfg config.Config) error {
+	ctx := context.Background()
+	db, err := store.Open(ctx, cfg.DatabasePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if _, err := store.Migrate(ctx, db); err != nil {
+		return err
+	}
+	hash, err := auth.HashPassword(auth.DefaultPassword)
+	if err != nil {
+		return err
+	}
+	if err := store.New(db).SetLocalPassword(ctx, auth.AdminUser, hash, true, store.Actor{Subject: "cli", Name: "reset-admin-password"}, ""); err != nil {
+		return err
+	}
+	fmt.Println("The local admin password is now \"admin\". Sign in as admin and choose a new one.")
+	return nil
 }
 
 func healthcheck(addr string) error {

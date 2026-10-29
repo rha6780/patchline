@@ -279,3 +279,32 @@ func TestReadOnlyWithoutActions(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestLoginPages(t *testing.T) {
+	_, st := setup(t)
+	u, err := New(Options{Store: st, Actions: st, AuthEnabled: true, SSO: true, LocalAdmin: true,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, body := get(t, u, "/login?next=%2Ffindings%3Fopen%3D1")
+	if code != 200 || !strings.Contains(body, `href="/auth/login?next=%2ffindings%3fopen%3d1"`) ||
+		!strings.Contains(body, `action="/auth/local"`) || !strings.Contains(body, `value="/findings?open=1"`) {
+		t.Fatalf("login page: %d", code)
+	}
+	if strings.Contains(body, `href="/findings?open=1"`) {
+		t.Error("navigation shown before sign-in")
+	}
+	if _, body := get(t, u, "/login?next=https://evil.example"); !strings.Contains(body, `name="next" value="/"`) {
+		t.Error("external next kept")
+	}
+	if code, _ := get(t, as(person("dev"), u), "/account/password"); code != http.StatusNotFound {
+		t.Errorf("password page for an SSO user: %d", code)
+	}
+	admin := &auth.Principal{Authenticated: true, Subject: "local:admin", Name: "admin", Local: true, MustChangePassword: true,
+		Perms: auth.Set{auth.All: true}, CSRF: "t"}
+	code, body = get(t, as(admin, u), "/account/password")
+	if code != 200 || !strings.Contains(body, "default password") || !strings.Contains(body, `action="/account/password"`) {
+		t.Fatalf("password page: %d", code)
+	}
+}

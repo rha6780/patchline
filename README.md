@@ -57,6 +57,8 @@ docker build -t patchline .
 docker run -p 8080:8080 -v patchline-data:/data patchline
 ```
 
+Sign in as `admin` / `admin` and choose a new password; then connect single sign-on for everyone else ([Sign-in and permissions](docs/access-control.md)).
+
 Next, set up the inventory and connect your tools:
 
 1. Describe services, owners, Slack channels and repositories in an inventory ([example](examples/inventory/services.yaml)) and set `PATCHLINE_INVENTORY_PATH`.

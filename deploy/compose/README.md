@@ -19,6 +19,8 @@ cp deploy/compose/.env.example deploy/compose/.env
 make demo-up
 ```
 
+Patchline is at http://localhost:18080. The demo lets you read without signing in; sign in as `admin` / `admin` (you will be asked to choose a new password) to assign findings, approve requests or rotate webhook secrets.
+
 ## 2. Create an API key for Patchline
 
 In the Dependency-Track UI: **Administration → Access Management → Teams → Automation**.

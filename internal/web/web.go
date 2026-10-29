@@ -72,6 +72,9 @@ type Options struct {
 	OnChange func()
 	// AuthEnabled shows the signed-in user and the sign-out button.
 	AuthEnabled bool
+	// SSO and LocalAdmin choose what the sign-in page offers.
+	SSO        bool
+	LocalAdmin bool
 	// PublicURL is where users reach Patchline, for webhook URLs.
 	PublicURL string
 	// EnvWebhookToken and EnvGiteaSecret are the environment's values,
@@ -103,7 +106,7 @@ func New(o Options) (*UI, error) {
 		o.OnChange = func() {}
 	}
 	u := &UI{o: o, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide", "approvals", "settings", "signedout"} {
+	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide", "approvals", "settings", "signedout", "login", "password"} {
 		t, err := template.New("layout.html").Funcs(u.funcs()).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -121,6 +124,8 @@ func New(o Options) (*UI, error) {
 	u.mux.HandleFunc("GET /docs/integrations", u.guide)
 	u.mux.HandleFunc("GET /prefs", u.prefs)
 	u.mux.HandleFunc("GET /signed-out", u.signedOut)
+	u.mux.HandleFunc("GET /login", u.login)
+	u.mux.HandleFunc("GET /account/password", u.password)
 	if o.Actions != nil {
 		u.mux.HandleFunc("POST /findings/{id}/assign", u.assign)
 		u.mux.HandleFunc("POST /findings/{id}/requests", u.request)
@@ -649,7 +654,25 @@ func (u *UI) integrations(w http.ResponseWriter, r *http.Request) {
 const docsURL = "https://github.com/rha6780/patchline/blob/main/docs/"
 
 func (u *UI) signedOut(w http.ResponseWriter, r *http.Request) {
-	u.render(w, r, "signedout", "ui.signed_out", map[string]any{})
+	u.render(w, r, "signedout", "ui.signed_out", map[string]any{"LocalAdmin": u.o.LocalAdmin})
+}
+
+// login offers single sign-on and the local admin form.
+func (u *UI) login(w http.ResponseWriter, r *http.Request) {
+	next := r.URL.Query().Get("next")
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
+		next = "/"
+	}
+	u.render(w, r, "login", "ui.sign_in", map[string]any{"Next": next, "SSO": u.o.SSO, "LocalAdmin": u.o.LocalAdmin})
+}
+
+func (u *UI) password(w http.ResponseWriter, r *http.Request) {
+	p := auth.FromContext(r.Context())
+	if !p.Local {
+		http.NotFound(w, r)
+		return
+	}
+	u.render(w, r, "password", "ui.change_password", map[string]any{"Min": auth.MinPasswordLength})
 }
 
 // guide introduces the tools Patchline can take alerts from and how to

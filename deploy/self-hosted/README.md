@@ -45,6 +45,8 @@ docker compose ps           # patchline should be "healthy"
 curl -s http://127.0.0.1:8080/readyz
 ```
 
+Open `http://localhost:8080`, sign in as `admin` / `admin` and choose a new password. If you lose it, `docker compose run --rm patchline reset-admin-password` sets it back.
+
 With Dependency-Track as well, set `DT_DB_PASSWORD` in `.env`, set `PATCHLINE_DT_URL=http://dtrack-apiserver:8080`, then:
 
 ```sh
@@ -53,7 +55,7 @@ docker compose --profile dependency-track up -d --build
 
 | | URL |
 |---|---|
-| Patchline | http://localhost:8080 |
+| Patchline | http://localhost:8080 (first sign-in `admin` / `admin`; change it) |
 | Dependency-Track UI | http://localhost:8082 (first login `admin` / `admin`; change it) |
 | Dependency-Track API | http://localhost:8081 |
 

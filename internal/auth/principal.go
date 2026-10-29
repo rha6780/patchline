@@ -18,6 +18,12 @@ type Principal struct {
 	Perms         Set
 	// CSRF must be sent back with every form that changes something.
 	CSRF string
+	// Local is the built-in admin account; MustChangePassword is set
+	// until its default password has been replaced.
+	Local              bool
+	MustChangePassword bool
+
+	sessionHash string
 }
 
 // Can reports whether the principal holds p.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -83,6 +84,12 @@ type Config struct {
 	// AccessPolicyPath maps groups and users to permissions
 	// (PATCHLINE_ACCESS_POLICY_PATH). Empty lets everyone who signs in read.
 	AccessPolicyPath string
+	// LocalAdmin enables the built-in admin account (PATCHLINE_LOCAL_ADMIN,
+	// default true). It starts as admin/admin and must change the password.
+	LocalAdmin bool
+	// AllowAnonymous lets requests without a session read
+	// (PATCHLINE_ALLOW_ANONYMOUS), for use behind an authenticating proxy.
+	AllowAnonymous bool
 }
 
 // OIDCEnabled reports whether sign-in is configured.
@@ -111,6 +118,7 @@ func Default() Config {
 		OIDCScopes:       []string{"profile", "email"},
 		OIDCGroupsClaims: []string{"groups"},
 		SessionTTL:       12 * time.Hour,
+		LocalAdmin:       true,
 	}
 }
 
@@ -212,6 +220,21 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			return Config{}, fmt.Errorf("PATCHLINE_SESSION_TTL: want a positive duration such as 12h, got %q", v)
 		}
 		cfg.SessionTTL = d
+	}
+	for _, b := range []struct {
+		name string
+		dst  *bool
+	}{{"PATCHLINE_LOCAL_ADMIN", &cfg.LocalAdmin}, {"PATCHLINE_ALLOW_ANONYMOUS", &cfg.AllowAnonymous}} {
+		if v, ok := lookup(b.name); ok && v != "" {
+			p, err := strconv.ParseBool(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("%s: want true or false, got %q", b.name, v)
+			}
+			*b.dst = p
+		}
+	}
+	if !cfg.LocalAdmin && !cfg.OIDCEnabled() && !cfg.AllowAnonymous {
+		return Config{}, fmt.Errorf("PATCHLINE_LOCAL_ADMIN=false needs PATCHLINE_OIDC_ISSUER (or PATCHLINE_ALLOW_ANONYMOUS=true): otherwise nobody can sign in")
 	}
 	if cfg.OIDCEnabled() {
 		switch {

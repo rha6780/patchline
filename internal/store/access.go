@@ -521,11 +521,9 @@ func insertAudit(ctx context.Context, tx *sql.Tx, by Actor, action, target strin
 	return err
 }
 
-// expiresIn formats now+d the way the store keeps times.
-func (s *Store) expiresIn(d time.Duration) string { return formatTime(s.now().Add(d)) }
-
-// SessionExpiry returns the expiry time for a session or login starting now.
-func (s *Store) SessionExpiry(d time.Duration) string { return s.expiresIn(d) }
+// TimeFromNow formats now+d the way the store keeps times, for expiries
+// and for comparisons with stored times (d = 0 is now).
+func (s *Store) TimeFromNow(d time.Duration) string { return formatTime(s.now().Add(d)) }
 
 // Settings people can change in the UI. A stored value replaces the
 // environment variable; resetting it returns to the environment.

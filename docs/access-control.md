@@ -2,7 +2,10 @@
 
 English | [한국어](access-control.ko.md)
 
-Without sign-in, the web UI and the read API are open to anyone who can reach them, and nothing can be changed from the UI. With OpenID Connect (FusionAuth, Keycloak, Okta, Entra ID, Google and others), people sign in. The groups or roles in their ID token then decide what they can do:
+Every page and API call needs a sign-in. There are two ways in:
+
+- **Local admin**: a built-in `admin` account for first-time setup and as a fallback when single sign-on is down. It holds every permission.
+- **Single sign-on** with OpenID Connect (FusionAuth, Keycloak, Okta, Entra ID, Google and others) for everyone else. The groups or roles in their ID token decide what they can do:
 
 | Permission | Allows |
 |---|---|
@@ -15,6 +18,24 @@ Without sign-in, the web UI and the read API are open to anyone who can reach th
 | `*` | All of the above |
 
 Webhooks (`/webhooks/*`) and health checks never need a session; they authenticate with their own secrets.
+
+## Local admin
+
+On first start Patchline creates the account `admin` with the password `admin`, and logs a warning until it is changed.
+
+1. Open Patchline and sign in as `admin` / `admin`.
+2. Choose a new password: at least 12 characters, not `admin`. Until then every page leads to the password form and the API answers `403`.
+
+| | |
+|---|---|
+| Lockout | 5 failed sign-ins in a row lock the account for 15 minutes |
+| Password change | Ends the admin's other sessions |
+| Lost password | `patchline reset-admin-password` (with the same `PATCHLINE_DB_PATH`) sets it back to `admin`, to be changed at the next sign-in, and ends its sessions. In the self-hosted setup: `docker compose run --rm patchline reset-admin-password` |
+| Turn it off | `PATCHLINE_LOCAL_ADMIN=false` once single sign-on works; its sessions end |
+
+Change the default password **before** exposing Patchline beyond localhost: until then, anyone who can reach the sign-in page can take the account.
+
+`PATCHLINE_ALLOW_ANONYMOUS=true` lets requests without a session read (UI and API), for deployments where an authenticating proxy already guards Patchline. Changes still need a sign-in.
 
 ## 1. Register Patchline with the identity provider
 

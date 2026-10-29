@@ -1,0 +1,18 @@
+{{define "content"}}
+{{$L := .L}}
+<div class="narrow">
+<h1>{{t $L "ui.sign_in"}}</h1>
+{{if .SSO}}
+<p><a class="button" href="/auth/login?next={{.Next}}">{{t $L "ui.sign_in_sso"}}</a></p>
+{{end}}
+{{if .LocalAdmin}}
+<form class="card form" method="post" action="/auth/local">
+  {{if .SSO}}<h3>{{t $L "ui.local_admin"}}</h3><p class="meta">{{t $L "ui.local_admin_hint"}}</p>{{end}}
+  <input type="hidden" name="next" value="{{.Next}}">
+  <label><span>{{t $L "ui.username"}}</span><input type="text" name="username" value="admin" autocomplete="username" required></label>
+  <label><span>{{t $L "ui.password"}}</span><input type="password" name="password" autocomplete="current-password" required autofocus></label>
+  <div class="row"><button class="btn primary" type="submit">{{t $L "ui.sign_in"}}</button></div>
+</form>
+{{end}}
+</div>
+{{end}}

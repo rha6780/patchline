@@ -138,8 +138,8 @@ func app(t *testing.T, idp *fakeIdP, policy Policy) (*httptest.Server, *http.Cli
 	srv = httptest.NewUnstartedServer(nil)
 	srv.Start()
 	t.Cleanup(srv.Close)
-	a, err := New(context.Background(), Config{Issuer: idp.srv.URL, ClientID: "patchline", ClientSecret: "s",
-		PublicURL: srv.URL, GroupsClaims: []string{"groups", "realm_access.roles"}}, policy, newStore(t),
+	a, err := New(context.Background(), Options{PublicURL: srv.URL, OIDC: &Config{Issuer: idp.srv.URL, ClientID: "patchline",
+		ClientSecret: "s", GroupsClaims: []string{"groups", "realm_access.roles"}}}, policy, newStore(t),
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestSignInWithoutAccess(t *testing.T) {
 func TestSignInRejectsForgedToken(t *testing.T) {
 	idp := newIdP(t, nil)
 	other := newIdP(t, nil)
-	a, err := New(context.Background(), Config{Issuer: idp.srv.URL, ClientID: "patchline", PublicURL: "https://p.example.com"},
+	a, err := New(context.Background(), Options{PublicURL: "https://p.example.com", OIDC: &Config{Issuer: idp.srv.URL, ClientID: "patchline"}},
 		DefaultPolicy(), newStore(t), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)

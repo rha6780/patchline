@@ -44,14 +44,14 @@ func TestSessions(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 	if err := s.CreateSession(ctx, Session{IDHash: "h1", Subject: "u", Groups: []string{"a"}, CSRF: "c",
-		CreatedAt: s.SessionExpiry(0), ExpiresAt: s.SessionExpiry(time.Hour)}); err != nil {
+		CreatedAt: s.TimeFromNow(0), ExpiresAt: s.TimeFromNow(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.GetSession(ctx, "h1")
 	if err != nil || got.Subject != "u" || len(got.Groups) != 1 || got.CSRF != "c" {
 		t.Fatalf("session = %+v, %v", got, err)
 	}
-	_ = s.CreateSession(ctx, Session{IDHash: "old", Subject: "u", CSRF: "c", CreatedAt: s.SessionExpiry(-2 * time.Hour), ExpiresAt: s.SessionExpiry(-time.Hour)})
+	_ = s.CreateSession(ctx, Session{IDHash: "old", Subject: "u", CSRF: "c", CreatedAt: s.TimeFromNow(-2 * time.Hour), ExpiresAt: s.TimeFromNow(-time.Hour)})
 	if _, err := s.GetSession(ctx, "old"); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("expired session: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestSessions(t *testing.T) {
 		t.Errorf("deleted session: %v", err)
 	}
 
-	if err := s.SaveAuthState(ctx, AuthState{State: "st", Nonce: "n", Verifier: "v", Next: "/x", ExpiresAt: s.SessionExpiry(time.Minute)}); err != nil {
+	if err := s.SaveAuthState(ctx, AuthState{State: "st", Nonce: "n", Verifier: "v", Next: "/x", ExpiresAt: s.TimeFromNow(time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
 	if a, err := s.TakeAuthState(ctx, "st"); err != nil || a.Nonce != "n" || a.Next != "/x" {

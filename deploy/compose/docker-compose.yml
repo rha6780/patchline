@@ -64,6 +64,9 @@ services:
       - dtrack-apiserver
     environment:
       PATCHLINE_LOG_LEVEL: debug
+      # Demo only: read without signing in, so the curl steps in README.md work.
+      # Sign in as admin / admin to change things.
+      PATCHLINE_ALLOW_ANONYMOUS: "true"
       PATCHLINE_INVENTORY_PATH: /etc/patchline/inventory
       PATCHLINE_POLICY_PATH: /etc/patchline/policy/policy.yaml
       PATCHLINE_WEBHOOK_TOKEN: ${PATCHLINE_WEBHOOK_TOKEN:-change-me}
@@ -81,7 +84,7 @@ services:
       - ../../examples/inventory:/etc/patchline/inventory:ro
       - ../../examples/policy:/etc/patchline/policy:ro
     ports:
-      - "${PATCHLINE_PORT:-18080}:8080"
+      - "127.0.0.1:${PATCHLINE_PORT:-18080}:8080"
     restart: unless-stopped
 
 volumes:

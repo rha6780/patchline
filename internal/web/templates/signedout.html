@@ -2,5 +2,5 @@
 {{$L := .L}}
 <h1>{{t $L "ui.signed_out"}}</h1>
 <p>{{t $L "ui.signed_out_lead"}}</p>
-<p><a class="button" href="/auth/login">{{t $L "ui.sign_in"}}</a></p>
+<p><a class="button" href="{{if .LocalAdmin}}/login{{else}}/auth/login{{end}}">{{t $L "ui.sign_in"}}</a></p>
 {{end}}

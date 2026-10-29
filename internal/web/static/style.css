@@ -204,3 +204,4 @@ table.compact td:first-child code { white-space: nowrap; overflow-wrap: normal; 
 .request + .request { margin-top: 10px; }
 .request blockquote { margin: 0; padding: 6px 10px; border-left: 3px solid var(--line); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
 .secret { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 10px; border-radius: 8px; background: var(--code); overflow-wrap: anywhere; user-select: all; }
+.narrow { max-width: 440px; }

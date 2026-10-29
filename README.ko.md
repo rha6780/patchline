@@ -57,6 +57,8 @@ docker build -t patchline .
 docker run -p 8080:8080 -v patchline-data:/data patchline
 ```
 
+`admin` / `admin`으로 로그인해 새 비밀번호를 정하세요. 다른 사람은 SSO로 로그인하게 연결합니다([로그인과 권한](docs/access-control.ko.md)).
+
 그다음 인벤토리를 만들고 도구를 연결합니다.
 
 1. 서비스, 담당자, Slack 채널, 저장소를 인벤토리([예시](examples/inventory/services.yaml))에 적고 `PATCHLINE_INVENTORY_PATH`를 설정합니다.

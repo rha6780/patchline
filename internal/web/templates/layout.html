@@ -10,6 +10,7 @@
 <body>
 <header class="top">
   <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>Patchline</a>
+  {{if can .P "findings.read"}}
   <nav aria-label="Main">
     <a href="/" {{if eq .Page "overview"}}aria-current="page"{{end}}>{{t .L "ui.nav.overview"}}</a>
     <a href="/findings?open=1" {{if or (eq .Page "findings") (eq .Page "finding")}}aria-current="page"{{end}}>{{t .L "ui.nav.findings"}}</a>
@@ -18,6 +19,7 @@
     {{if or (can .P "settings.webhooks") (can .P "audit.read")}}<a href="/settings" {{if eq .Page "settings"}}aria-current="page"{{end}}>{{t .L "ui.nav.settings"}}</a>{{end}}
     {{if .DTUIURL}}<a href="{{.DTUIURL}}" class="ext">Dependency-Track ↗</a>{{end}}
   </nav>
+  {{end}}
   <div class="prefs">
     <div class="seg" role="group" aria-label="{{t .L "ui.theme"}}">
       {{range .Themes}}<a href="/prefs?theme={{.}}&next={{query $.Path}}" {{if eq . $.Theme}}aria-current="true"{{end}}>{{t $.L (print "ui.theme." .)}}</a>{{end}}
@@ -27,7 +29,7 @@
     </div>
     {{if and .AuthEnabled .P.Authenticated}}
     <form class="user" method="post" action="/auth/logout">
-      <span title="{{.P.Identity}}{{if .P.Groups}} · {{join .P.Groups ", "}}{{end}}">{{.P.Label}}</span>
+      {{if .P.Local}}<a href="/account/password" title="{{t .L "ui.change_password"}}">{{.P.Label}}</a>{{else}}<span title="{{.P.Identity}}{{if .P.Groups}} · {{join .P.Groups ", "}}{{end}}">{{.P.Label}}</span>{{end}}
       <input type="hidden" name="csrf" value="{{.P.CSRF}}">
       <button class="btn ghost small" type="submit">{{t .L "ui.sign_out"}}</button>
     </form>

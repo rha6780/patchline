@@ -248,7 +248,7 @@ func (u *UI) decide(w http.ResponseWriter, r *http.Request) {
 // back as a no-op: the finding is already risk accepted.
 func (u *UI) suppressInDT(ctx context.Context, req store.ExceptionRequest, p *auth.Principal) error {
 	if u.o.DT == nil {
-		return errors.New("Dependency-Track is not configured (PATCHLINE_DT_URL, PATCHLINE_DT_API_KEY)")
+		return errors.New("dependency-track is not configured (PATCHLINE_DT_URL, PATCHLINE_DT_API_KEY)")
 	}
 	f, err := u.o.Store.GetFinding(ctx, req.FindingID)
 	if err != nil {

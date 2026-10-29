@@ -72,7 +72,7 @@ func TestFromLookupOverrides(t *testing.T) {
 		NotifyLang:          "ko",
 	}
 	d := Default()
-	want.OIDCScopes, want.OIDCGroupsClaims, want.SessionTTL = d.OIDCScopes, d.OIDCGroupsClaims, d.SessionTTL
+	want.OIDCScopes, want.OIDCGroupsClaims, want.SessionTTL, want.LocalAdmin = d.OIDCScopes, d.OIDCGroupsClaims, d.SessionTTL, d.LocalAdmin
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
@@ -127,10 +127,11 @@ func TestOIDC(t *testing.T) {
 		"client id":  {"PATCHLINE_OIDC_ISSUER": "https://id", "PATCHLINE_PUBLIC_URL": "https://p"},
 		"public url": {"PATCHLINE_OIDC_ISSUER": "https://id", "PATCHLINE_OIDC_CLIENT_ID": "c"},
 		"ttl":        {"PATCHLINE_SESSION_TTL": "forever"},
+		"nobody":     {"PATCHLINE_LOCAL_ADMIN": "false"},
 	} {
 		if _, err := FromLookup(lookupFrom(env)); err == nil {
 			t.Errorf("%s: want an error", name)
-		} else if name != "ttl" && !strings.Contains(err.Error(), "required") {
+		} else if (name == "client id" || name == "public url") && !strings.Contains(err.Error(), "required") {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
