@@ -8,8 +8,9 @@ For a quick tour with sample data, use the [compose demo](../compose/README.md) 
 
 | File | |
 |---|---|
-| `docker-compose.yml` | Patchline, plus Dependency-Track under the `dependency-track` profile |
+| `docker-compose.yml` | Patchline, plus Dependency-Track (`dependency-track` profile) and a Trivy server (`trivy` profile) |
 | `.env.example` | Settings; copy to `.env` |
+| `scripts/enable-trivy.sh` | Turns on the Trivy analyzer in Dependency-Track through its API |
 | `config/` | Your inventory and policy, mounted read-only at `/etc/patchline` (not committed) |
 
 ## 1. Configure
@@ -55,6 +56,8 @@ docker compose --profile dependency-track up -d --build
 | Patchline | http://localhost:8080 |
 | Dependency-Track UI | http://localhost:8082 (first login `admin` / `admin`; change it) |
 | Dependency-Track API | http://localhost:8081 |
+
+To add the Trivy analyzer, set `TRIVY_TOKEN` and add `--profile trivy`; see [Trivy](../../docs/integrations/trivy.md) for turning it on in Dependency-Track (`scripts/enable-trivy.sh`).
 
 The Dependency-Track API server needs several GB of memory (give Docker at least 8 GB), and the first start takes a few minutes while it downloads vulnerability data. Create Patchline's API key afterwards, put it in `.env`, and run `docker compose up -d` again.
 

@@ -13,6 +13,7 @@ Patchline은 이미 쓰고 있는 도구들 사이에서 동작합니다. 가이
 |---|---|---|
 | Dependency-Track | 취약점 수집원: Finding, 분석 판정, BOM 처리 | [dependency-track.ko.md](integrations/dependency-track.ko.md) |
 | CI의 SBOM 생성(Trivy, CycloneDX) | Dependency-Track이 분석할 BOM을 만들고 커밋을 근거로 남김 | [sbom-ci.ko.md](integrations/sbom-ci.ko.md) |
+| Trivy 분석기 | Dependency-Track 분석에 Trivy 취약점 DB를 추가 | [trivy.ko.md](integrations/trivy.ko.md) |
 | Renovate | 수정 PR을 만들고, Patchline이 이를 Finding과 연결 | [renovate.ko.md](integrations/renovate.ko.md) |
 | Gitea / Forgejo / GitHub | Pull request Webhook | [git-webhooks.ko.md](integrations/git-webhooks.ko.md) |
 | Slack | Finding당 메시지 1개, 갱신과 스레드 이력 | [slack.ko.md](integrations/slack.ko.md) |

@@ -82,7 +82,7 @@ jobs:
             -F bom=@bom.patchline.json
 ```
 
-`aquasec/trivy`는 검토한 버전으로 고정하세요.
+`aquasec/trivy`는 검토한 버전으로 고정하세요. 분석에도 Trivy 취약점 DB를 쓰려면 [Trivy 분석기](trivy.ko.md)를 참고하세요.
 
 ## Gradle(Kotlin / Spring Boot)
 

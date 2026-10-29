@@ -5,6 +5,7 @@
 #   cp -r ../../examples/inventory config/     # then describe your services
 #   docker compose up -d --build                                   # Patchline only
 #   docker compose --profile dependency-track up -d --build        # + Dependency-Track
+#   docker compose --profile dependency-track --profile trivy up -d --build   # + Trivy analyzer
 #
 # See README.md in this directory.
 
@@ -91,7 +92,29 @@ services:
       - "${DT_BIND:-127.0.0.1}:${DT_UI_PORT:-8082}:8080"
     restart: unless-stopped
 
+  # --- Optional: Trivy server as a Dependency-Track analyzer (--profile trivy) ---
+  # Enable it in Dependency-Track: Administration -> Analyzers -> Trivy,
+  # Base URL http://trivy:8080, API token = TRIVY_TOKEN
+  # (or run scripts/enable-trivy.sh).
+
+  trivy:
+    profiles: [trivy]
+    image: aquasec/trivy:${TRIVY_VERSION:-0.76.1}
+    command: ["server"]
+    environment:
+      TRIVY_LISTEN: "0.0.0.0:8080"
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-}
+      # Internal mirrors of the vulnerability databases, for air-gapped servers.
+      TRIVY_DB_REPOSITORY: ${TRIVY_DB_REPOSITORY:-}
+      TRIVY_JAVA_DB_REPOSITORY: ${TRIVY_JAVA_DB_REPOSITORY:-}
+    volumes:
+      - trivy-cache:/root/.cache/trivy
+    # No host port: Dependency-Track reaches it as http://trivy:8080.
+    # Publish one (e.g. "127.0.0.1:8083:8080") only for an external Dependency-Track.
+    restart: unless-stopped
+
 volumes:
   patchline-data:
+  trivy-cache:
   postgres-data:
   dtrack-data:

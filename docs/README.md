@@ -13,6 +13,7 @@ Patchline sits between the tools you already run. Each guide covers what to set 
 |---|---|---|
 | Dependency-Track | Vulnerability source: findings, analysis decisions, BOM processing | [dependency-track.md](integrations/dependency-track.md) |
 | SBOM in CI (Trivy, CycloneDX) | Produces the BOMs Dependency-Track analyzes, with the commit as evidence | [sbom-ci.md](integrations/sbom-ci.md) |
+| Trivy analyzer | Adds Trivy's vulnerability database to Dependency-Track's analysis | [trivy.md](integrations/trivy.md) |
 | Renovate | Opens fix pull requests that Patchline links to findings | [renovate.md](integrations/renovate.md) |
 | Gitea / Forgejo / GitHub | Pull request webhooks | [git-webhooks.md](integrations/git-webhooks.md) |
 | Slack | One message per finding, updates and thread history | [slack.md](integrations/slack.md) |

@@ -8,8 +8,9 @@
 
 | 파일 | |
 |---|---|
-| `docker-compose.yml` | Patchline, 그리고 `dependency-track` 프로필의 Dependency-Track |
+| `docker-compose.yml` | Patchline, 그리고 Dependency-Track(`dependency-track` 프로필)과 Trivy 서버(`trivy` 프로필) |
 | `.env.example` | 설정. `.env`로 복사해서 사용 |
+| `scripts/enable-trivy.sh` | Dependency-Track API로 Trivy 분석기를 켬 |
 | `config/` | 인벤토리와 정책. `/etc/patchline`에 읽기 전용으로 마운트(커밋하지 않음) |
 
 ## 1. 설정
@@ -55,6 +56,8 @@ docker compose --profile dependency-track up -d --build
 | Patchline | http://localhost:8080 |
 | Dependency-Track UI | http://localhost:8082 (첫 로그인 `admin` / `admin`, 바로 변경하세요) |
 | Dependency-Track API | http://localhost:8081 |
+
+Trivy 분석기를 추가하려면 `TRIVY_TOKEN`을 넣고 `--profile trivy`를 붙입니다. Dependency-Track에서 켜는 방법(`scripts/enable-trivy.sh`)은 [Trivy](../../docs/integrations/trivy.ko.md)를 참고하세요.
 
 Dependency-Track API 서버는 메모리를 몇 GB 사용하므로 Docker에 8 GB 이상 할당하세요. 처음 실행할 때는 취약점 데이터를 내려받느라 몇 분 걸립니다. 그다음 Patchline용 API 키를 만들어 `.env`에 넣고 `docker compose up -d`를 다시 실행합니다.
 

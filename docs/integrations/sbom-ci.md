@@ -82,7 +82,7 @@ jobs:
             -F bom=@bom.patchline.json
 ```
 
-Pin `aquasec/trivy` to a version you have reviewed.
+Pin `aquasec/trivy` to a version you have reviewed. To also use Trivy's vulnerability database for the analysis itself, see [Trivy analyzer](trivy.md).
 
 ## Gradle (Kotlin / Spring Boot)
 
