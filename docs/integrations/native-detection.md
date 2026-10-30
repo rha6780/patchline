@@ -98,7 +98,13 @@ curl -sS "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" -b "pat
 | Fix merged, waiting for the rescan | `in_triage`, response `update` |
 | Not affected / false positive / risk accepted | As decided, with the justification and the reason as `detail` |
 
-The document is CycloneDX 1.5 and validates against the official schema. It names the vulnerable components by purl; its `affects` refer to those components, not to the uploaded SBOM's `bom-ref`s, so tools that require BOM-Link references may not apply it. **Integrations** has a download link next to each Patchline project. The API needs a signed-in session, like the rest of `/api/v1`.
+The document is CycloneDX 1.5 and validates against the official schema. When the uploaded SBOM was CycloneDX with a `serialNumber` and `bom-ref`s (Trivy and the CycloneDX plugins write both), each vulnerability points into it with a BOM-Link: `urn:cdx:<serial>/<version>#<bom-ref>`. Scanners apply the VEX to that SBOM:
+
+```sh
+trivy sbom --vex storefront-api.vex.json bom.json   # not_affected / false_positive findings disappear
+```
+
+Without a serial or bom-refs (or for SPDX), the VEX lists the vulnerable components itself and refers to them by purl. **Integrations** has a download link next to each Patchline project.
 
 ## Component search and impact
 

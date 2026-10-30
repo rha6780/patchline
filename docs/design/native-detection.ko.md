@@ -72,10 +72,8 @@ CI ── SBOM ───────┤ patchline: SBOM Inbox → 구성요소 �
   - Dependency-Track이 아는 Finding은 판정을 그곳에 기록합니다(근거를 붙인 `NOT_AFFECTED`, `FALSE_POSITIVE`, 또는 `EXPLOITABLE` + `WILL_NOT_FIX` + Suppress).
   - Patchline만 보고한 Finding은 Patchline에 보관합니다(`analysis_*` 컬럼).
 - **VEX 내보내기:** `GET /api/v1/vex?project=&version=`이 스냅샷의 Finding을 CycloneDX 1.5 VEX로 내보냅니다. 열림은 `in_triage`, Merge 후 재스캔 대기는 `in_triage` + `update`, 판정은 판정대로 표시합니다. CycloneDX 스키마 검증을 통과합니다.
-- **아직 없는 것:**
-  - VEX `affects`를 업로드한 SBOM을 가리키는 BOM-Link로 만들기
-  - 도구가 세션 없이 VEX를 가져갈 API 토큰
-  - UI에서 판정 취소
+- **BOM-Link:** VEX `affects`는 업로드한 CycloneDX SBOM을 가리키는 BOM-Link(`urn:cdx:<serial>/<version>#<bom-ref>`)입니다. Trivy `--vex`가 실제로 적용하는 것을 확인했습니다(해당 없음으로 판정한 Log4Shell은 빠지고, 열린 CVE는 남음).
+- **아직 없는 것:** UI에서 판정 취소.
 
 ### 4단계: 선택 엔진으로 Trivy
 

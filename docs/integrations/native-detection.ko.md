@@ -98,7 +98,13 @@ curl -sS "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" -b "pat
 | 수정 PR Merge, 재스캔 대기 | `in_triage`, 대응 `update` |
 | 해당 없음 / 오탐 / 위험 수용 | 판정 그대로. 근거와 사유(`detail`) 포함 |
 
-문서는 CycloneDX 1.5이며 공식 스키마 검증을 통과합니다. 취약한 구성요소를 purl로 담고, `affects`는 업로드한 SBOM의 `bom-ref`가 아니라 VEX 안의 구성요소를 가리킵니다. 그래서 BOM-Link 참조를 요구하는 도구는 이 VEX를 적용하지 못할 수 있습니다. **연동** 화면에서 Patchline 프로젝트마다 내려받을 수 있습니다. API는 다른 `/api/v1`처럼 로그인 세션이 필요합니다.
+문서는 CycloneDX 1.5이며 공식 스키마 검증을 통과합니다. 업로드한 SBOM이 `serialNumber`와 `bom-ref`를 가진 CycloneDX라면(Trivy와 CycloneDX 플러그인은 둘 다 씁니다), 각 취약점이 BOM-Link(`urn:cdx:<serial>/<version>#<bom-ref>`)로 그 SBOM을 가리킵니다. 그래서 스캐너가 이 VEX를 그 SBOM에 적용할 수 있습니다.
+
+```sh
+trivy sbom --vex storefront-api.vex.json bom.json   # not_affected / false_positive Finding이 빠짐
+```
+
+serial이나 bom-ref가 없으면(또는 SPDX면) VEX 안에 취약한 구성요소를 직접 담고 purl로 가리킵니다. **연동** 화면에서 Patchline 프로젝트마다 내려받을 수 있습니다.
 
 ## 구성요소 검색과 영향 분석
 

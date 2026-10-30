@@ -30,12 +30,16 @@ type Component struct {
 	// type has no OSV ecosystem (for example OS packages).
 	Ecosystem string `json:"ecosystem,omitempty"`
 	Package   string `json:"package,omitempty"`
+	// BOMRef is the CycloneDX bom-ref, for VEX BOM-Links.
+	BOMRef string `json:"bom_ref,omitempty"`
 }
 
 // Document is what Patchline keeps from an SBOM.
 type Document struct {
-	Format     string // CycloneDX or SPDX
-	Serial     string
+	Format string // CycloneDX or SPDX
+	Serial string
+	// Version is the CycloneDX document version (1 when absent).
+	Version    int
 	Commit     string
 	Ref        string
 	Components []Component
@@ -81,6 +85,7 @@ func Parse(data []byte) (Document, error) {
 }
 
 type cdxComponent struct {
+	BOMRef     string         `json:"bom-ref"`
 	Group      string         `json:"group"`
 	Name       string         `json:"name"`
 	Version    string         `json:"version"`
@@ -91,6 +96,7 @@ type cdxComponent struct {
 func parseCycloneDX(data []byte) (Document, error) {
 	var bom struct {
 		SerialNumber string `json:"serialNumber"`
+		Version      int    `json:"version"`
 		Metadata     struct {
 			Component  *cdxComponent `json:"component"`
 			Properties []struct {
@@ -103,7 +109,10 @@ func parseCycloneDX(data []byte) (Document, error) {
 	if err := json.Unmarshal(data, &bom); err != nil {
 		return Document{}, fmt.Errorf("sbom: CycloneDX: %w", err)
 	}
-	doc := Document{Format: "CycloneDX", Serial: bom.SerialNumber}
+	doc := Document{Format: "CycloneDX", Serial: bom.SerialNumber, Version: bom.Version}
+	if doc.Version == 0 {
+		doc.Version = 1
+	}
 	for _, p := range bom.Metadata.Properties {
 		doc.setProperty(p.Name, p.Value)
 	}
@@ -120,7 +129,7 @@ func parseCycloneDX(data []byte) (Document, error) {
 				name = c.Group + "/" + c.Name
 			}
 			if c.PURL != root || root == "" {
-				doc.add(seen, c.PURL, name, c.Version)
+				doc.add(seen, c.PURL, name, c.Version, c.BOMRef)
 			}
 			walk(c.Components)
 		}
@@ -163,7 +172,7 @@ func parseSPDX(data []byte) (Document, error) {
 				break
 			}
 		}
-		doc.add(seen, ref, p.Name, p.VersionInfo)
+		doc.add(seen, ref, p.Name, p.VersionInfo, "")
 	}
 	return doc, nil
 }
@@ -179,7 +188,7 @@ func (d *Document) setProperty(name, value string) {
 	}
 }
 
-func (d *Document) add(seen map[string]bool, ref, name, version string) {
+func (d *Document) add(seen map[string]bool, ref, name, version, bomRef string) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		d.WithoutPURL++
@@ -189,7 +198,7 @@ func (d *Document) add(seen map[string]bool, ref, name, version string) {
 		return
 	}
 	seen[ref] = true
-	c := Component{PURL: ref, Name: name, Version: version}
+	c := Component{PURL: ref, Name: name, Version: version, BOMRef: bomRef}
 	if p, err := purl.Parse(ref); err == nil {
 		c.Ecosystem, c.Package = p.OSV()
 		if c.Version == "" {

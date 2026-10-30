@@ -53,7 +53,8 @@ func (p *Processor) handleSBOM(ctx context.Context, it store.InboxItem) (string,
 	id := sbom.ProjectID(up.Project, up.Version)
 	comps := make([]store.Component, 0, len(doc.Components))
 	for _, c := range doc.Components {
-		comps = append(comps, store.Component{PURL: c.PURL, Name: c.Name, Version: c.Version, Ecosystem: c.Ecosystem, Package: c.Package})
+		comps = append(comps, store.Component{PURL: c.PURL, Name: c.Name, Version: c.Version, Ecosystem: c.Ecosystem,
+			Package: c.Package, BOMRef: c.BOMRef})
 	}
 	if err := p.Store.ReplaceComponents(ctx, SourcePatchline, id, comps); err != nil {
 		return "", err
@@ -64,6 +65,10 @@ func (p *Processor) handleSBOM(ctx context.Context, it store.InboxItem) (string,
 	if err := p.Store.TouchSourceProject(ctx, sp, true); err != nil {
 		return "", err
 	}
+	if err := p.Store.SetSnapshotBOM(ctx, SourcePatchline, id, doc.Serial, doc.Version); err != nil {
+		return "", err
+	}
+	sp.BOMVersion = doc.Version
 	evidence := map[string]any{"source": SourcePatchline, "project": up.Project, "version": up.Version,
 		"inbox_id": it.ID, "sbom_format": doc.Format}
 	if doc.Commit != "" {

@@ -13,6 +13,8 @@ type Component struct {
 	Version   string `json:"version"`
 	Ecosystem string `json:"ecosystem,omitempty"`
 	Package   string `json:"package,omitempty"`
+	// BOMRef is the component's bom-ref in the uploaded CycloneDX SBOM.
+	BOMRef string `json:"bom_ref,omitempty"`
 }
 
 // ReplaceComponents makes components the snapshot of a source project.
@@ -30,14 +32,14 @@ func (s *Store) ReplaceComponents(ctx context.Context, source, project string, c
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO sbom_components (source, project_id, purl, name, version, ecosystem, package)
-		VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`)
+		INSERT INTO sbom_components (source, project_id, purl, name, version, ecosystem, package, bom_ref)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, c := range components {
-		if _, err = stmt.ExecContext(ctx, source, project, c.PURL, c.Name, c.Version, c.Ecosystem, c.Package); err != nil {
+		if _, err = stmt.ExecContext(ctx, source, project, c.PURL, c.Name, c.Version, c.Ecosystem, c.Package, c.BOMRef); err != nil {
 			return err
 		}
 	}
@@ -47,7 +49,7 @@ func (s *Store) ReplaceComponents(ctx context.Context, source, project string, c
 // Components returns the snapshot of a source project.
 func (s *Store) Components(ctx context.Context, source, project string) ([]Component, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT purl, name, version, ecosystem, package FROM sbom_components
+		SELECT purl, name, version, ecosystem, package, bom_ref FROM sbom_components
 		WHERE source = ? AND project_id = ? ORDER BY purl`, source, project)
 	if err != nil {
 		return nil, err
@@ -56,7 +58,7 @@ func (s *Store) Components(ctx context.Context, source, project string) ([]Compo
 	var out []Component
 	for rows.Next() {
 		var c Component
-		if err := rows.Scan(&c.PURL, &c.Name, &c.Version, &c.Ecosystem, &c.Package); err != nil {
+		if err := rows.Scan(&c.PURL, &c.Name, &c.Version, &c.Ecosystem, &c.Package, &c.BOMRef); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -64,10 +66,19 @@ func (s *Store) Components(ctx context.Context, source, project string) ([]Compo
 	return out, rows.Err()
 }
 
+// SetSnapshotBOM records the serial and version of the SBOM a snapshot
+// came from, exactly (an SBOM without a serial clears it), so VEX
+// BOM-Links never point into an older document.
+func (s *Store) SetSnapshotBOM(ctx context.Context, source, project, serial string, version int) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE source_projects SET last_bom_serial = ?, last_bom_version = ?
+		WHERE source = ? AND project_id = ?`, serial, version, source, project)
+	return err
+}
+
 // SourceProjects returns the projects of a source.
 func (s *Store) SourceProjects(ctx context.Context, source string) ([]SourceProject, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT source, project_id, name, version, service, registered, last_commit, last_ref, last_bom_serial
+		SELECT source, project_id, name, version, service, registered, last_commit, last_ref, last_bom_serial, last_bom_version
 		FROM source_projects WHERE source = ? ORDER BY name, version`, source)
 	if err != nil {
 		return nil, err
@@ -77,7 +88,7 @@ func (s *Store) SourceProjects(ctx context.Context, source string) ([]SourceProj
 	for rows.Next() {
 		var p SourceProject
 		if err := rows.Scan(&p.Source, &p.ProjectID, &p.Name, &p.Version, &p.Service, &p.Registered,
-			&p.Commit, &p.Ref, &p.BOMSerial); err != nil {
+			&p.Commit, &p.Ref, &p.BOMSerial, &p.BOMVersion); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

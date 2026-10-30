@@ -49,6 +49,7 @@ type Store interface {
 	ReplaceComponents(ctx context.Context, source, project string, components []store.Component) error
 	Components(ctx context.Context, source, project string) ([]store.Component, error)
 	SourceProjects(ctx context.Context, source string) ([]store.SourceProject, error)
+	SetSnapshotBOM(ctx context.Context, source, project, serial string, version int) error
 	OpenFindingsInRepository(ctx context.Context, repository string, environments []string) ([]store.Finding, error)
 	LinkPullRequest(ctx context.Context, l store.PullRequestLink) (bool, error)
 	ClosePullRequest(ctx context.Context, repository string, number int, merged bool, mergeSHA string) ([]int64, error)

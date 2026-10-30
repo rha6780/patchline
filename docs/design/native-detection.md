@@ -63,7 +63,8 @@ Done.
 - Requests now include *not affected* (with a CycloneDX justification) and *false positive* besides risk acceptance, all through the request/approve flow; nobody approves their own.
 - A finding Dependency-Track knows gets the decision written there (`NOT_AFFECTED` + justification, `FALSE_POSITIVE`, or `EXPLOITABLE` + `WILL_NOT_FIX` + suppressed); one only Patchline reports keeps it in Patchline (`analysis_*` columns).
 - `GET /api/v1/vex?project=&version=` exports the snapshot's findings as CycloneDX 1.5 VEX: open → `in_triage`, fix merged → `in_triage` + `update`, decisions as decided. The output validates against the CycloneDX schema.
-- Not yet: VEX `affects` as BOM-Links into the uploaded SBOM, API tokens so tools can fetch VEX without a session, and revoking a decision from the UI.
+- VEX `affects` are BOM-Links into the uploaded CycloneDX SBOM (`urn:cdx:<serial>/<version>#<bom-ref>`); Trivy's `--vex` applies them (checked: a not-affected Log4Shell disappears, the open CVE stays).
+- Not yet: revoking a decision from the UI.
 
 ### Phase 4: Trivy as an optional engine
 

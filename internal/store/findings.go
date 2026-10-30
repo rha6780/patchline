@@ -595,6 +595,9 @@ type SourceProject struct {
 	Commit    string
 	Ref       string
 	BOMSerial string
+	// BOMVersion is the CycloneDX version of the latest SBOM (uploads to
+	// Patchline only).
+	BOMVersion int
 }
 
 // TouchSourceProject records that a source project was seen, and when bom

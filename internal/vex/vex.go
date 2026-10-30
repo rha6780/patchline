@@ -6,6 +6,7 @@ package vex
 import (
 	"crypto/rand"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -82,6 +83,12 @@ type affect struct {
 // Build describes the findings of one project version. Findings are the
 // ones the project currently reports (open and closed); the components
 // are the snapshot's.
+//
+// When the uploaded SBOM was CycloneDX with a serial number and bom-refs,
+// each vulnerability affects a BOM-Link into it
+// (urn:cdx:<serial>/<version>#<bom-ref>), which is how scanners such as
+// Trivy apply a VEX to the SBOM it describes. Otherwise the vulnerable
+// components are listed in the VEX itself and referenced by purl.
 func Build(p store.SourceProject, findings []store.Finding, components []store.Component, tool string, now time.Time) Document {
 	doc := Document{BOMFormat: "CycloneDX", SpecVersion: "1.5", SerialNumber: "urn:uuid:" + uuid(), Version: 1,
 		Components: []component{}, Vulnerabilities: []vulnerability{}}
@@ -93,10 +100,14 @@ func Build(p store.SourceProject, findings []store.Finding, components []store.C
 	for _, c := range components {
 		names[c.PURL] = c
 	}
+	link := bomLinkBase(p)
 	used := map[string]bool{}
 	for _, f := range findings {
 		ref := f.ComponentRef
-		if !used[ref] {
+		target := ref
+		if sc, ok := names[ref]; ok && link != "" && sc.BOMRef != "" {
+			target = link + "#" + url.PathEscape(sc.BOMRef)
+		} else if !used[ref] {
 			used[ref] = true
 			c := component{BOMRef: ref, Type: "library", Name: f.ComponentName, Version: f.ComponentVersion}
 			if strings.HasPrefix(ref, "pkg:") {
@@ -112,7 +123,7 @@ func Build(p store.SourceProject, findings []store.Finding, components []store.C
 		}
 		v := vulnerability{
 			BOMRef: fmt.Sprintf("%s#%s", f.VulnID, ref), ID: f.VulnID, Source: sourceOf(f.VulnID),
-			Description: f.Title, Analysis: analysisOf(f), Affects: []affect{{Ref: ref}},
+			Description: f.Title, Analysis: analysisOf(f), Affects: []affect{{Ref: target}},
 		}
 		if sev := f.DisplaySeverity(); sev != "" && sev != finding.SeverityUnassigned {
 			v.Ratings = []rating{{Severity: sev, Method: "other"}}
@@ -126,6 +137,20 @@ func Build(p store.SourceProject, findings []store.Finding, components []store.C
 	}
 	sort.Slice(doc.Components, func(i, j int) bool { return doc.Components[i].BOMRef < doc.Components[j].BOMRef })
 	return doc
+}
+
+// bomLinkBase is "urn:cdx:<serial>/<version>" of the snapshot's SBOM, or ""
+// when it had no urn:uuid serial.
+func bomLinkBase(p store.SourceProject) string {
+	serial, ok := strings.CutPrefix(p.BOMSerial, "urn:uuid:")
+	if !ok || serial == "" {
+		return ""
+	}
+	v := p.BOMVersion
+	if v == 0 {
+		v = 1
+	}
+	return fmt.Sprintf("urn:cdx:%s/%d", serial, v)
 }
 
 // analysisOf maps a finding to a CycloneDX analysis.
