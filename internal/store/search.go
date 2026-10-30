@@ -190,3 +190,24 @@ func (s *Store) FindingsForVuln(ctx context.Context, ids []string) ([]Finding, e
 	}
 	return out, rows.Err()
 }
+
+// SnapshotFindings returns the findings a source project currently
+// reports, in any state.
+func (s *Store) SnapshotFindings(ctx context.Context, source, project string) ([]Finding, error) {
+	rows, err := s.db.QueryContext(ctx, findingColumns+` FROM findings
+		WHERE id IN (SELECT finding_id FROM finding_sightings WHERE source = ? AND project_id = ?)
+		ORDER BY component_purl, vuln_id`, source, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Finding{}
+	for rows.Next() {
+		f, err := scanFinding(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}

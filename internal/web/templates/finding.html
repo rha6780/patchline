@@ -14,6 +14,7 @@
   {{if $f.Repository}}<div><dt>{{t $L "ui.fact.repository"}}</dt><dd>{{$f.Repository}}</dd></div>{{end}}
   <div><dt>{{t $L "ui.fact.assignee"}}</dt><dd>{{if $f.Assignee}}👤 {{$f.Assignee}}{{else}}<span class="muted">{{t $L "ui.unassigned"}}</span>{{end}}</dd></div>
   <div><dt>{{t $L "ui.fact.owners"}}</dt><dd>{{if .Service}}{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}{{if .Service.SlackChannel}} · {{.Service.SlackChannel}}{{end}}{{else}}—{{end}}</dd></div>
+  {{if $f.Analysis}}<div><dt>{{t $L "ui.fact.analysis"}}</dt><dd>{{t $L (print "analysis." $f.Analysis.State)}}{{if $f.Analysis.Justification}} · {{t $L (print "just." $f.Analysis.Justification)}}{{end}}<div class="meta">{{$f.Analysis.By}}{{if $f.Analysis.At}} · {{ts $f.Analysis.At}}{{end}}</div>{{if $f.Analysis.Detail}}<div class="meta">{{$f.Analysis.Detail}}</div>{{end}}</dd></div>{{end}}
   {{if $f.Aliases}}<div><dt>{{t $L "ui.fact.aliases"}}</dt><dd>{{join $f.Aliases ", "}}</dd></div>{{end}}
   {{if .Sightings}}<div><dt>{{t $L "ui.fact.sources"}}</dt><dd>{{range $i, $s := .Sightings}}{{if $i}}<br>{{end}}{{sourceLabel $L $s.Source}} <span class="meta">{{$s.Project}}</span>{{end}}</dd></div>{{end}}
   <div><dt>{{t $L "ui.fact.first_seen"}}</dt><dd>{{ts $f.FirstSeenAt}}</dd></div>
@@ -75,16 +76,38 @@
     <div class="row"><button class="btn primary" type="submit">{{t $L "ui.request"}}</button></div>
   </form>
   {{end}}
+  {{if not (index .PendingKinds "not_affected")}}
+  <form class="card form" method="post" action="/findings/{{$f.ID}}/requests">
+    <h3>{{t $L "req.kind.not_affected"}}</h3>
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <input type="hidden" name="kind" value="not_affected">
+    <label><span>{{t $L "ui.justification"}}</span><select name="justification" required>
+      <option value="">—</option>
+      {{range .Justifications}}<option value="{{.}}">{{t $L (print "just." .)}}</option>{{end}}
+    </select></label>
+    <label><span>{{t $L "ui.reason"}}</span><textarea name="reason" maxlength="2000" required placeholder="{{t $L "ui.reason_na_hint"}}"></textarea></label>
+    <div class="row"><button class="btn primary" type="submit" {{if not .CanDecide}}disabled{{end}}>{{t $L "ui.request"}}</button></div>
+  </form>
+  {{end}}
   {{if not (index .PendingKinds "risk_acceptance")}}
   <form class="card form" method="post" action="/findings/{{$f.ID}}/requests">
     <h3>{{t $L "req.kind.risk_acceptance"}}</h3>
     <input type="hidden" name="csrf" value="{{$csrf}}">
     <input type="hidden" name="kind" value="risk_acceptance">
     <label><span>{{t $L "ui.reason"}}</span><textarea name="reason" maxlength="2000" required placeholder="{{t $L "ui.reason_risk_hint"}}"></textarea></label>
-    <div class="row"><button class="btn primary" type="submit" {{if not .CanAccept}}disabled{{end}}>{{t $L "ui.request"}}</button></div>
-    <p class="meta">{{if .CanAccept}}{{t $L "ui.risk_hint"}}{{else}}{{t $L "ui.risk_no_dt"}}{{end}}</p>
+    <div class="row"><button class="btn primary" type="submit" {{if not .CanDecide}}disabled{{end}}>{{t $L "ui.request"}}</button></div>
   </form>
   {{end}}
+  {{if not (index .PendingKinds "false_positive")}}
+  <form class="card form" method="post" action="/findings/{{$f.ID}}/requests">
+    <h3>{{t $L "req.kind.false_positive"}}</h3>
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <input type="hidden" name="kind" value="false_positive">
+    <label><span>{{t $L "ui.reason"}}</span><textarea name="reason" maxlength="2000" required placeholder="{{t $L "ui.reason_fp_hint"}}"></textarea></label>
+    <div class="row"><button class="btn primary" type="submit" {{if not .CanDecide}}disabled{{end}}>{{t $L "ui.request"}}</button></div>
+  </form>
+  {{end}}
+  <p class="meta decision-note">{{if not .CanDecide}}{{t $L "ui.risk_no_dt"}}{{else if .InDT}}{{t $L "ui.decision_in_dt"}}{{else}}{{t $L "ui.decision_in_patchline"}}{{end}}</p>
   {{end}}
 </div>
 {{end}}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -126,8 +127,17 @@ func (u *UI) request(w http.ResponseWriter, r *http.Request) {
 	}
 	req := store.ExceptionRequest{FindingID: f.ID, Kind: r.PostFormValue("kind"), Reason: reason}
 	switch req.Kind {
-	case store.RequestRiskAcceptance:
-		if f.DTComponentUUID == "" || f.DTVulnerabilityUUID == "" {
+	case store.RequestRiskAcceptance, store.RequestFalsePositive, store.RequestNotAffected:
+		if req.Kind == store.RequestNotAffected {
+			req.Justification = r.PostFormValue("justification")
+			if !slices.Contains(store.Justifications, req.Justification) {
+				back(w, r, path, "error", "justification")
+				return
+			}
+		}
+		// A decision on a Dependency-Track finding is written there; one on
+		// a finding only Patchline reports stays in Patchline.
+		if inDT(f) && u.o.DT == nil {
 			back(w, r, path, "error", "no_dt")
 			return
 		}
@@ -224,13 +234,22 @@ func (u *UI) decide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if d.Status == store.RequestApproved && req.Kind == store.RequestRiskAcceptance {
-		if err := u.suppressInDT(r.Context(), req, p); err != nil {
-			u.o.Logger.Warn("write risk acceptance to dependency-track", "request", id, "err", err)
-			back(w, r, path, "error", "dt_write")
+	if d.Status == store.RequestApproved && isDecision(req.Kind) {
+		f, err := u.o.Store.GetFinding(r.Context(), req.FindingID)
+		if err != nil {
+			u.fail(w, err)
 			return
 		}
-		d.Evidence = map[string]any{"dependency_track": "suppressed"}
+		if inDT(f) {
+			if err := u.writeToDT(r.Context(), f, req, p); err != nil {
+				u.o.Logger.Warn("write decision to dependency-track", "request", id, "kind", req.Kind, "err", err)
+				back(w, r, path, "error", "dt_write")
+				return
+			}
+			d.Evidence = map[string]any{"recorded_in": "dependency-track"}
+		} else {
+			d.Evidence = map[string]any{"recorded_in": "patchline"}
+		}
 	}
 	if err := u.o.Actions.DecideRequest(r.Context(), d); errors.Is(err, store.ErrNotPending) {
 		back(w, r, path, "error", "not_pending")
@@ -243,27 +262,46 @@ func (u *UI) decide(w http.ResponseWriter, r *http.Request) {
 	back(w, r, path, "notice", d.Status)
 }
 
-// suppressInDT records the accepted risk in Dependency-Track, so the
-// decision lives where the analysis lives. Its PROJECT_AUDIT_CHANGE comes
-// back as a no-op: the finding is already risk accepted.
-func (u *UI) suppressInDT(ctx context.Context, req store.ExceptionRequest, p *auth.Principal) error {
+// isDecision reports whether a request kind closes the finding with an
+// analysis decision.
+func isDecision(kind string) bool {
+	switch kind {
+	case store.RequestRiskAcceptance, store.RequestNotAffected, store.RequestFalsePositive:
+		return true
+	}
+	return false
+}
+
+// inDT reports whether Dependency-Track knows the finding, so decisions
+// about it belong there.
+func inDT(f store.Finding) bool {
+	return f.DTProjectUUID != "" && f.DTComponentUUID != "" && f.DTVulnerabilityUUID != ""
+}
+
+// writeToDT records the decision in Dependency-Track, so it lives where
+// the analysis lives. The PROJECT_AUDIT_CHANGE that follows is a no-op:
+// the finding is already closed.
+func (u *UI) writeToDT(ctx context.Context, f store.Finding, req store.ExceptionRequest, p *auth.Principal) error {
 	if u.o.DT == nil {
 		return errors.New("dependency-track is not configured (PATCHLINE_DT_URL, PATCHLINE_DT_API_KEY)")
 	}
-	f, err := u.o.Store.GetFinding(ctx, req.FindingID)
-	if err != nil {
-		return err
-	}
-	if f.DTProjectUUID == "" || f.DTComponentUUID == "" || f.DTVulnerabilityUUID == "" {
-		return errors.New("finding has no Dependency-Track identifiers")
-	}
 	reason := oneLine(req.Reason)
-	return u.o.DT.SetAnalysis(ctx, dependencytrack.AnalysisUpdate{
+	a := dependencytrack.AnalysisUpdate{
 		ProjectUUID: f.DTProjectUUID, ComponentUUID: f.DTComponentUUID, VulnerabilityUUID: f.DTVulnerabilityUUID,
-		State: "EXPLOITABLE", Response: "WILL_NOT_FIX", Details: reason, Suppressed: true,
-		Comment: fmt.Sprintf("Risk accepted in Patchline (request #%d): requested by %s, approved by %s. %s",
-			req.ID, labelOr(req.RequestedByName, req.RequestedBy), p.Label(), reason),
-	})
+		Justification: "NOT_SET", Response: "NOT_SET", Details: reason,
+	}
+	what := ""
+	switch req.Kind {
+	case store.RequestRiskAcceptance:
+		a.State, a.Response, a.Suppressed, what = "EXPLOITABLE", "WILL_NOT_FIX", true, "Risk accepted"
+	case store.RequestNotAffected:
+		a.State, a.Justification, what = "NOT_AFFECTED", strings.ToUpper(req.Justification), "Not affected ("+req.Justification+")"
+	case store.RequestFalsePositive:
+		a.State, what = "FALSE_POSITIVE", "False positive"
+	}
+	a.Comment = fmt.Sprintf("%s in Patchline (request #%d): requested by %s, approved by %s. %s",
+		what, req.ID, labelOr(req.RequestedByName, req.RequestedBy), p.Label(), reason)
+	return u.o.DT.SetAnalysis(ctx, a)
 }
 
 func (u *UI) approvals(w http.ResponseWriter, r *http.Request) {

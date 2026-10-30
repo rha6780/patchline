@@ -2,7 +2,7 @@
 
 [English](native-detection.md) | 한국어
 
-상태: 1·2단계 구현 완료, 3~4단계 예정.
+상태: 1~3단계 구현 완료, 4단계 예정.
 
 ## 목표
 
@@ -14,7 +14,7 @@ Dependency-Track 연동은 그대로 유지하면서, Patchline이 직접 취약
 | 취약점 데이터 대조 | 1단계(OSV), 4단계(선택 엔진으로 Trivy) |
 | 데이터가 바뀌면 재분석 | 1단계 |
 | 구성요소 검색·영향 분석 | 2단계(완료) |
-| 분석 판정과 VEX | 3단계 |
+| 분석 판정과 VEX | 3단계(완료) |
 | 라이선스·정책 위반 | 당분간 범위 밖 |
 
 ## 구조
@@ -66,9 +66,16 @@ CI ── SBOM ───────┤ patchline: SBOM Inbox → 구성요소 �
 
 ### 3단계: 분석 판정과 VEX
 
-- **Patchline만 보고하는 Finding:** 판정(근거가 있는 해당 없음, 오탐, 위험 수용)을 Patchline이 보관합니다. 위험 수용은 지금의 요청·승인 흐름을 그대로 쓰고, "해당 없음"에도 같은 흐름을 붙입니다.
-- **Dependency-Track도 보고하는 Finding:** 지금처럼 판정을 Dependency-Track에 기록합니다.
-- **VEX 내보내기:** `GET /api/v1/projects/{name}/{version}/vex`로 스냅샷의 CycloneDX VEX를 내보냅니다.
+구현했습니다.
+- **판정 종류:** 위험 수용에 더해 *해당 없음*(CycloneDX 근거 포함)과 *오탐*을 요청할 수 있습니다. 모두 요청·승인 흐름을 거치고, 본인 요청은 승인할 수 없습니다.
+- **기록 위치:**
+  - Dependency-Track이 아는 Finding은 판정을 그곳에 기록합니다(근거를 붙인 `NOT_AFFECTED`, `FALSE_POSITIVE`, 또는 `EXPLOITABLE` + `WILL_NOT_FIX` + Suppress).
+  - Patchline만 보고한 Finding은 Patchline에 보관합니다(`analysis_*` 컬럼).
+- **VEX 내보내기:** `GET /api/v1/vex?project=&version=`이 스냅샷의 Finding을 CycloneDX 1.5 VEX로 내보냅니다. 열림은 `in_triage`, Merge 후 재스캔 대기는 `in_triage` + `update`, 판정은 판정대로 표시합니다. CycloneDX 스키마 검증을 통과합니다.
+- **아직 없는 것:**
+  - VEX `affects`를 업로드한 SBOM을 가리키는 BOM-Link로 만들기
+  - 도구가 세션 없이 VEX를 가져갈 API 토큰
+  - UI에서 판정 취소
 
 ### 4단계: 선택 엔진으로 Trivy
 

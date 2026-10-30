@@ -157,6 +157,8 @@ func (s *Store) AssignFinding(ctx context.Context, id int64, assignee string, by
 const (
 	RequestRiskAcceptance = "risk_acceptance"
 	RequestDueExtension   = "due_extension"
+	RequestNotAffected    = "not_affected"
+	RequestFalsePositive  = "false_positive"
 
 	RequestPending   = "pending"
 	RequestApproved  = "approved"
@@ -173,11 +175,14 @@ var ErrNotPending = errors.New("request is no longer pending")
 
 // ExceptionRequest asks to accept a finding's risk or to move its due date.
 type ExceptionRequest struct {
-	ID              int64   `json:"id"`
-	FindingID       int64   `json:"finding_id"`
-	Kind            string  `json:"kind"`
-	Reason          string  `json:"reason"`
-	RequestedDue    *string `json:"requested_due,omitempty"`
+	ID           int64   `json:"id"`
+	FindingID    int64   `json:"finding_id"`
+	Kind         string  `json:"kind"`
+	Reason       string  `json:"reason"`
+	RequestedDue *string `json:"requested_due,omitempty"`
+	// Justification is the CycloneDX justification of a not-affected
+	// request (code_not_reachable, protected_at_runtime, ...).
+	Justification   string  `json:"justification,omitempty"`
 	RequestedBy     string  `json:"requested_by"`
 	RequestedByName string  `json:"requested_by_name,omitempty"`
 	RequestedAt     string  `json:"requested_at"`
@@ -208,9 +213,9 @@ func (s *Store) CreateRequest(ctx context.Context, r ExceptionRequest, by Actor)
 		}
 	}()
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO exception_requests (finding_id, kind, reason, requested_due, requested_by, requested_by_name, requested_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-		r.FindingID, r.Kind, r.Reason, r.RequestedDue, by.Subject, by.Name, now).Scan(&id)
+		INSERT INTO exception_requests (finding_id, kind, reason, justification, requested_due, requested_by, requested_by_name, requested_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		r.FindingID, r.Kind, r.Reason, r.Justification, r.RequestedDue, by.Subject, by.Name, now).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return 0, ErrPendingRequest
@@ -221,6 +226,9 @@ func (s *Store) CreateRequest(ctx context.Context, r ExceptionRequest, by Actor)
 	if r.RequestedDue != nil {
 		ev["requested_due"] = *r.RequestedDue
 	}
+	if r.Justification != "" {
+		ev["justification"] = r.Justification
+	}
 	if err = insertEvent(ctx, tx, r.FindingID, finding.EventExceptionAsked, sql.NullString{}, sql.NullString{}, ev, now); err != nil {
 		return 0, err
 	}
@@ -230,7 +238,7 @@ func (s *Store) CreateRequest(ctx context.Context, r ExceptionRequest, by Actor)
 	return id, tx.Commit()
 }
 
-const requestColumns = `SELECT r.id, r.finding_id, r.kind, r.reason, r.requested_due, r.requested_by, r.requested_by_name,
+const requestColumns = `SELECT r.id, r.finding_id, r.kind, r.reason, r.justification, r.requested_due, r.requested_by, r.requested_by_name,
 	r.requested_at, r.status, r.decided_by, r.decided_by_name, r.decided_at, r.decision_note,
 	f.vuln_id, f.service, f.environment, COALESCE(NULLIF(f.effective_severity, ''), f.severity)
 	FROM exception_requests r JOIN findings f ON f.id = r.finding_id`
@@ -241,7 +249,7 @@ func scanRequest(sc scanner) (ExceptionRequest, error) {
 		due     sql.NullString
 		decided sql.NullString
 	)
-	if err := sc.Scan(&r.ID, &r.FindingID, &r.Kind, &r.Reason, &due, &r.RequestedBy, &r.RequestedByName,
+	if err := sc.Scan(&r.ID, &r.FindingID, &r.Kind, &r.Reason, &r.Justification, &due, &r.RequestedBy, &r.RequestedByName,
 		&r.RequestedAt, &r.Status, &r.DecidedBy, &r.DecidedByName, &decided, &r.DecisionNote,
 		&r.VulnID, &r.Service, &r.Environment, &r.Severity); err != nil {
 		return ExceptionRequest{}, err
@@ -331,15 +339,15 @@ func (s *Store) DecideRequest(ctx context.Context, d Decision) (err error) {
 		}
 	}()
 	var (
-		findingID int64
-		kind      string
-		due       sql.NullString
+		findingID             int64
+		kind, reason, justify string
+		due                   sql.NullString
 	)
 	err = tx.QueryRowContext(ctx, `
 		UPDATE exception_requests SET status = ?, decided_by = ?, decided_by_name = ?, decided_at = ?, decision_note = ?
 		WHERE id = ? AND status = 'pending'
-		RETURNING finding_id, kind, requested_due`,
-		d.Status, d.By.Subject, d.By.Name, now, d.Note, d.RequestID).Scan(&findingID, &kind, &due)
+		RETURNING finding_id, kind, requested_due, reason, justification`,
+		d.Status, d.By.Subject, d.By.Name, now, d.Note, d.RequestID).Scan(&findingID, &kind, &due, &reason, &justify)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotPending
 	}
@@ -362,7 +370,14 @@ func (s *Store) DecideRequest(ctx context.Context, d Decision) (err error) {
 	if d.Status == RequestApproved {
 		switch kind {
 		case RequestRiskAcceptance:
-			err = acceptRisk(ctx, tx, findingID, ev, now)
+			err = closeFinding(ctx, tx, findingID, finding.StateRiskAccepted,
+				Analysis{State: AnalysisExploitable, Response: ResponseWillNotFix, Detail: reason}, d.By, ev, now)
+		case RequestNotAffected:
+			err = closeFinding(ctx, tx, findingID, finding.StateNotAffected,
+				Analysis{State: AnalysisNotAffected, Justification: justify, Detail: reason}, d.By, ev, now)
+		case RequestFalsePositive:
+			err = closeFinding(ctx, tx, findingID, finding.StateNotAffected,
+				Analysis{State: AnalysisFalsePositive, Detail: reason}, d.By, ev, now)
 		case RequestDueExtension:
 			err = extendDue(ctx, tx, findingID, due, ev, now)
 		}
@@ -373,21 +388,54 @@ func (s *Store) DecideRequest(ctx context.Context, d Decision) (err error) {
 	return tx.Commit()
 }
 
-func acceptRisk(ctx context.Context, tx *sql.Tx, id int64, ev map[string]any, now string) error {
+// Analysis is a decision in CycloneDX VEX terms.
+type Analysis struct {
+	State         string `json:"state"`
+	Justification string `json:"justification,omitempty"`
+	Response      string `json:"response,omitempty"`
+	Detail        string `json:"detail,omitempty"`
+	By            string `json:"by,omitempty"`
+	At            string `json:"at,omitempty"`
+}
+
+// CycloneDX analysis states and responses Patchline records.
+const (
+	AnalysisExploitable   = "exploitable"
+	AnalysisNotAffected   = "not_affected"
+	AnalysisFalsePositive = "false_positive"
+	ResponseWillNotFix    = "will_not_fix"
+)
+
+// Justifications are the CycloneDX reasons a component is not affected.
+var Justifications = []string{
+	"code_not_present", "code_not_reachable", "requires_configuration", "requires_dependency",
+	"requires_environment", "protected_by_compiler", "protected_at_runtime", "protected_at_perimeter",
+	"protected_by_mitigating_control",
+}
+
+// closeFinding applies an approved decision: the finding moves to state to
+// (when the lifecycle allows it) and keeps the analysis for VEX.
+func closeFinding(ctx context.Context, tx *sql.Tx, id int64, to finding.State, a Analysis, by Actor, ev map[string]any, now string) error {
 	var from string
 	if err := tx.QueryRowContext(ctx, `SELECT state FROM findings WHERE id = ?`, id).Scan(&from); err != nil {
 		return err
 	}
-	if !finding.CanTransition(finding.State(from), finding.StateRiskAccepted) {
+	if !finding.CanTransition(finding.State(from), to) {
 		return nil
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE findings SET state = ?, updated_at = ? WHERE id = ?`,
-		finding.StateRiskAccepted, now, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE findings SET state = ?, analysis_state = ?, analysis_justification = ?, analysis_response = ?,
+		       analysis_detail = ?, analysis_by = ?, analysis_at = ?, updated_at = ?
+		WHERE id = ?`, to, a.State, a.Justification, a.Response, a.Detail, by.Label(), now, now, id); err != nil {
 		return err
 	}
-	ev = map[string]any{"reason": ReasonApproved, "request": ev["request"], "by": ev["by"], "by_name": ev["by_name"]}
+	ev = map[string]any{"reason": ReasonApproved, "request": ev["request"], "by": ev["by"], "by_name": ev["by_name"],
+		"analysis_state": a.State}
+	if a.Justification != "" {
+		ev["justification"] = a.Justification
+	}
 	return insertEvent(ctx, tx, id, finding.EventStateChanged,
-		sql.NullString{String: from, Valid: true}, sql.NullString{String: string(finding.StateRiskAccepted), Valid: true}, ev, now)
+		sql.NullString{String: from, Valid: true}, sql.NullString{String: string(to), Valid: true}, ev, now)
 }
 
 func extendDue(ctx context.Context, tx *sql.Tx, id int64, due sql.NullString, ev map[string]any, now string) error {

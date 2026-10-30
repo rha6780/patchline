@@ -9,7 +9,7 @@ Patchline can find vulnerabilities itself: CI uploads an SBOM to Patchline, whic
 | SBOM goes to | Dependency-Track | Patchline (`/ingest/sbom`) |
 | Matching | Dependency-Track's analyzers (NVD, OSS Index, OSV, GitHub, Trivy) | OSV: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist |
 | OS packages (deb, rpm, apk) | With the Trivy analyzer | Not yet (planned via Trivy) |
-| Analysis decisions | In Dependency-Track | Planned (phase 3) |
+| Analysis decisions | In Dependency-Track | In Patchline, through approvals, exported as VEX |
 
 ## 1. Turn it on
 
@@ -72,7 +72,33 @@ You can upload the same SBOM to Dependency-Track and to Patchline; the findings 
 - Each upload replaces the project version's snapshot. Vulnerabilities no longer in it resolve, with the commit as evidence, unless another source (Dependency-Track) still reports them. Vulnerabilities that come back reopen.
 - After each OSV update, every stored snapshot is analyzed again. A new advisory creates findings and notifications without a new build; a withdrawn advisory resolves its findings.
 - Severity is the advisory's (GitHub's rating, otherwise the CVSS v3 base score). When Dependency-Track also reports the finding, its severity is used.
-- Due dates, KEV and EPSS escalation, Renovate PR links, Slack messages and approvals work as for Dependency-Track findings. EPSS comes from Dependency-Track only. Risk acceptance needs a Dependency-Track finding for now.
+- Due dates, KEV and EPSS escalation, Renovate PR links, Slack messages and approvals work as for Dependency-Track findings. EPSS comes from Dependency-Track only.
+
+## Decisions and VEX
+
+A finding only Patchline reports is decided in Patchline, through the same request and approval as risk acceptance ([Sign-in and permissions](../access-control.md)):
+
+| Request | VEX analysis |
+|---|---|
+| Not affected + justification | `not_affected` with `code_not_present`, `code_not_reachable`, `requires_configuration`, `requires_dependency`, `requires_environment`, `protected_by_compiler`, `protected_at_runtime`, `protected_at_perimeter` or `protected_by_mitigating_control` |
+| False positive | `false_positive` |
+| Risk acceptance | `exploitable`, response `will_not_fix` |
+
+The decision is kept with the finding (who approved it, when, why) and shown on the finding page. A later SBOM that still contains the component does not reopen it.
+
+Each project version's VEX lists every vulnerability its latest SBOM reports, with its decision:
+
+```sh
+curl -sS "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" -b "patchline_session=…" > storefront-api.vex.json
+```
+
+| Finding | VEX analysis |
+|---|---|
+| Open | `in_triage` |
+| Fix merged, waiting for the rescan | `in_triage`, response `update` |
+| Not affected / false positive / risk accepted | As decided, with the justification and the reason as `detail` |
+
+The document is CycloneDX 1.5 and validates against the official schema. It names the vulnerable components by purl; its `affects` refer to those components, not to the uploaded SBOM's `bom-ref`s, so tools that require BOM-Link references may not apply it. **Integrations** has a download link next to each Patchline project. The API needs a signed-in session, like the rest of `/api/v1`.
 
 ## Component search and impact
 

@@ -2,7 +2,7 @@
 
 English | [한국어](native-detection.ko.md)
 
-Status: phases 1 and 2 implemented, phases 3–4 planned.
+Status: phases 1–3 implemented, phase 4 planned.
 
 ## Goal
 
@@ -14,7 +14,7 @@ Patchline keeps its Dependency-Track integration and can also detect vulnerabili
 | Matching against vulnerability data | Phase 1 (OSV), phase 4 (Trivy as an optional engine) |
 | Re-analysis when the data changes | Phase 1 |
 | Component search and impact analysis | Phase 2 (done) |
-| Analysis decisions and VEX | Phase 3 |
+| Analysis decisions and VEX | Phase 3 (done) |
 | License and policy violations | Out of scope for now |
 
 ## Architecture
@@ -59,9 +59,11 @@ Done. **Components** (`/components`, `GET /api/v1/components`) finds where a pac
 
 ### Phase 3: analysis decisions and VEX
 
-- For findings only Patchline reports, the decision (not affected with a justification, false positive, risk accepted) lives in Patchline. Risk acceptance reuses today's request/approve flow; "not affected" gets the same flow.
-- For findings Dependency-Track also reports, decisions keep going to Dependency-Track as today.
-- `GET /api/v1/projects/{name}/{version}/vex` exports CycloneDX VEX for the snapshot.
+Done.
+- Requests now include *not affected* (with a CycloneDX justification) and *false positive* besides risk acceptance, all through the request/approve flow; nobody approves their own.
+- A finding Dependency-Track knows gets the decision written there (`NOT_AFFECTED` + justification, `FALSE_POSITIVE`, or `EXPLOITABLE` + `WILL_NOT_FIX` + suppressed); one only Patchline reports keeps it in Patchline (`analysis_*` columns).
+- `GET /api/v1/vex?project=&version=` exports the snapshot's findings as CycloneDX 1.5 VEX: open → `in_triage`, fix merged → `in_triage` + `update`, decisions as decided. The output validates against the CycloneDX schema.
+- Not yet: VEX `affects` as BOM-Links into the uploaded SBOM, API tokens so tools can fetch VEX without a session, and revoking a decision from the UI.
 
 ### Phase 4: Trivy as an optional engine
 

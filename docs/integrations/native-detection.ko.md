@@ -9,7 +9,7 @@ Patchline이 직접 취약점을 찾을 수 있습니다. CI가 SBOM을 Patchlin
 | SBOM을 보내는 곳 | Dependency-Track | Patchline(`/ingest/sbom`) |
 | 대조 | Dependency-Track 분석기(NVD, OSS Index, OSV, GitHub, Trivy) | OSV: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist |
 | OS 패키지(deb, rpm, apk) | Trivy 분석기를 쓰면 가능 | 아직 없음(Trivy로 지원 예정) |
-| 분석 판정 | Dependency-Track에서 | 예정(3단계) |
+| 분석 판정 | Dependency-Track에서 | Patchline 승인 흐름으로, VEX로 내보냄 |
 
 ## 1. 켜기
 
@@ -72,7 +72,33 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 - 업로드할 때마다 그 프로젝트 버전의 스냅샷이 바뀝니다. 스냅샷에서 사라진 취약점은 커밋을 근거로 해결됩니다. 단, 다른 출처(Dependency-Track)가 아직 보고 중이면 열린 채로 둡니다. 다시 나타나면 재발로 처리합니다.
 - OSV가 갱신될 때마다 저장된 스냅샷을 모두 다시 분석합니다. 새 권고가 나오면 빌드 없이도 Finding과 알림이 생기고, 철회된 권고의 Finding은 해결됩니다.
 - 심각도는 권고의 값(GitHub 등급, 없으면 CVSS v3 기본 점수)을 씁니다. Dependency-Track도 보고하면 그쪽 심각도를 씁니다.
-- 기한, KEV·EPSS 상향, Renovate PR 연결, Slack 메시지, 승인은 Dependency-Track Finding과 똑같이 동작합니다. EPSS는 Dependency-Track에서만 받습니다. 위험 수용은 아직 Dependency-Track Finding에만 쓸 수 있습니다.
+- 기한, KEV·EPSS 상향, Renovate PR 연결, Slack 메시지, 승인은 Dependency-Track Finding과 똑같이 동작합니다. EPSS는 Dependency-Track에서만 받습니다.
+
+## 판정과 VEX
+
+Patchline만 보고한 Finding은 Patchline에서 판정합니다. 위험 수용과 같은 요청·승인 흐름을 씁니다([로그인과 권한](../access-control.ko.md)).
+
+| 요청 | VEX 분석 |
+|---|---|
+| 해당 없음 + 근거 | `not_affected`. 근거는 `code_not_present`, `code_not_reachable`, `requires_configuration`, `requires_dependency`, `requires_environment`, `protected_by_compiler`, `protected_at_runtime`, `protected_at_perimeter`, `protected_by_mitigating_control` 중 하나 |
+| 오탐 | `false_positive` |
+| 위험 수용 | `exploitable`, 대응 `will_not_fix` |
+
+판정(누가, 언제, 왜 승인했는지)은 Finding에 보관되고 Finding 상세에 표시됩니다. 이후 SBOM에 같은 구성요소가 남아 있어도 다시 열리지 않습니다.
+
+프로젝트 버전마다 VEX를 내보냅니다. 최신 SBOM이 보고하는 모든 취약점과 그 판정이 들어갑니다.
+
+```sh
+curl -sS "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" -b "patchline_session=…" > storefront-api.vex.json
+```
+
+| Finding | VEX 분석 |
+|---|---|
+| 열림 | `in_triage` |
+| 수정 PR Merge, 재스캔 대기 | `in_triage`, 대응 `update` |
+| 해당 없음 / 오탐 / 위험 수용 | 판정 그대로. 근거와 사유(`detail`) 포함 |
+
+문서는 CycloneDX 1.5이며 공식 스키마 검증을 통과합니다. 취약한 구성요소를 purl로 담고, `affects`는 업로드한 SBOM의 `bom-ref`가 아니라 VEX 안의 구성요소를 가리킵니다. 그래서 BOM-Link 참조를 요구하는 도구는 이 VEX를 적용하지 못할 수 있습니다. **연동** 화면에서 Patchline 프로젝트마다 내려받을 수 있습니다. API는 다른 `/api/v1`처럼 로그인 세션이 필요합니다.
 
 ## 구성요소 검색과 영향 분석
 

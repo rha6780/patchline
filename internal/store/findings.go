@@ -49,6 +49,10 @@ type Finding struct {
 	// the effective severity stays at or below DueOverrideSeverity.
 	DueOverride         *string `json:"due_override,omitempty"`
 	DueOverrideSeverity string  `json:"due_override_severity,omitempty"`
+
+	// Analysis is the approved decision behind a closed finding, if
+	// Patchline recorded one.
+	Analysis *Analysis `json:"analysis,omitempty"`
 }
 
 // Overdue reports whether the finding is open and past its due date.
@@ -479,7 +483,8 @@ const findingColumns = `SELECT id, service, registered, repository, environment,
 	component_name, component_version, vuln_id, aliases, severity, title,
 	state, due_at, first_seen_at, resolved_at, updated_at, dt_project_uuid, dt_vuln_source, dt_vuln_id,
 	epss, kev, effective_severity, sla_reasons, sla_started_at,
-	dt_component_uuid, dt_vulnerability_uuid, assignee, due_override, due_override_severity`
+	dt_component_uuid, dt_vulnerability_uuid, assignee, due_override, due_override_severity,
+	analysis_state, analysis_justification, analysis_response, analysis_detail, analysis_by, analysis_at`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -493,12 +498,15 @@ func scanFinding(sc scanner) (Finding, error) {
 		reasons  string
 		started  sql.NullString
 		override sql.NullString
+		an       Analysis
+		anAt     sql.NullString
 	)
 	if err := sc.Scan(&r.ID, &r.Service, &r.Registered, &r.Repository, &r.Environment, &r.ComponentRef,
 		&r.ComponentName, &r.ComponentVersion, &r.VulnID, &aliases, &r.Severity, &r.Title,
 		&r.State, &due, &r.FirstSeenAt, &resolved, &r.UpdatedAt, &r.DTProjectUUID, &r.DTVulnSource, &r.DTVulnID,
 		&epss, &r.KEV, &r.EffectiveSeverity, &reasons, &started,
-		&r.DTComponentUUID, &r.DTVulnerabilityUUID, &r.Assignee, &override, &r.DueOverrideSeverity); err != nil {
+		&r.DTComponentUUID, &r.DTVulnerabilityUUID, &r.Assignee, &override, &r.DueOverrideSeverity,
+		&an.State, &an.Justification, &an.Response, &an.Detail, &an.By, &anAt); err != nil {
 		return Finding{}, err
 	}
 	if epss.Valid {
@@ -509,6 +517,10 @@ func scanFinding(sc scanner) (Finding, error) {
 	}
 	if override.Valid {
 		r.DueOverride = &override.String
+	}
+	if an.State != "" {
+		an.At = anAt.String
+		r.Analysis = &an
 	}
 	if err := json.Unmarshal([]byte(reasons), &r.SLAReasons); err != nil {
 		return Finding{}, fmt.Errorf("finding %d: sla_reasons: %w", r.ID, err)

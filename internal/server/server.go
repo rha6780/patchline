@@ -65,6 +65,10 @@ type Options struct {
 	Auth *auth.Authenticator
 	// Impact, when set, serves component search and vulnerability impact.
 	Impact impact.Store
+	// Snapshots, when set, serves VEX for the SBOMs uploaded to Patchline.
+	Snapshots Snapshots
+	// Version is Patchline's version, named as the tool in VEX documents.
+	Version string
 	// UI, when set, serves every path not handled above (the web pages).
 	UI http.Handler
 	// OnInbox is called after a new delivery is stored (to wake the processor).
@@ -84,6 +88,7 @@ type Options struct {
 //	GET  /api/v1/findings/{id}/pull-requests  linked pull requests
 //	GET  /api/v1/components            where packages are used (?q=&ecosystem=&version=&limit=)
 //	GET  /api/v1/vulnerabilities/{id}  what a CVE / GHSA affects
+//	GET  /api/v1/vex                   CycloneDX VEX of a project version (?project=&version=)
 func New(o Options) http.Handler {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
@@ -110,6 +115,9 @@ func New(o Options) http.Handler {
 		mux.HandleFunc("GET /api/v1/findings", h.listFindings)
 		mux.HandleFunc("GET /api/v1/findings/{id}/events", h.findingEvents)
 		mux.HandleFunc("GET /api/v1/findings/{id}/pull-requests", h.findingPullRequests)
+	}
+	if o.Snapshots != nil {
+		mux.HandleFunc("GET /api/v1/vex", h.vex)
 	}
 	if o.Impact != nil {
 		mux.HandleFunc("GET /api/v1/components", h.components)

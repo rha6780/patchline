@@ -186,6 +186,8 @@ func run() error {
 			Secrets:      store.WebhookSecrets{Store: st, EnvToken: cfg.WebhookToken, EnvGitea: cfg.GiteaWebhookSecret}.Current,
 			Auth:         authn,
 			Impact:       st,
+			Snapshots:    st,
+			Version:      version,
 			UI:           ui,
 			OnInbox:      proc.Wake,
 			Logger:       logger,

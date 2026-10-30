@@ -125,8 +125,14 @@ On a finding, `findings.assign` sets the **assignee**: the person working on it,
 
 | Request | Approval does |
 |---|---|
-| **Risk acceptance** (reason) | Writes the analysis to Dependency-Track (`EXPLOITABLE`, response `WILL_NOT_FIX`, suppressed, with the reason and both names in the comment), then marks the finding *risk accepted* |
+| **Risk acceptance** (reason) | Marks the finding *risk accepted* (VEX: `exploitable`, response `will_not_fix`) |
+| **Not affected** (justification, reason) | Marks the finding *not affected* with a CycloneDX justification such as `code_not_reachable` or `protected_at_perimeter` |
+| **False positive** (reason) | Marks the finding *not affected* (VEX: `false_positive`) |
 | **Due date extension** (new date, reason) | Moves the due date to the end of that day |
+
+Where the decision is recorded depends on who reports the finding:
+- **Dependency-Track reports it:** the decision is also written to Dependency-Track: `EXPLOITABLE` + `WILL_NOT_FIX` + suppressed, `NOT_AFFECTED` with the justification, or `FALSE_POSITIVE`. The comment carries the reason and both names. If Patchline cannot write to Dependency-Track, the request is refused.
+- **Only Patchline reports it** ([built-in detection](integrations/native-detection.md)): the decision is kept in Patchline and exported as VEX.
 
 - People with `exceptions.request` ask from the finding page; approvers see every pending request under **Approvals**.
 - **Nobody approves their own request**, even with both permissions. The requester can withdraw a pending request.

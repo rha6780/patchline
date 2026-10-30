@@ -209,15 +209,80 @@ func TestDueExtensionAndWithdraw(t *testing.T) {
 }
 
 func TestRiskAcceptanceWithoutDT(t *testing.T) {
+	// Dependency-Track reports the finding but Patchline cannot write to it:
+	// the request is refused up front instead of failing at approval.
 	u, st, id := writableUI(t, nil)
-	_ = post(t, as(person("dev", auth.ExceptionsRequest), u), findingPath(id)+"/requests", url.Values{"kind": {"risk_acceptance"}, "reason": {"r"}})
+	rec := post(t, as(person("dev", auth.ExceptionsRequest), u), findingPath(id)+"/requests", url.Values{"kind": {"risk_acceptance"}, "reason": {"r"}})
+	if !strings.Contains(location(rec), "error=no_dt") {
+		t.Fatalf("request: %s", location(rec))
+	}
+	if reqs, _ := st.ListRequests(context.Background(), store.RequestFilter{Status: store.RequestPending}); len(reqs) != 0 {
+		t.Fatalf("pending = %d", len(reqs))
+	}
+}
+
+func TestDecisionsOnPatchlineFindings(t *testing.T) {
+	ctx := context.Background()
+	dt := &fakeDT{}
+	u, st, _ := writableUI(t, dt)
+	// A finding only Patchline reports (no Dependency-Track ids).
+	id, _, err := st.UpsertFinding(ctx, finding.Observation{Service: "storefront", Registered: true, Environment: "main",
+		ComponentRef: "pkg:npm/lodash@4.17.15", ComponentName: "lodash", ComponentVersion: "4.17.15", VulnID: "CVE-2020-8203",
+		Severity: finding.SeverityHigh, Source: finding.SourcePatchline, SourceProject: "storefront-api@main"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev, lead := person("dev", auth.ExceptionsRequest), person("lead", auth.ExceptionsApprove)
+	path := findingPath(id) + "/requests"
+
+	_, body := get(t, as(dev, u), findingPath(id))
+	for _, want := range []string{"Not affected", "False positive", "Code not reachable", "Only Patchline reports this finding"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("finding page lacks %q", want)
+		}
+	}
+	if rec := post(t, as(dev, u), path, url.Values{"kind": {"not_affected"}, "reason": {"r"}, "justification": {"because"}}); !strings.Contains(location(rec), "error=justification") {
+		t.Fatalf("bad justification: %s", location(rec))
+	}
+	if rec := post(t, as(dev, u), path, url.Values{"kind": {"not_affected"}, "reason": {"lodash.merge is never called"},
+		"justification": {"code_not_reachable"}}); !strings.Contains(location(rec), "notice=requested") {
+		t.Fatalf("request: %s", location(rec))
+	}
+	reqs, _ := st.ListRequests(ctx, store.RequestFilter{FindingID: id, Status: store.RequestPending})
+	if len(reqs) != 1 || reqs[0].Justification != "code_not_reachable" {
+		t.Fatalf("pending = %+v", reqs)
+	}
+	calls := len(dt.calls)
+	if rec := post(t, as(lead, u), "/requests/"+itoa(reqs[0].ID), url.Values{"action": {"approve"}}); !strings.Contains(location(rec), "notice=approved") {
+		t.Fatalf("approve: %s", location(rec))
+	}
+	if len(dt.calls) != calls {
+		t.Error("a Patchline-only decision was written to Dependency-Track")
+	}
+	f, _ := st.GetFinding(ctx, id)
+	if f.State != string(finding.StateNotAffected) || f.Analysis == nil || f.Analysis.State != "not_affected" ||
+		f.Analysis.Justification != "code_not_reachable" || f.Analysis.Detail != "lodash.merge is never called" || f.Analysis.By != "Lead" {
+		t.Fatalf("finding = %+v analysis %+v", f, f.Analysis)
+	}
+	_, body = get(t, as(dev, u), findingPath(id))
+	if !strings.Contains(body, "Decision") || !strings.Contains(body, "Code not reachable") {
+		t.Error("decision not shown")
+	}
+}
+
+func TestNotAffectedWrittenToDT(t *testing.T) {
+	dt := &fakeDT{}
+	u, st, id := writableUI(t, dt)
+	_ = post(t, as(person("dev", auth.ExceptionsRequest), u), findingPath(id)+"/requests",
+		url.Values{"kind": {"not_affected"}, "reason": {"behind the WAF"}, "justification": {"protected_at_perimeter"}})
 	reqs, _ := st.ListRequests(context.Background(), store.RequestFilter{Status: store.RequestPending})
 	if len(reqs) != 1 {
 		t.Fatalf("pending = %d", len(reqs))
 	}
-	rec := post(t, as(person("lead", auth.ExceptionsApprove), u), "/requests/"+itoa(reqs[0].ID), url.Values{"action": {"approve"}})
-	if !strings.Contains(location(rec), "error=dt_write") {
-		t.Fatalf("approve without DT: %s", location(rec))
+	_ = post(t, as(person("lead", auth.ExceptionsApprove), u), "/requests/"+itoa(reqs[0].ID), url.Values{"action": {"approve"}})
+	last := dt.calls[len(dt.calls)-1]
+	if last.State != "NOT_AFFECTED" || last.Justification != "PROTECTED_AT_PERIMETER" || last.Suppressed || last.Response != "NOT_SET" {
+		t.Fatalf("analysis = %+v", last)
 	}
 }
 

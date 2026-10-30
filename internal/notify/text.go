@@ -180,9 +180,17 @@ func EventText(l i18n.Lang, e store.FindingEvent) string {
 		}
 		return l.T("ev.unassigned", str("by_name"))
 	case finding.EventExceptionAsked:
-		text := l.T("req.asked.risk_acceptance", str("by_name"))
-		if str("kind") == store.RequestDueExtension {
+		var text string
+		switch kind := str("kind"); {
+		case kind == store.RequestDueExtension:
 			text = l.T("req.asked.due_extension", str("by_name"), dateOnly(str("requested_due")))
+		case i18n.Has("req.asked." + kind):
+			text = l.T("req.asked."+kind, str("by_name"))
+		default:
+			text = l.T("req.asked.risk_acceptance", str("by_name"))
+		}
+		if j := str("justification"); j != "" {
+			text += " (" + l.T("just."+j) + ")"
 		}
 		if r := str("reason"); r != "" {
 			text += "\n> " + r

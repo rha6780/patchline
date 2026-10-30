@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -327,5 +328,87 @@ func TestComponentsAndImpactAPI(t *testing.T) {
 	code, m = get("/api/v1/vulnerabilities/CVE-2020-8203")
 	if affected, _ := m["affected"].([]any); code != 200 || m["id"] != "CVE-2020-8203" || len(affected) != 1 {
 		t.Fatalf("impact: %d %v", code, m)
+	}
+}
+
+func TestVEX(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	_ = st.TouchSourceProject(ctx, store.SourceProject{Source: "patchline", ProjectID: "app@main", Name: "app", Version: "main", Service: "app"}, true)
+	_ = st.ReplaceComponents(ctx, "patchline", "app@main", []store.Component{
+		{PURL: "pkg:npm/lodash@4.17.15", Name: "lodash", Version: "4.17.15", Ecosystem: "npm", Package: "lodash"},
+		{PURL: "pkg:npm/minimist@1.2.0", Name: "minimist", Version: "1.2.0", Ecosystem: "npm", Package: "minimist"}})
+	add := func(purl, name, id string) int64 {
+		fid, _, err := st.UpsertFinding(ctx, finding.Observation{Service: "app", Environment: "main", ComponentRef: purl,
+			ComponentName: name, ComponentVersion: "x", VulnID: id, Aliases: []string{"GHSA-" + id[4:8] + "-xxxx-xxxx"},
+			Severity: "high", Title: "t " + id, Source: "patchline", SourceProject: "app@main"}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fid
+	}
+	add("pkg:npm/lodash@4.17.15", "lodash", "CVE-2020-8203")
+	na := add("pkg:npm/lodash@4.17.15", "lodash", "CVE-2021-23337")
+	ra := add("pkg:npm/minimist@1.2.0", "minimist", "CVE-2021-44906")
+	decide := func(fid int64, kind, justification string) {
+		rid, err := st.CreateRequest(ctx, store.ExceptionRequest{FindingID: fid, Kind: kind, Reason: "because", Justification: justification}, store.Actor{Subject: "a"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.DecideRequest(ctx, store.Decision{RequestID: rid, Status: store.RequestApproved, By: store.Actor{Subject: "b", Name: "Bob"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decide(na, store.RequestNotAffected, "code_not_reachable")
+	decide(ra, store.RequestRiskAcceptance, "")
+
+	h := New(Options{DB: st, Findings: st, Snapshots: st, Version: "1.2.3", Logger: quiet})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/vex?project=app&version=main&download=1", nil))
+	if rec.Code != 200 || !strings.Contains(rec.Header().Get("Content-Disposition"), "app-main.vex.json") {
+		t.Fatalf("vex: %d %s", rec.Code, rec.Body)
+	}
+	var doc struct {
+		BOMFormat, SpecVersion string
+		Metadata               struct {
+			Component struct{ Name, Version string }
+		}
+		Components      []struct{ PURL string }
+		Vulnerabilities []struct {
+			ID       string
+			Analysis struct {
+				State, Justification, Detail string
+				Response                     []string
+			}
+			Affects []struct{ Ref string }
+		}
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.BOMFormat != "CycloneDX" || doc.SpecVersion != "1.5" || doc.Metadata.Component.Name != "app" ||
+		len(doc.Components) != 2 || len(doc.Vulnerabilities) != 3 {
+		t.Fatalf("doc = %+v", doc)
+	}
+	got := map[string]string{}
+	for _, v := range doc.Vulnerabilities {
+		got[v.ID] = v.Analysis.State + "/" + v.Analysis.Justification + "/" + strings.Join(v.Analysis.Response, ",")
+		if len(v.Affects) != 1 || v.Affects[0].Ref == "" {
+			t.Errorf("%s affects %+v", v.ID, v.Affects)
+		}
+	}
+	want := map[string]string{"CVE-2020-8203": "in_triage//", "CVE-2021-23337": "not_affected/code_not_reachable/",
+		"CVE-2021-44906": "exploitable//will_not_fix"}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("%s = %q, want %q", id, got[id], w)
+		}
+	}
+	for _, q := range []string{"project=app&version=prod", "version=main"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/vex?"+q, nil))
+		if rec.Code != http.StatusNotFound && rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", q, rec.Code)
+		}
 	}
 }

@@ -12,7 +12,7 @@
   {{range .Projects}}
   <tr>
     <td>{{if and (eq .Source "dependencytrack") (dtProject .ProjectID)}}<a href="{{dtProject .ProjectID}}">{{.Name}}</a>{{else}}{{.Name}}{{end}} <span class="muted">@ {{if .Version}}{{.Version}}{{else}}—{{end}}</span></td>
-    <td>{{sourceLabel $L .Source}}</td>
+    <td>{{sourceLabel $L .Source}}{{if eq .Source "patchline"}} · <a href="/api/v1/vex?project={{.Name}}&version={{.Version}}&download=1">{{t $L "ui.vex"}}</a>{{end}}</td>
     <td>{{if .Registered}}<a href="/services/{{pathEscape .Service}}">{{.Service}}</a>{{else}}<span class="tag warn">{{t $L "ui.not_in_inventory"}}</span>{{end}}</td>
     <td class="nowrap">{{if .LastBOMAt}}{{ts .LastBOMAt}}{{if staleBOM .LastBOMAt $.Stale}} <span class="tag warn">{{t $L "ui.stale"}}</span>{{end}}{{else}}<span class="muted">{{t $L "ui.never"}}</span>{{end}}</td>
     <td>{{if .Commit}}<code>{{short .Commit}}</code>{{if .Ref}} <span class="meta">{{.Ref}}</span>{{end}}{{else}}<span class="muted">—</span>{{end}}</td>

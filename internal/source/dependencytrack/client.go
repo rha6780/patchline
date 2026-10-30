@@ -128,6 +128,7 @@ type AnalysisUpdate struct {
 	ComponentUUID     string `json:"component"`
 	VulnerabilityUUID string `json:"vulnerability"`
 	State             string `json:"analysisState"`
+	Justification     string `json:"analysisJustification"`
 	Response          string `json:"analysisResponse"`
 	Details           string `json:"analysisDetails"`
 	Comment           string `json:"comment"`

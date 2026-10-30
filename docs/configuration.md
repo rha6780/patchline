@@ -38,6 +38,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
 | `GET` | `/api/v1/components` | Where packages are used in the stored SBOMs. `q`, `ecosystem`, `version` (e.g. `<2.17.0`), `limit` |
 | `GET` | `/api/v1/vulnerabilities/{id}` | What a CVE or GHSA affects: affected snapshots, fixed versions, findings from every source |
+| `GET` | `/api/v1/vex` | CycloneDX 1.5 VEX of a project version (`project`, `version`, `download=1` for a file) |
 | `GET` | `/login` | Sign-in page (local admin, single sign-on) |
 | `POST` | `/auth/local`, `/account/password` | Local admin sign-in and password change |
 | `GET` | `/auth/login`, `/auth/callback`; `POST /auth/logout` | OIDC sign-in, when configured; sign-out |

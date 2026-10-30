@@ -533,7 +533,11 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 		}
 		data["Pending"], data["Decided"], data["PendingKinds"] = pending, decided, pendingKinds
 		data["MinDue"] = minDue.Add(24 * time.Hour).UTC().Format("2006-01-02")
-		data["CanAccept"] = u.o.DT != nil && f.DTComponentUUID != "" && f.DTVulnerabilityUUID != ""
+		// Decisions on Dependency-Track findings need the write-back;
+		// Patchline-only findings are decided here.
+		data["CanDecide"] = !inDT(f) || u.o.DT != nil
+		data["InDT"] = inDT(f)
+		data["Justifications"] = store.Justifications
 	}
 	u.render(w, r, "finding", f.VulnID, data)
 }
