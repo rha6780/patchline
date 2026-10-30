@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<bom xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" serialNumber="urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79" version="1" xmlns="http://cyclonedx.org/schema/bom/1.6">
+  <metadata>
+    <component type="application" bom-ref="storefront-api">
+      <name>storefront-api</name>
+      <version>main</version>
+    </component>
+    <properties>
+      <property name="patchline:git:commit">1f0e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6</property>
+      <property name="patchline:git:ref">refs/heads/main</property>
+    </properties>
+  </metadata>
+  <components>
+    <component type="library" bom-ref="pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1">
+      <group>org.apache.logging.log4j</group>
+      <name>log4j-core</name>
+      <version>2.14.1</version>
+      <purl>pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1</purl>
+    </component>
+    <component type="library" bom-ref="pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10.1">
+      <group>com.fasterxml.jackson.core</group>
+      <name>jackson-databind</name>
+      <version>2.9.10.1</version>
+      <purl>pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10.1</purl>
+    </component>
+    <component type="library" bom-ref="pkg:npm/lodash@4.17.15">
+      <name>lodash</name>
+      <version>4.17.15</version>
+      <purl>pkg:npm/lodash@4.17.15</purl>
+    </component>
+  </components>
+</bom>

@@ -3,6 +3,8 @@ package intake
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -45,7 +47,7 @@ func bomWith(purls ...string) json.RawMessage {
 
 func upload(t *testing.T, st *store.Store, key string, bom json.RawMessage) {
 	t.Helper()
-	payload, _ := json.Marshal(sbom.Upload{Project: "storefront-api", Version: "main", BOM: bom})
+	payload, _ := json.Marshal(sbom.Upload{Project: "storefront-api", Version: "main", BOM: sbom.Raw(bom)})
 	if _, _, err := st.InsertInbox(context.Background(), SourcePatchline, EventSBOM, key, payload); err != nil {
 		t.Fatal(err)
 	}
@@ -199,5 +201,30 @@ func TestSBOMWithoutMatcherIsStored(t *testing.T) {
 	}
 	if list, _ := st.ListFindings(ctx, store.FindingFilter{}); len(list) != 0 {
 		t.Fatalf("findings without a matcher: %+v", list)
+	}
+}
+
+func TestXMLUploadIsAnalyzed(t *testing.T) {
+	ctx := context.Background()
+	p, st := setup(t, nil)
+	p.Matcher = &fakeMatcher{ready: true, vulns: map[string][]osv.Match{
+		"pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1": {{ID: "GHSA-jfh8-c2jp-5v3q", Aliases: []string{"CVE-2021-44228"}, Severity: "critical"}},
+	}}
+	xml, err := os.ReadFile(filepath.Join("..", "sbom", "testdata", "storefront-api.cdx.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(sbom.Upload{Project: "storefront-api", Version: "main", BOM: xml})
+	if _, _, err := st.InsertInbox(ctx, SourcePatchline, EventSBOM, "x1", payload); err != nil {
+		t.Fatal(err)
+	}
+	drain(t, p)
+	if f := findingFor(t, st, "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"); f.VulnID != "CVE-2021-44228" {
+		t.Fatalf("finding = %+v", f)
+	}
+	projects, _ := st.SourceProjects(ctx, SourcePatchline)
+	if len(projects) != 1 || projects[0].Commit != "1f0e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6" ||
+		projects[0].BOMSerial != "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79" {
+		t.Fatalf("project = %+v", projects)
 	}
 }

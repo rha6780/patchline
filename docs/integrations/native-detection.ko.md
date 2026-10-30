@@ -58,7 +58,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 
 | | |
 |---|---|
-| 형식 | CycloneDX JSON, SPDX JSON(XML은 아직 미지원) |
+| 형식 | CycloneDX JSON 또는 XML(1.x 스키마 모두. CycloneDX Gradle·Maven 플러그인의 기본 출력), SPDX JSON. UTF-8 BOM이 붙어 있어도 됨 |
 | 구성요소 | `purl`로 식별. purl이 없는 구성요소는 개수만 세고(`without_purl`) 건너뜀 |
 | `project` | Dependency-Track 프로젝트 이름과 똑같이 인벤토리에서 찾음(`dependency_track_projects`, 기본값: `repo`의 마지막 부분) |
 | `version` | 환경(예: `main`, `prod`) |
@@ -147,7 +147,7 @@ serial이나 bom-ref가 없으면(또는 SPDX면) VEX 안에 취약한 구성요
 | 증상 | 원인 |
 |---|---|
 | `401` | 토큰이 `PATCHLINE_WEBHOOK_TOKEN`(또는 **설정 → Webhook**의 값)과 다름 |
-| `400 … XML is not supported` | JSON으로 생성(`trivy … --format cyclonedx`, JSON 출력의 `cyclonedxBom`) |
+| `400 … XML that is not CycloneDX` | SPDX XML/RDF와 tag-value는 읽지 않음. CycloneDX(XML 또는 JSON)나 SPDX JSON으로 생성 |
 | `components: 0` 또는 `without_purl`이 많음 | 생성기가 purl을 쓰지 않음. Trivy나 CycloneDX 플러그인 사용 |
 | `… still syncing, nothing resolved` | 첫 다운로드가 끝나지 않음. `osv synced`를 기다림 |
 | `osv sync failed` | 인터넷 불가. export를 사내에 미러링하고 `PATCHLINE_OSV_URL` 지정 |

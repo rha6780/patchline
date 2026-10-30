@@ -58,7 +58,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 
 | | |
 |---|---|
-| Formats | CycloneDX JSON, SPDX JSON (XML is not supported yet) |
+| Formats | CycloneDX JSON or XML (any 1.x schema, as the CycloneDX Gradle and Maven plugins write by default), SPDX JSON. A UTF-8 byte order mark is fine |
 | Components | Identified by `purl`; components without one are counted (`without_purl`) and skipped |
 | `project` | Looked up in the inventory like a Dependency-Track project name (`dependency_track_projects`, default: last segment of `repo`) |
 | `version` | The environment, e.g. `main`, `prod` |
@@ -147,7 +147,7 @@ The stored snapshots answer two questions, under **Components** in the UI and th
 | Symptom | Cause |
 |---|---|
 | `401` | Token differs from `PATCHLINE_WEBHOOK_TOKEN` (or the one under **Settings → Webhooks**) |
-| `400 … XML is not supported` | Generate JSON (`trivy … --format cyclonedx`, `cyclonedxBom` with JSON output) |
+| `400 … XML that is not CycloneDX` | SPDX XML / RDF and tag-value are not read: generate CycloneDX (XML or JSON) or SPDX JSON |
 | `components: 0` or many `without_purl` | The generator does not write purls; use Trivy or the CycloneDX plugins |
 | `… still syncing, nothing resolved` | The first download has not finished; wait for `osv synced` |
 | `osv sync failed` | No internet: mirror the exports internally and set `PATCHLINE_OSV_URL` |

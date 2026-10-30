@@ -1,10 +1,11 @@
 // Package sbom reads the components of an SBOM uploaded to Patchline:
-// CycloneDX and SPDX, in JSON.
+// CycloneDX (JSON or XML) and SPDX (JSON).
 package sbom
 
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"regexp"
@@ -53,14 +54,20 @@ type Document struct {
 
 var shaPattern = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 
-// Parse reads a CycloneDX or SPDX JSON document.
+// Parse reads a CycloneDX (JSON or XML) or SPDX (JSON) document.
 func Parse(data []byte) (Document, error) {
-	data = bytes.TrimSpace(data)
+	// Windows tools (and cyclonedx-cli) start files with a UTF-8 byte order mark.
+	data = bytes.TrimSpace(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")))
 	if len(data) == 0 {
 		return Document{}, errors.New("sbom: empty document")
 	}
 	if data[0] == '<' {
-		return Document{}, errors.New("sbom: XML is not supported, upload CycloneDX or SPDX as JSON")
+		doc, err := parseCycloneDXXML(data)
+		if err != nil {
+			return Document{}, err
+		}
+		sort.Slice(doc.Components, func(i, j int) bool { return doc.Components[i].PURL < doc.Components[j].PURL })
+		return doc, nil
 	}
 	var probe struct {
 		BOMFormat   string `json:"bomFormat"`
@@ -254,11 +261,114 @@ func (d *Document) add(seen map[string]bool, ref, name, version, bomRef string) 
 
 // Upload is an SBOM received by Patchline, as stored in the inbox.
 type Upload struct {
-	Project    string          `json:"project"`
-	Version    string          `json:"version"`
-	ReceivedAt string          `json:"received_at"`
-	BOM        json.RawMessage `json:"bom"`
+	Project    string `json:"project"`
+	Version    string `json:"version"`
+	ReceivedAt string `json:"received_at"`
+	BOM        Raw    `json:"bom"`
 }
 
 // ProjectID is the source project id of an uploaded SBOM: name@version.
 func ProjectID(project, version string) string { return project + "@" + version }
+
+// Raw is the uploaded document as it arrived. In the inbox envelope it is
+// a JSON value when the SBOM is JSON (readable when inspecting the inbox),
+// otherwise a base64 string.
+type Raw []byte
+
+// MarshalJSON embeds JSON documents as they are and encodes others.
+func (r Raw) MarshalJSON() ([]byte, error) {
+	if t := bytes.TrimSpace(r); len(t) > 0 && (t[0] == '{' || t[0] == '[') && json.Valid(t) {
+		return t, nil
+	}
+	return json.Marshal([]byte(r))
+}
+
+// UnmarshalJSON accepts both forms.
+func (r *Raw) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) > 0 && data[0] == '"' {
+		var b []byte
+		if err := json.Unmarshal(data, &b); err != nil {
+			return err
+		}
+		*r = b
+		return nil
+	}
+	*r = append(Raw(nil), data...)
+	return nil
+}
+
+// CycloneDX XML (any 1.x schema namespace: element names match without it).
+type xmlComponent struct {
+	BOMRef     string         `xml:"bom-ref,attr"`
+	Group      string         `xml:"group"`
+	Name       string         `xml:"name"`
+	Version    string         `xml:"version"`
+	PURL       string         `xml:"purl"`
+	Properties []xmlProperty  `xml:"properties>property"`
+	Components []xmlComponent `xml:"components>component"`
+}
+
+type xmlProperty struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:",chardata"`
+}
+
+func parseCycloneDXXML(data []byte) (Document, error) {
+	var bom struct {
+		XMLName      xml.Name `xml:"bom"`
+		SerialNumber string   `xml:"serialNumber,attr"`
+		Version      int      `xml:"version,attr"`
+		Metadata     struct {
+			Component  *xmlComponent `xml:"component"`
+			Properties []xmlProperty `xml:"properties>property"`
+		} `xml:"metadata"`
+		Components []xmlComponent `xml:"components>component"`
+	}
+	if err := xml.Unmarshal(data, &bom); err != nil {
+		var se xml.UnmarshalError
+		if errors.As(err, &se) || strings.Contains(err.Error(), "expected element type <bom>") {
+			return Document{}, errors.New("sbom: XML that is not CycloneDX; upload CycloneDX (XML or JSON) or SPDX JSON")
+		}
+		return Document{}, fmt.Errorf("sbom: CycloneDX XML: %w", err)
+	}
+	doc := Document{Format: "CycloneDX", Serial: strings.TrimSpace(bom.SerialNumber), Version: bom.Version}
+	if doc.Version == 0 {
+		doc.Version = 1
+	}
+	for _, p := range bom.Metadata.Properties {
+		doc.setProperty(p.Name, p.Value)
+	}
+	root := ""
+	if bom.Metadata.Component != nil {
+		root = strings.TrimSpace(bom.Metadata.Component.PURL)
+	}
+	seen := map[string]bool{}
+	var walk func([]xmlComponent)
+	walk = func(cs []xmlComponent) {
+		for _, c := range cs {
+			// The JSON path handles the rest (source package properties too).
+			j := cdxComponent{BOMRef: c.BOMRef, Group: strings.TrimSpace(c.Group), Name: strings.TrimSpace(c.Name),
+				Version: strings.TrimSpace(c.Version), PURL: strings.TrimSpace(c.PURL)}
+			for _, p := range c.Properties {
+				j.Properties = append(j.Properties, struct {
+					Name  string `json:"name"`
+					Value string `json:"value"`
+				}{p.Name, strings.TrimSpace(p.Value)})
+			}
+			name := j.Name
+			if j.Group != "" {
+				name = j.Group + "/" + j.Name
+			}
+			if j.PURL != root || root == "" {
+				doc.add(seen, j.PURL, name, j.Version, j.BOMRef)
+				if n := len(doc.Components); n > 0 && doc.Components[n-1].PURL == j.PURL {
+					doc.Components[n-1].setSource(j)
+				}
+			}
+			walk(c.Components)
+		}
+	}
+	walk(bom.Components)
+	return doc, nil
+}

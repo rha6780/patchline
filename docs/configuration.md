@@ -32,7 +32,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/readyz` | Readiness (database) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track outbound webhook (`?token=` or `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` webhook (HMAC signature, or the token) |
-| `POST` | `/ingest/sbom` | CycloneDX or SPDX (JSON) SBOM upload for built-in detection ([guide](integrations/native-detection.md)). Authenticated with the webhook token |
+| `POST` | `/ingest/sbom` | CycloneDX (JSON or XML) or SPDX (JSON) SBOM upload for built-in detection ([guide](integrations/native-detection.md)). Authenticated with the webhook token |
 | `GET` | `/api/v1/findings` | Findings with owners and assignee; filters `service`, `environment`, `state`, `assignee`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |

@@ -32,7 +32,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `GET` | `/readyz` | Readiness(DB) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track Outbound Webhook(`?token=` 또는 `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` Webhook(HMAC 서명 또는 토큰) |
-| `POST` | `/ingest/sbom` | CycloneDX·SPDX(JSON) SBOM 업로드, 자체 탐지([가이드](integrations/native-detection.ko.md)). Webhook 토큰으로 인증 |
+| `POST` | `/ingest/sbom` | CycloneDX(JSON·XML)·SPDX(JSON) SBOM 업로드, 자체 탐지([가이드](integrations/native-detection.ko.md)). Webhook 토큰으로 인증 |
 | `GET` | `/api/v1/findings` | 서비스 담당자와 처리 담당자를 포함한 Finding 목록. 필터 `service`, `environment`, `state`, `assignee`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Finding에 연결된 PR |

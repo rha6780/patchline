@@ -20,7 +20,7 @@ import (
 //	POST /ingest/sbom  -F project=... -F version=... -F bom=@bom.json  (multipart)
 //
 // It authenticates with the webhook token, checks that the document is a
-// readable CycloneDX or SPDX JSON SBOM, and stores it in the inbox; the
+// readable CycloneDX (JSON, XML) or SPDX JSON SBOM, and stores it in the inbox; the
 // processor matches it.
 func (h *handler) ingestSBOM(w http.ResponseWriter, r *http.Request) {
 	token, _, err := h.secrets(r)

@@ -269,11 +269,18 @@ func TestIngestSBOM(t *testing.T) {
 	if rec := send(jsonReq("version=main", "s3cret", bom)); rec.Code != http.StatusBadRequest {
 		t.Fatalf("no project: %d", rec.Code)
 	}
-	if rec := send(jsonReq("project=x", "s3cret", []byte(`<bom/>`))); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "XML") {
-		t.Fatalf("xml: %d %s", rec.Code, rec.Body)
+	if rec := send(jsonReq("project=x", "s3cret", []byte(`<spdx/>`))); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "not CycloneDX") {
+		t.Fatalf("non-CycloneDX xml: %d %s", rec.Code, rec.Body)
+	}
+	xmlBOM, err := os.ReadFile(filepath.Join("..", "sbom", "testdata", "storefront-api.cdx.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := send(jsonReq("project=storefront-api&version=xml", "s3cret", xmlBOM)); rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"components":3`) {
+		t.Fatalf("CycloneDX XML: %d %s", rec.Code, rec.Body)
 	}
 	rec := send(jsonReq("project=storefront-api&version=main", "s3cret", bom))
-	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"components":3`) || woken != 1 {
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"components":3`) || woken != 2 {
 		t.Fatalf("json upload: %d %s (woken %d)", rec.Code, rec.Body, woken)
 	}
 
@@ -290,13 +297,16 @@ func TestIngestSBOM(t *testing.T) {
 	if rec := send(r); rec.Code != http.StatusAccepted {
 		t.Fatalf("multipart upload: %d %s", rec.Code, rec.Body)
 	}
+	if woken != 3 {
+		t.Errorf("woken = %d", woken)
+	}
 
 	items, _ := st.PendingInbox(context.Background(), 5, 10)
-	if len(items) != 2 || items[0].Source != "patchline" || items[0].EventType != "sbom" {
+	if len(items) != 3 || items[0].Source != "patchline" || items[0].EventType != "sbom" {
 		t.Fatalf("inbox = %+v", items)
 	}
 	var up struct{ Project, Version string }
-	_ = json.Unmarshal(items[1].Payload, &up)
+	_ = json.Unmarshal(items[2].Payload, &up)
 	if up.Project != "storefront-api" || up.Version != "prod" {
 		t.Errorf("multipart payload = %+v", up)
 	}
