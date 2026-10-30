@@ -74,6 +74,23 @@ You can upload the same SBOM to Dependency-Track and to Patchline; the findings 
 - Severity is the advisory's (GitHub's rating, otherwise the CVSS v3 base score). When Dependency-Track also reports the finding, its severity is used.
 - Due dates, KEV and EPSS escalation, Renovate PR links, Slack messages and approvals work as for Dependency-Track findings. EPSS comes from Dependency-Track only. Risk acceptance needs a Dependency-Track finding for now.
 
+## Component search and impact
+
+The stored snapshots answer two questions, under **Components** in the UI and through the API:
+
+| Question | UI | API |
+|---|---|---|
+| Where is a package used, in which version? | `/components?q=log4j&version=< 2.17.0` | `GET /api/v1/components?q=log4j&ecosystem=Maven&version=<2.17.0` |
+| What does a vulnerability affect? | `/vulnerabilities/CVE-2021-44228`, or type the id into the search | `GET /api/v1/vulnerabilities/CVE-2021-44228` |
+
+- `version` takes comparisons joined by commas: `< 2.17.0`, `>= 2.0, < 2.17.0`, `= 2.14.1`.
+- The impact page lists:
+  - the snapshots with an affected version, with the matching range, the version that fixes it, the commit, and the finding's state, including closed findings
+  - how many snapshots already run a fixed version
+  - every finding of that vulnerability from any source; Dependency-Track findings for services without an SBOM in Patchline appear here
+- A GHSA id finds its CVE and the other way round. A finding page links to its vulnerability's impact.
+- Only SBOMs uploaded to Patchline are searchable; Dependency-Track's components stay in Dependency-Track.
+
 ## Check
 
 1. `osv synced` lines in the log for each ecosystem.

@@ -17,6 +17,7 @@ The header switches between English and Korean and between system, light and dar
 | Finding: facts, fix pull requests, evidence timeline | `/findings/{id}` |
 | Service: owners, repositories, findings per environment (highlights fixed-on-`main`-but-open-in-`prod`) | `/services/{name}` |
 | Integrations: Dependency-Track projects with last BOM and commit, inventory projects without a BOM, failed webhooks and notifications | `/integrations` |
+| Components: where packages are used, and what a vulnerability affects | `/components`, `/vulnerabilities/{id}` |
 | Approvals: pending risk acceptances and due date extensions, recent decisions (`exceptions.request` or `exceptions.approve`) | `/approvals` |
 | Settings: webhook token and secret rotation (`settings.webhooks`), audit log (`audit.read`) | `/settings` |
 | Integrations guide: vulnerability sources Patchline can take alerts from (Dependency-Track supported, OpenCVE planned), how to connect them, and links to the guides in `docs/integrations` | `/docs/integrations` |
@@ -35,6 +36,8 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/api/v1/findings` | Findings with owners and assignee; filters `service`, `environment`, `state`, `assignee`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
+| `GET` | `/api/v1/components` | Where packages are used in the stored SBOMs. `q`, `ecosystem`, `version` (e.g. `<2.17.0`), `limit` |
+| `GET` | `/api/v1/vulnerabilities/{id}` | What a CVE or GHSA affects: affected snapshots, fixed versions, findings from every source |
 | `GET` | `/login` | Sign-in page (local admin, single sign-on) |
 | `POST` | `/auth/local`, `/account/password` | Local admin sign-in and password change |
 | `GET` | `/auth/login`, `/auth/callback`; `POST /auth/logout` | OIDC sign-in, when configured; sign-out |

@@ -74,6 +74,23 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 - 심각도는 권고의 값(GitHub 등급, 없으면 CVSS v3 기본 점수)을 씁니다. Dependency-Track도 보고하면 그쪽 심각도를 씁니다.
 - 기한, KEV·EPSS 상향, Renovate PR 연결, Slack 메시지, 승인은 Dependency-Track Finding과 똑같이 동작합니다. EPSS는 Dependency-Track에서만 받습니다. 위험 수용은 아직 Dependency-Track Finding에만 쓸 수 있습니다.
 
+## 구성요소 검색과 영향 분석
+
+저장된 스냅샷으로 두 가지를 답합니다. UI의 **구성요소** 메뉴나 API로 확인할 수 있습니다.
+
+| 질문 | UI | API |
+|---|---|---|
+| 이 패키지를 어디서 어떤 버전으로 쓰나? | `/components?q=log4j&version=< 2.17.0` | `GET /api/v1/components?q=log4j&ecosystem=Maven&version=<2.17.0` |
+| 이 취약점이 어디에 영향을 주나? | `/vulnerabilities/CVE-2021-44228` 또는 검색창에 ID 입력 | `GET /api/v1/vulnerabilities/CVE-2021-44228` |
+
+- `version`은 비교식을 쉼표로 이어 씁니다: `< 2.17.0`, `>= 2.0, < 2.17.0`, `= 2.14.1`.
+- 영향 분석 화면에는 다음이 나옵니다.
+  - 영향받는 버전을 쓰는 스냅샷: 해당한 범위, 고치는 버전, 커밋, Finding 상태(종료된 것 포함)
+  - 이미 수정 버전을 쓰는 스냅샷 수
+  - 그 취약점의 모든 출처 Finding. Patchline에 SBOM이 없는 서비스의 Dependency-Track Finding도 여기에 나옵니다
+- GHSA ID로 찾아도 CVE가 나오고, 그 반대도 됩니다. Finding 상세에서 그 취약점의 영향 분석으로 이동할 수 있습니다.
+- 검색 대상은 Patchline에 올린 SBOM뿐입니다. Dependency-Track의 구성요소는 Dependency-Track에서 보세요.
+
 ## 확인
 
 1. 로그에 생태계별 `osv synced`가 남습니다.

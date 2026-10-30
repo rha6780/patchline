@@ -17,6 +17,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | Finding 상세: 정보, 수정 PR, 근거 타임라인 | `/findings/{id}` |
 | 서비스: 담당자, 저장소, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조) | `/services/{name}` |
 | Integrations: DT 프로젝트별 마지막 BOM·커밋, BOM이 없는 인벤토리 프로젝트, 실패한 Webhook·알림 | `/integrations` |
+| 구성요소: 패키지 사용처 검색, 취약점 영향 분석 | `/components`, `/vulnerabilities/{id}` |
 | 승인: 대기 중인 위험 수용·기한 연장 요청, 최근 결정(`exceptions.request` 또는 `exceptions.approve`) | `/approvals` |
 | 설정: Webhook 토큰·Secret 교체(`settings.webhooks`), 감사 로그(`audit.read`) | `/settings` |
 | 연동 가이드: 알림을 받을 수 있는 취약점 소스(Dependency-Track 지원, OpenCVE 예정), 연결 방법, `docs/integrations` 가이드 링크 | `/docs/integrations` |
@@ -35,6 +36,8 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `GET` | `/api/v1/findings` | 서비스 담당자와 처리 담당자를 포함한 Finding 목록. 필터 `service`, `environment`, `state`, `assignee`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Finding에 연결된 PR |
+| `GET` | `/api/v1/components` | 저장된 SBOM에서 패키지 사용처 검색. `q`, `ecosystem`, `version`(예: `<2.17.0`), `limit` |
+| `GET` | `/api/v1/vulnerabilities/{id}` | CVE·GHSA의 영향 범위: 영향받는 스냅샷, 고치는 버전, 모든 출처의 Finding |
 | `GET` | `/login` | 로그인 화면(로컬 관리자, SSO) |
 | `POST` | `/auth/local`, `/account/password` | 로컬 관리자 로그인과 비밀번호 변경 |
 | `GET` | `/auth/login`, `/auth/callback`; `POST /auth/logout` | OIDC 로그인(설정한 경우), 로그아웃 |

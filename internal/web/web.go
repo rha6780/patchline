@@ -29,6 +29,7 @@ import (
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/i18n"
+	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/store"
@@ -73,6 +74,8 @@ type Options struct {
 	OnChange func()
 	// AuthEnabled shows the signed-in user and the sign-out button.
 	AuthEnabled bool
+	// Impact enables component search and vulnerability impact pages.
+	Impact impact.Store
 	// SSO and LocalAdmin choose what the sign-in page offers.
 	SSO        bool
 	LocalAdmin bool
@@ -107,7 +110,7 @@ func New(o Options) (*UI, error) {
 		o.OnChange = func() {}
 	}
 	u := &UI{o: o, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide", "approvals", "settings", "signedout", "login", "password"} {
+	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide", "approvals", "settings", "signedout", "login", "password", "components", "vulnerability"} {
 		t, err := template.New("layout.html").Funcs(u.funcs()).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -126,6 +129,10 @@ func New(o Options) (*UI, error) {
 	u.mux.HandleFunc("GET /prefs", u.prefs)
 	u.mux.HandleFunc("GET /signed-out", u.signedOut)
 	u.mux.HandleFunc("GET /login", u.login)
+	if o.Impact != nil {
+		u.mux.HandleFunc("GET /components", u.components)
+		u.mux.HandleFunc("GET /vulnerabilities/{id}", u.vulnerability)
+	}
 	u.mux.HandleFunc("GET /account/password", u.password)
 	if o.Actions != nil {
 		u.mux.HandleFunc("POST /findings/{id}/assign", u.assign)
@@ -155,6 +162,7 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page, titleKey strin
 	data["P"] = auth.FromContext(r.Context())
 	data["AuthEnabled"] = u.o.AuthEnabled
 	data["Writable"] = u.o.Actions != nil
+	data["Impact"] = u.o.Impact != nil
 	data["Notice"], data["Error"] = notice(l, r)
 	data["Version"] = u.o.Version
 	data["DTUIURL"] = u.o.DTUIURL
@@ -710,9 +718,12 @@ func (u *UI) funcs() template.FuncMap {
 			return nil
 		},
 		"isOpen": func(s string) bool { return finding.State(s).Open() },
+		// can: the permission, and the UI changes things at all.
 		"can": func(p *auth.Principal, perm string) bool {
 			return u.o.Actions != nil && p.Can(auth.Permission(perm))
 		},
+		// has: the permission alone, for what reading shows.
+		"has":         func(p *auth.Principal, perm string) bool { return p.Can(auth.Permission(perm)) },
 		"kindLabel":   notify.RequestKindLabel,
 		"sourceLabel": notify.SourceLabel,
 		"statusLabel": notify.RequestStatusLabel,

@@ -10,10 +10,11 @@
 <body>
 <header class="top">
   <a class="brand" href="/"><span class="logo" aria-hidden="true"></span>Patchline</a>
-  {{if can .P "findings.read"}}
+  {{if has .P "findings.read"}}
   <nav aria-label="Main">
     <a href="/" {{if eq .Page "overview"}}aria-current="page"{{end}}>{{t .L "ui.nav.overview"}}</a>
     <a href="/findings?open=1" {{if or (eq .Page "findings") (eq .Page "finding")}}aria-current="page"{{end}}>{{t .L "ui.nav.findings"}}</a>
+    {{if .Impact}}<a href="/components" {{if or (eq .Page "components") (eq .Page "vulnerability")}}aria-current="page"{{end}}>{{t .L "ui.nav.components"}}</a>{{end}}
     <a href="/integrations" {{if eq .Page "integrations"}}aria-current="page"{{end}}>{{t .L "ui.nav.integrations"}}</a>
     {{if or (can .P "exceptions.approve") (can .P "exceptions.request")}}<a href="/approvals" {{if eq .Page "approvals"}}aria-current="page"{{end}}>{{t .L "ui.nav.approvals"}}</a>{{end}}
     {{if or (can .P "settings.webhooks") (can .P "audit.read")}}<a href="/settings" {{if eq .Page "settings"}}aria-current="page"{{end}}>{{t .L "ui.nav.settings"}}</a>{{end}}

@@ -88,6 +88,7 @@ func TestMatchComponent(t *testing.T) {
 	db := fakeDB{"Maven org.apache.logging.log4j:log4j-core": {{ID: r.ID, Aliases: r.Aliases, Severity: r.Severity, Ranges: r.Affected[0].Ranges}},
 		"Go github.com/x/y": {{ID: "GO-1", Ranges: []store.OSVRange{{Introduced: "0", Fixed: "1.2.0"}}}},
 		"PyPI listed":       {{ID: "PYSEC-2", Versions: []string{"0.9"}, Ranges: []store.OSVRange{{Introduced: "0", Fixed: "1.0"}}}},
+		"PyPI listed-only":  {{ID: "PYSEC-3", Versions: []string{"3.0", "3.1"}}},
 	}
 	comp := func(eco, pkg, v string) store.Component {
 		return store.Component{Ecosystem: eco, Package: pkg, Version: v}
@@ -104,7 +105,8 @@ func TestMatchComponent(t *testing.T) {
 		{comp(purl.Maven, "org.apache.logging.log4j:log4j-core", "2.12.2"), 0, "", ""},
 		{comp(purl.Go, "github.com/x/y", "v1.1.9"), 1, "< 1.2.0", "1.2.0"},
 		{comp(purl.Go, "github.com/x/y", "v1.2.0"), 0, "", ""},
-		{comp(purl.PyPI, "listed", "0.9"), 1, "= 0.9", "1.0"},
+		{comp(purl.PyPI, "listed", "0.9"), 1, "< 1.0", "1.0"},
+		{comp(purl.PyPI, "listed-only", "3.1"), 1, "= 3.1", ""},
 		{comp("", "", "1.0"), 0, "", ""},
 	} {
 		ms, err := MatchComponent(context.Background(), db, tc.c)

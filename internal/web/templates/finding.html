@@ -3,6 +3,7 @@
 <p class="crumbs"><a href="/findings?open=1">{{t $L "ui.findings"}}</a> / <a href="/services/{{pathEscape $f.Service}}">{{$f.Service}}</a> / #{{$f.ID}}</p>
 <h1><span class="pill big {{sevClass $f.DisplaySeverity}}">{{$f.DisplaySeverity}}</span> {{$f.VulnID}}{{if $f.KEV}} <span class="tag kev">CISA KEV</span>{{end}}</h1>
 {{if $f.Title}}<p class="lead">{{$f.Title}}</p>{{end}}
+{{if .Impact}}<p><a href="/vulnerabilities/{{pathEscape $f.VulnID}}">{{t $L "ui.impact_link" $f.VulnID}}</a></p>{{end}}
 
 <dl class="facts">
   <div><dt>{{t $L "ui.fact.state"}}</dt><dd><span class="state {{stateClass $f.State}}">{{stateLabel $L $f.State}}</span></dd></div>

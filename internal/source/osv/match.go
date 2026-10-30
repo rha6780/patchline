@@ -36,10 +36,9 @@ func MatchComponent(ctx context.Context, db Candidates, c store.Component) ([]Ma
 	if err != nil {
 		return nil, err
 	}
-	v := normalizeVersion(c.Ecosystem, c.Version)
 	var out []Match
 	for _, cand := range cands {
-		if rng, fixed, ok := affects(c.Ecosystem, v, cand); ok {
+		if rng, fixed, ok := Affects(c.Ecosystem, c.Version, cand); ok {
 			out = append(out, Match{ID: cand.ID, Aliases: cand.Aliases, Summary: cand.Summary,
 				Severity: cand.Severity, Range: rng, Fixed: fixed})
 		}
@@ -47,14 +46,12 @@ func MatchComponent(ctx context.Context, db Candidates, c store.Component) ([]Ma
 	return out, nil
 }
 
-// affects reports whether version v is affected: listed explicitly, or
-// inside one of the ranges.
-func affects(ecosystem, v string, c store.OSVCandidate) (rng, fixed string, ok bool) {
-	for _, listed := range c.Versions {
-		if normalizeVersion(ecosystem, listed) == v {
-			return "= " + listed, fixedFor(ecosystem, v, c.Ranges), true
-		}
-	}
+// Affects reports whether version v of a package is affected by the
+// candidate: inside one of its ranges, or listed explicitly. It returns the
+// range that matched (the listed version when no range did) and the first
+// fixed version after v, when known.
+func Affects(ecosystem, v string, c store.OSVCandidate) (rng, fixed string, ok bool) {
+	v = normalizeVersion(ecosystem, v)
 	for _, r := range c.Ranges {
 		vr := version.Range{}
 		if r.Introduced != "" && r.Introduced != "0" {
@@ -68,6 +65,13 @@ func affects(ecosystem, v string, c store.OSVCandidate) (rng, fixed string, ok b
 		}
 		if vr.Contains(v) {
 			return vr.String(), r.Fixed, true
+		}
+	}
+	// Some records list versions their ranges do not express (for example
+	// ranges the comparison cannot read); the list counts too.
+	for _, listed := range c.Versions {
+		if normalizeVersion(ecosystem, listed) == v {
+			return "= " + listed, fixedFor(ecosystem, v, c.Ranges), true
 		}
 	}
 	return "", "", false

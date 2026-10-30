@@ -299,3 +299,33 @@ func TestIngestSBOM(t *testing.T) {
 		t.Errorf("multipart payload = %+v", up)
 	}
 }
+
+func TestComponentsAndImpactAPI(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	_ = st.TouchSourceProject(ctx, store.SourceProject{Source: "patchline", ProjectID: "app@main", Name: "app", Version: "main", Service: "app"}, true)
+	_ = st.ReplaceComponents(ctx, "patchline", "app@main", []store.Component{{PURL: "pkg:npm/lodash@4.17.15", Name: "lodash",
+		Version: "4.17.15", Ecosystem: "npm", Package: "lodash"}})
+	_ = st.UpsertOSV(ctx, []store.OSVRecord{{ID: "GHSA-p6mc-m468-83gw", Ecosystem: "npm", Modified: "2025-01-01T00:00:00Z",
+		Aliases: []string{"CVE-2020-8203"}, Severity: "high",
+		Affected: []store.OSVAffected{{Ecosystem: "npm", Package: "lodash", Ranges: []store.OSVRange{{Introduced: "0", Fixed: "4.17.19"}}}}}})
+	h := New(Options{DB: st, Findings: st, Impact: st, Logger: quiet})
+	get := func(path string) (int, map[string]any) {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		var m map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &m)
+		return rec.Code, m
+	}
+	code, m := get("/api/v1/components?q=lodash&version=%3C4.17.19")
+	if comps, _ := m["components"].([]any); code != 200 || len(comps) != 1 {
+		t.Fatalf("components: %d %v", code, m)
+	}
+	if code, _ := get("/api/v1/components?q=lodash&version=%3C%3C"); code != http.StatusBadRequest {
+		t.Fatalf("bad constraint: %d", code)
+	}
+	code, m = get("/api/v1/vulnerabilities/CVE-2020-8203")
+	if affected, _ := m["affected"].([]any); code != 200 || m["id"] != "CVE-2020-8203" || len(affected) != 1 {
+		t.Fatalf("impact: %d %v", code, m)
+	}
+}

@@ -2,7 +2,7 @@
 
 English | [한국어](native-detection.ko.md)
 
-Status: phase 1 implemented, phases 2–4 planned.
+Status: phases 1 and 2 implemented, phases 3–4 planned.
 
 ## Goal
 
@@ -10,10 +10,10 @@ Patchline keeps its Dependency-Track integration and can also detect vulnerabili
 
 | Dependency-Track feature | In Patchline |
 |---|---|
-| SBOM upload and storage per project version | Phase 1 |
+| SBOM upload and storage per project version | Phase 1 (done) |
 | Matching against vulnerability data | Phase 1 (OSV), phase 4 (Trivy as an optional engine) |
 | Re-analysis when the data changes | Phase 1 |
-| Component search and impact analysis | Phase 2 |
+| Component search and impact analysis | Phase 2 (done) |
 | Analysis decisions and VEX | Phase 3 |
 | License and policy violations | Out of scope for now |
 
@@ -55,7 +55,7 @@ A **source** reports **sightings**: "project P of source S contains component C 
 
 ### Phase 2: component search and impact analysis
 
-The component snapshots are already stored in phase 1. Phase 2 adds a page and API: which services and environments contain a package (optionally a version range), and for a CVE, which snapshots are affected, including those whose findings are closed.
+Done. **Components** (`/components`, `GET /api/v1/components`) finds where a package is used, with an optional version constraint (`>= 2.0, < 2.17.0`). The impact page (`/vulnerabilities/{id}`, `GET /api/v1/vulnerabilities/{id}`) resolves a CVE or GHSA through the OSV aliases. It lists the snapshots running an affected version (range, fixed version, commit, and the finding even when closed), counts those on a fixed version, and shows every finding of the vulnerability from any source.
 
 ### Phase 3: analysis decisions and VEX
 

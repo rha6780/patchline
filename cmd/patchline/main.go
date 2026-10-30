@@ -165,7 +165,7 @@ func run() error {
 	webOpts := web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger,
 		OnChange: func() { sla.Wake(); notifier.Wake() }, PublicURL: cfg.PublicURL,
 		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret,
-		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local()}
+		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local(), Impact: st}
 	if dt != nil {
 		webOpts.DT = dt
 	}
@@ -185,6 +185,7 @@ func run() error {
 			GiteaSecret:  cfg.GiteaWebhookSecret,
 			Secrets:      store.WebhookSecrets{Store: st, EnvToken: cfg.WebhookToken, EnvGitea: cfg.GiteaWebhookSecret}.Current,
 			Auth:         authn,
+			Impact:       st,
 			UI:           ui,
 			OnInbox:      proc.Wake,
 			Logger:       logger,

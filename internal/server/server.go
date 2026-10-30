@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/auth"
+	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/source/gitea"
@@ -62,6 +63,8 @@ type Options struct {
 	// Auth signs people in and guards the UI and the API. Nil leaves them
 	// open and read-only. Webhooks authenticate with their own secrets.
 	Auth *auth.Authenticator
+	// Impact, when set, serves component search and vulnerability impact.
+	Impact impact.Store
 	// UI, when set, serves every path not handled above (the web pages).
 	UI http.Handler
 	// OnInbox is called after a new delivery is stored (to wake the processor).
@@ -79,6 +82,8 @@ type Options struct {
 //	GET  /api/v1/findings              findings with owners (?service=&environment=&state=&assignee=&limit=)
 //	GET  /api/v1/findings/{id}/events  a finding's timeline
 //	GET  /api/v1/findings/{id}/pull-requests  linked pull requests
+//	GET  /api/v1/components            where packages are used (?q=&ecosystem=&version=&limit=)
+//	GET  /api/v1/vulnerabilities/{id}  what a CVE / GHSA affects
 func New(o Options) http.Handler {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
@@ -105,6 +110,10 @@ func New(o Options) http.Handler {
 		mux.HandleFunc("GET /api/v1/findings", h.listFindings)
 		mux.HandleFunc("GET /api/v1/findings/{id}/events", h.findingEvents)
 		mux.HandleFunc("GET /api/v1/findings/{id}/pull-requests", h.findingPullRequests)
+	}
+	if o.Impact != nil {
+		mux.HandleFunc("GET /api/v1/components", h.components)
+		mux.HandleFunc("GET /api/v1/vulnerabilities/{id}", h.vulnerability)
 	}
 	if o.UI != nil {
 		mux.Handle("/", o.UI)
@@ -321,6 +330,33 @@ func (h *handler) findingEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+}
+
+func (h *handler) components(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	uses, err := impact.Search(r.Context(), h.o.Impact, impact.Query{Text: q.Get("q"), Ecosystem: q.Get("ecosystem"),
+		Version: q.Get("version"), Limit: limit})
+	if errors.Is(err, impact.ErrBadConstraint) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		h.o.Logger.Error("search components", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not search components")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"components": uses})
+}
+
+func (h *handler) vulnerability(w http.ResponseWriter, r *http.Request) {
+	rep, err := impact.Analyze(r.Context(), h.o.Impact, r.PathValue("id"))
+	if err != nil {
+		h.o.Logger.Error("vulnerability impact", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not analyze the vulnerability")
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

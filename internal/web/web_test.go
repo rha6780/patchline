@@ -346,3 +346,73 @@ func TestFindingSources(t *testing.T) {
 		t.Error("integrations page lacks the source column")
 	}
 }
+
+func impactUI(t *testing.T) (*UI, *store.Store) {
+	t.Helper()
+	_, st := setup(t)
+	ctx := context.Background()
+	if err := st.TouchSourceProject(ctx, store.SourceProject{Source: finding.SourcePatchline, ProjectID: "storefront-api@main",
+		Name: "storefront-api", Version: "main", Service: "storefront", Registered: true, Commit: "1f0e2d3c4b5a"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ReplaceComponents(ctx, finding.SourcePatchline, "storefront-api@main", []store.Component{
+		{PURL: "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1", Name: "org.apache.logging.log4j/log4j-core", Version: "2.14.1",
+			Ecosystem: "Maven", Package: "org.apache.logging.log4j:log4j-core"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertOSV(ctx, []store.OSVRecord{{ID: "GHSA-jfh8-c2jp-5v3q", Ecosystem: "Maven", Modified: "2025-01-01T00:00:00Z",
+		Aliases: []string{"CVE-2021-44228"}, Summary: "Remote code injection in Log4j", Severity: "critical",
+		Affected: []store.OSVAffected{{Ecosystem: "Maven", Package: "org.apache.logging.log4j:log4j-core",
+			Ranges: []store.OSVRange{{Introduced: "2.13.0", Fixed: "2.15.0"}}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	u, err := New(Options{Store: st, Impact: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u, st
+}
+
+func TestComponentsPage(t *testing.T) {
+	u, _ := impactUI(t)
+	code, body := get(t, as(person("dev"), u), "/components?q=log4j&version=%3C+2.17.0")
+	if code != 200 || !strings.Contains(body, "org.apache.logging.log4j:log4j-core") || !strings.Contains(body, "2.14.1") ||
+		!strings.Contains(body, "storefront-api") || !strings.Contains(body, `href="/components"`) {
+		t.Fatalf("search: %d", code)
+	}
+	if _, body := get(t, u, "/components?q=log4j&version=%3E%3D+2.15"); !strings.Contains(body, "No component matches") {
+		t.Error("version filter did not exclude 2.14.1")
+	}
+	if _, body := get(t, u, "/components?q=log4j&version=%3C%3C"); !strings.Contains(body, "Version: use for example") {
+		t.Error("bad constraint not reported")
+	}
+	rec := httptest.NewRecorder()
+	u.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/components?q=cve-2021-44228", nil))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/vulnerabilities/CVE-2021-44228" {
+		t.Fatalf("cve search: %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+func TestVulnerabilityPage(t *testing.T) {
+	u, _ := impactUI(t)
+	code, body := get(t, u, "/vulnerabilities/GHSA-jfh8-c2jp-5v3q")
+	if code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	for _, want := range []string{"CVE-2021-44228", "Remote code injection in Log4j", "&gt;= 2.13.0, &lt; 2.15.0", "2.15.0",
+		"storefront", "osv.dev/vulnerability/GHSA-jfh8-c2jp-5v3q"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("impact page lacks %q", want)
+		}
+	}
+	// The finding from setup (Dependency-Track, same CVE) is listed.
+	if !strings.Contains(body, "Findings from every source") || !strings.Contains(body, `href="/findings/`) {
+		t.Error("findings section missing")
+	}
+	if _, body := get(t, u, "/findings/1"); !strings.Contains(body, `href="/vulnerabilities/CVE-2021-44228"`) {
+		t.Error("finding page does not link to the impact page")
+	}
+	if _, body := get(t, u, "/vulnerabilities/CVE-2099-0001"); !strings.Contains(body, "Not in the OSV data") {
+		t.Error("unknown id not explained")
+	}
+}
