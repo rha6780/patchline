@@ -21,6 +21,14 @@ make demo-up
 
 Patchline is at http://localhost:18080. The demo lets you read without signing in; sign in as `admin` / `admin` (you will be asked to choose a new password) to assign findings, approve requests or rotate webhook secrets.
 
+### Shortcut: `make demo-seed`
+
+Once Dependency-Track answers (the first start takes a few minutes), `make demo-seed` does steps 2, 3 and 5 for you: it sets Dependency-Track's admin password to `patchline-demo` (or `DT_ADMIN_PASSWORD`), creates Patchline's API key in `.env`, adds the alert, turns on the Trivy analyzer, restarts Patchline and uploads the sample SBOM as `storefront-api@main` and `@prod`.
+
+The compose file runs a Trivy server because out of the box Dependency-Track matches package URLs only through OSS Index (which needs a token) or the OSV and GitHub mirrors (off by default), so the sample SBOM would show no findings. To set it up by hand, see [Trivy](../../docs/integrations/trivy.md). It needs `curl` and `jq` and is safe to run again. Then continue with step 6.
+
+To do it by hand instead:
+
 ## 2. Create an API key for Patchline
 
 In the Dependency-Track UI: **Administration → Access Management → Teams → Automation**.

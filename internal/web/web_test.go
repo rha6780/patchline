@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/store"
@@ -306,5 +307,21 @@ func TestPrefsLinksKeepThePage(t *testing.T) {
 	if !strings.Contains(body, `/prefs?lang=ko&next=%2ffindings%3fopen%3d1%26service%3dstorefront`) {
 		i := strings.Index(body, "/prefs?lang=ko")
 		t.Fatalf("language link: %s", body[i:i+90])
+	}
+}
+
+func TestSignInLink(t *testing.T) {
+	_, st := setup(t)
+	u, err := New(Options{Store: st, Actions: st, AuthEnabled: true, LocalAdmin: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reading without a session (PATCHLINE_ALLOW_ANONYMOUS): the header offers sign-in.
+	anon := &auth.Principal{Perms: auth.Set{auth.FindingsRead: true}}
+	if _, body := get(t, as(anon, u), "/findings"); !strings.Contains(body, `href="/login?next=%2ffindings"`) {
+		t.Error("sign-in link missing for an anonymous reader")
+	}
+	if _, body := get(t, as(person("dev"), u), "/findings"); strings.Contains(body, `href="/login`) {
+		t.Error("sign-in link shown to a signed-in user")
 	}
 }

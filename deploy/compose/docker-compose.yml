@@ -46,6 +46,20 @@ services:
       - "${DT_API_PORT:-18081}:8080"
     restart: unless-stopped
 
+  # Vulnerability analyzer for Dependency-Track. Out of the box Dependency-Track
+  # matches purls only through OSS Index (needs a token) or OSV/GitHub mirrors
+  # (off), so the sample SBOM would have no findings. `make demo-seed` turns
+  # the Trivy analyzer on (Base URL http://trivy:8080).
+  trivy:
+    image: aquasec/trivy:${TRIVY_VERSION:-0.76.1}
+    command: ["server"]
+    environment:
+      TRIVY_LISTEN: "0.0.0.0:8080"
+      TRIVY_TOKEN: ${TRIVY_TOKEN:-patchline-demo-trivy}
+    volumes:
+      - trivy-cache:/root/.cache/trivy
+    restart: unless-stopped
+
   dtrack-frontend:
     image: dependencytrack/frontend:4.14.0
     depends_on:
@@ -88,6 +102,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  trivy-cache:
   postgres-data:
   dtrack-data:
   patchline-data:
