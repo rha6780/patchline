@@ -8,7 +8,7 @@ Patchline이 직접 취약점을 찾을 수 있습니다. CI가 SBOM을 Patchlin
 |---|---|---|
 | SBOM을 보내는 곳 | Dependency-Track | Patchline(`/ingest/sbom`) |
 | 대조 | Dependency-Track 분석기(NVD, OSS Index, OSV, GitHub, Trivy) | OSV: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist |
-| OS 패키지(deb, rpm, apk) | Trivy 분석기를 쓰면 가능 | 아직 없음(Trivy로 지원 예정) |
+| OS 패키지(deb, rpm, apk) | Trivy 분석기를 쓰면 가능 | Trivy 서버를 연결하면 가능(`PATCHLINE_TRIVY_URL`) |
 | 분석 판정 | Dependency-Track에서 | Patchline 승인 흐름으로, VEX로 내보냄 |
 
 ## 1. 켜기
@@ -24,6 +24,21 @@ PATCHLINE_OSV_REFRESH=6h                       # 변경분을 받는 주기
 처음 실행하면 생태계별 전체 export를 한 번 받습니다(Maven 약 10MB, npm 약 220MB, PyPI 약 40MB, Go 약 13MB). 이후에는 바뀐 레코드만 받습니다(`modified_id.csv`). 데이터는 SQLite DB에 저장되며, npm을 포함하면 DB가 80MB 정도 늘어납니다. 시작 로그에 `osv synced ecosystem=… records=…`가 남습니다.
 
 설정한 모든 생태계가 한 번씩 동기화되기 전에는 업로드를 분석은 하되 해결 판정은 하지 않습니다. 덜 받은 데이터를 "고쳐졌다"로 오해하지 않기 위해서입니다.
+
+### Trivy로 OS 패키지 대조
+
+OSV는 언어 패키지를 다룹니다. 컨테이너 이미지의 OS 패키지(deb, rpm, apk)는 Trivy 서버를 두 번째 엔진으로 붙여 대조합니다. 직접 설치용 compose의 `--profile trivy`와 데모에 Trivy 서버가 있습니다.
+
+```sh
+PATCHLINE_TRIVY_URL=http://trivy:8080
+PATCHLINE_TRIVY_TOKEN=<서버의 --token>
+PATCHLINE_TRIVY_SCOPE=os        # all: 언어 패키지도 보냄(OSV 결과와 합쳐짐)
+```
+
+- OS 패키지의 purl에는 `distro` 한정자가 필요합니다(`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`). `trivy image --format cyclonedx`가 이렇게 씁니다. 없으면 건너뜁니다.
+- Debian·Ubuntu 권고는 소스 패키지 이름을 씁니다. Trivy의 `aquasecurity:trivy:SrcName` 속성(또는 Syft의 `upstream` 한정자)을 읽어 `libssl1.1`을 `openssl`로 조회합니다.
+- 업로드 한 번에 OS 릴리스마다 한 번씩 스캔합니다. Trivy에 연결할 수 없으면 업로드를 재시도하고, 그동안은 해결 판정을 하지 않습니다.
+- 확인 결과: `debian:11.6-slim` SBOM에서 Patchline이 `trivy sbom`과 똑같이 474개의 패키지 × 취약점을 보고했습니다.
 
 ## 2. CI에서 SBOM 올리기
 

@@ -70,6 +70,9 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_OSV_ECOSYSTEMS` | `Maven,npm,PyPI,Go` | OSV ecosystems for built-in detection (also `crates.io`, `NuGet`, `RubyGems`, `Packagist`). `off` only stores SBOMs |
 | `PATCHLINE_OSV_URL` | OSV exports | Where the OSV exports are served, for an internal mirror |
 | `PATCHLINE_OSV_REFRESH` | `6h` | How often OSV changes are fetched |
+| `PATCHLINE_TRIVY_URL` | — | Trivy server as a second engine for built-in detection: OS packages (deb, rpm, apk) |
+| `PATCHLINE_TRIVY_TOKEN` | — | The Trivy server's `--token` |
+| `PATCHLINE_TRIVY_SCOPE` | `os` | `all` also sends language packages (merged with the OSV matches) |
 | `PATCHLINE_PUBLIC_URL` | — | Where users reach Patchline; required with OIDC (redirect URI `/auth/callback`). `https://` makes the session cookie Secure |
 | `PATCHLINE_LOCAL_ADMIN` | `true` | Built-in `admin` account (starts as `admin` / `admin`, password change forced). `false` needs OIDC |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | Let requests without a session read; only behind an authenticating proxy |

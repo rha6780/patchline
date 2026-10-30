@@ -15,6 +15,9 @@ type Component struct {
 	Package   string `json:"package,omitempty"`
 	// BOMRef is the component's bom-ref in the uploaded CycloneDX SBOM.
 	BOMRef string `json:"bom_ref,omitempty"`
+	// SrcName and SrcVersion name the source package of an OS package.
+	SrcName    string `json:"src_name,omitempty"`
+	SrcVersion string `json:"src_version,omitempty"`
 }
 
 // ReplaceComponents makes components the snapshot of a source project.
@@ -32,14 +35,14 @@ func (s *Store) ReplaceComponents(ctx context.Context, source, project string, c
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO sbom_components (source, project_id, purl, name, version, ecosystem, package, bom_ref)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`)
+		INSERT INTO sbom_components (source, project_id, purl, name, version, ecosystem, package, bom_ref, src_name, src_version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, c := range components {
-		if _, err = stmt.ExecContext(ctx, source, project, c.PURL, c.Name, c.Version, c.Ecosystem, c.Package, c.BOMRef); err != nil {
+		if _, err = stmt.ExecContext(ctx, source, project, c.PURL, c.Name, c.Version, c.Ecosystem, c.Package, c.BOMRef, c.SrcName, c.SrcVersion); err != nil {
 			return err
 		}
 	}
@@ -49,7 +52,7 @@ func (s *Store) ReplaceComponents(ctx context.Context, source, project string, c
 // Components returns the snapshot of a source project.
 func (s *Store) Components(ctx context.Context, source, project string) ([]Component, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT purl, name, version, ecosystem, package, bom_ref FROM sbom_components
+		SELECT purl, name, version, ecosystem, package, bom_ref, src_name, src_version FROM sbom_components
 		WHERE source = ? AND project_id = ? ORDER BY purl`, source, project)
 	if err != nil {
 		return nil, err
@@ -58,7 +61,7 @@ func (s *Store) Components(ctx context.Context, source, project string) ([]Compo
 	var out []Component
 	for rows.Next() {
 		var c Component
-		if err := rows.Scan(&c.PURL, &c.Name, &c.Version, &c.Ecosystem, &c.Package, &c.BOMRef); err != nil {
+		if err := rows.Scan(&c.PURL, &c.Name, &c.Version, &c.Ecosystem, &c.Package, &c.BOMRef, &c.SrcName, &c.SrcVersion); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

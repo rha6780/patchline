@@ -194,7 +194,7 @@ func TestSync(t *testing.T) {
 		t.Fatal("not ready after sync")
 	}
 	c := store.Component{Ecosystem: purl.Maven, Package: "org.apache.logging.log4j:log4j-core", Version: "2.14.1"}
-	if ms, _ := e.Match(ctx, c); len(ms) != 1 || ms[0].Severity != finding.SeverityCritical {
+	if ms := matchOne(t, e, c); len(ms) != 1 || ms[0].Severity != finding.SeverityCritical {
 		t.Fatalf("match after full sync: %+v", ms)
 	}
 
@@ -207,7 +207,7 @@ func TestSync(t *testing.T) {
 	if n, err := s.Sync(ctx); err != nil || n != 2 || fulls.Load() != 1 || singles.Load() != 2 {
 		t.Fatalf("incremental sync: %d %v (fulls %d, singles %d)", n, err, fulls.Load(), singles.Load())
 	}
-	ms, _ := e.Match(ctx, c)
+	ms := matchOne(t, e, c)
 	if len(ms) != 1 || ms[0].ID != "GHSA-new" {
 		t.Fatalf("match after incremental sync: %+v", ms)
 	}
@@ -244,4 +244,14 @@ func TestSyncFailureKeepsData(t *testing.T) {
 	if ready, _ := s.Ready(ctx); ready {
 		t.Error("ready after a failed first sync")
 	}
+}
+
+func matchOne(t *testing.T, e Engine, c store.Component) []Match {
+	t.Helper()
+	c.PURL = "pkg:test/" + c.Package
+	m, err := e.MatchAll(context.Background(), []store.Component{c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m[c.PURL]
 }

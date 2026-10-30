@@ -32,6 +32,10 @@ type Component struct {
 	Package   string `json:"package,omitempty"`
 	// BOMRef is the CycloneDX bom-ref, for VEX BOM-Links.
 	BOMRef string `json:"bom_ref,omitempty"`
+	// SrcName and SrcVersion name an OS package's source package, from
+	// Trivy's properties or the purl's upstream qualifier.
+	SrcName    string `json:"src_name,omitempty"`
+	SrcVersion string `json:"src_version,omitempty"`
 }
 
 // Document is what Patchline keeps from an SBOM.
@@ -91,6 +95,10 @@ type cdxComponent struct {
 	Version    string         `json:"version"`
 	PURL       string         `json:"purl"`
 	Components []cdxComponent `json:"components"`
+	Properties []struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	} `json:"properties"`
 }
 
 func parseCycloneDX(data []byte) (Document, error) {
@@ -130,6 +138,9 @@ func parseCycloneDX(data []byte) (Document, error) {
 			}
 			if c.PURL != root || root == "" {
 				doc.add(seen, c.PURL, name, c.Version, c.BOMRef)
+				if n := len(doc.Components); n > 0 && doc.Components[n-1].PURL == c.PURL {
+					doc.Components[n-1].setSource(c)
+				}
 			}
 			walk(c.Components)
 		}
@@ -188,6 +199,32 @@ func (d *Document) setProperty(name, value string) {
 	}
 }
 
+// Trivy's CycloneDX properties for an OS package's source package.
+const (
+	propSrcName    = "aquasecurity:trivy:SrcName"
+	propSrcVersion = "aquasecurity:trivy:SrcVersion"
+	propSrcRelease = "aquasecurity:trivy:SrcRelease"
+	propSrcEpoch   = "aquasecurity:trivy:SrcEpoch"
+)
+
+func (c *Component) setSource(cdx cdxComponent) {
+	props := map[string]string{}
+	for _, p := range cdx.Properties {
+		props[p.Name] = p.Value
+	}
+	if n := props[propSrcName]; n != "" {
+		c.SrcName = n
+		v := props[propSrcVersion]
+		if r := props[propSrcRelease]; r != "" && v != "" {
+			v += "-" + r
+		}
+		if e := props[propSrcEpoch]; e != "" && e != "0" && v != "" {
+			v = e + ":" + v
+		}
+		c.SrcVersion = v
+	}
+}
+
 func (d *Document) add(seen map[string]bool, ref, name, version, bomRef string) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -206,6 +243,10 @@ func (d *Document) add(seen map[string]bool, ref, name, version, bomRef string) 
 		}
 		if c.Name == "" {
 			c.Name = p.Name
+		}
+		// Syft writes the source package as upstream=name or name@version.
+		if up := p.Qualifiers["upstream"]; up != "" {
+			c.SrcName, c.SrcVersion, _ = strings.Cut(up, "@")
 		}
 	}
 	d.Components = append(d.Components, c)

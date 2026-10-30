@@ -2,7 +2,7 @@
 
 [English](native-detection.md) | 한국어
 
-상태: 1~3단계 구현 완료, 4단계 예정.
+상태: 1~4단계 구현 완료.
 
 ## 목표
 
@@ -11,7 +11,7 @@ Dependency-Track 연동은 그대로 유지하면서, Patchline이 직접 취약
 | Dependency-Track 기능 | Patchline |
 |---|---|
 | 프로젝트 버전별 SBOM 업로드·보관 | 1단계(완료) |
-| 취약점 데이터 대조 | 1단계(OSV), 4단계(선택 엔진으로 Trivy) |
+| 취약점 데이터 대조 | 1단계(OSV), 4단계(선택 엔진으로 Trivy), 완료 |
 | 데이터가 바뀌면 재분석 | 1단계 |
 | 구성요소 검색·영향 분석 | 2단계(완료) |
 | 분석 판정과 VEX | 3단계(완료) |
@@ -77,7 +77,16 @@ CI ── SBOM ───────┤ patchline: SBOM Inbox → 구성요소 �
 
 ### 4단계: 선택 엔진으로 Trivy
 
-엔진은 인터페이스입니다. OSV는 내장이고, OS 패키지와 이미지를 위해 Trivy 서버를 추가할 수 있습니다. Trivy 서버 API는 공개 문서가 없으므로 선택 사항으로 둡니다.
+구현했습니다. 엔진은 `detect.Engine`(`Ready`, 스냅샷 단위 `MatchAll`)을 구현하고, `detect.Combined`가 여러 엔진을 돌려 구성요소별로 결과를 합칩니다.
+- **연결:** `PATCHLINE_TRIVY_URL`로 Trivy 서버를 붙입니다. Patchline은 Twirp API를 JSON으로 호출합니다.
+  1. PutBlob: 패키지를 OS 릴리스별로 묶어 보냅니다(purl의 `distro` 한정자 기준).
+  2. Scan으로 대조합니다.
+  3. DeleteBlobs로 정리합니다.
+- **결과 연결:** Trivy가 purl을 다시 인코딩하므로, 결과는 패키지마다 보낸 bom-ref로 연결합니다.
+- **소스 패키지:** Trivy의 `SrcName`/`SrcVersion`/`SrcRelease`/`SrcEpoch` 속성이나 Syft의 `upstream` 한정자에서 읽습니다. 이 정보가 없으면 소스 패키지 기준인 Debian 권고를 놓칩니다.
+- **언어 패키지:** `PATCHLINE_TRIVY_SCOPE=all`이면 언어 패키지도 보내고, ID와 별칭으로 OSV 결과와 합칩니다.
+- **검증:** `debian:11.6-slim`에서 `trivy sbom`과 똑같이 474개 패키지 × 취약점을 보고했습니다.
+- **선택 사항인 이유:** Twirp API는 안정성이 문서로 보장되지 않으므로 엔진은 선택 사항으로 두고, 고정한 Trivy 버전(0.76.1)으로 테스트합니다.
 
 ## 위험 요소
 

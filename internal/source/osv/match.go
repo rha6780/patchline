@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/rha6780/patchline/internal/detect"
 	"github.com/rha6780/patchline/internal/purl"
 	"github.com/rha6780/patchline/internal/store"
 	"github.com/rha6780/patchline/internal/version"
@@ -15,17 +16,7 @@ type Candidates interface {
 }
 
 // Match is a vulnerability affecting a component.
-type Match struct {
-	ID       string
-	Aliases  []string
-	Summary  string
-	Severity string
-	// Range is the affected range the version fell into, for evidence:
-	// ">= 2.13.0, < 2.15.0" or "= 2.14.1" for an explicit version.
-	Range string
-	// Fixed is the first fixed version of that range, when known.
-	Fixed string
-}
+type Match = detect.Match
 
 // MatchComponent returns the vulnerabilities affecting c.
 func MatchComponent(ctx context.Context, db Candidates, c store.Component) ([]Match, error) {
@@ -40,7 +31,7 @@ func MatchComponent(ctx context.Context, db Candidates, c store.Component) ([]Ma
 	for _, cand := range cands {
 		if rng, fixed, ok := Affects(c.Ecosystem, c.Version, cand); ok {
 			out = append(out, Match{ID: cand.ID, Aliases: cand.Aliases, Summary: cand.Summary,
-				Severity: cand.Severity, Range: rng, Fixed: fixed})
+				Severity: cand.Severity, Range: rng, Fixed: fixed, Engine: "osv"})
 		}
 	}
 	return out, nil
@@ -105,7 +96,17 @@ type Engine struct {
 // Ready reports whether every configured ecosystem has been synced.
 func (e Engine) Ready(ctx context.Context) (bool, error) { return e.Syncer.Ready(ctx) }
 
-// Match returns the vulnerabilities affecting c.
-func (e Engine) Match(ctx context.Context, c store.Component) ([]Match, error) {
-	return MatchComponent(ctx, e.DB, c)
+// MatchAll matches each component with an OSV ecosystem.
+func (e Engine) MatchAll(ctx context.Context, comps []store.Component) (map[string][]Match, error) {
+	out := map[string][]Match{}
+	for _, c := range comps {
+		ms, err := MatchComponent(ctx, e.DB, c)
+		if err != nil {
+			return nil, err
+		}
+		if len(ms) > 0 {
+			out[c.PURL] = ms
+		}
+	}
+	return out, nil
 }

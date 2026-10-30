@@ -155,3 +155,13 @@ func TestOSVSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestTrivySettings(t *testing.T) {
+	cfg, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_TRIVY_URL": "http://trivy:8080", "PATCHLINE_TRIVY_TOKEN": "t", "PATCHLINE_TRIVY_SCOPE": "ALL"}))
+	if err != nil || cfg.TrivyURL != "http://trivy:8080" || cfg.TrivyToken != "t" || !cfg.TrivyAll {
+		t.Fatalf("got %+v, %v", cfg, err)
+	}
+	if _, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_TRIVY_SCOPE": "images"})); err == nil {
+		t.Error("bad scope accepted")
+	}
+}

@@ -8,7 +8,7 @@ Patchline can find vulnerabilities itself: CI uploads an SBOM to Patchline, whic
 |---|---|---|
 | SBOM goes to | Dependency-Track | Patchline (`/ingest/sbom`) |
 | Matching | Dependency-Track's analyzers (NVD, OSS Index, OSV, GitHub, Trivy) | OSV: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist |
-| OS packages (deb, rpm, apk) | With the Trivy analyzer | Not yet (planned via Trivy) |
+| OS packages (deb, rpm, apk) | With the Trivy analyzer | With a Trivy server (`PATCHLINE_TRIVY_URL`) |
 | Analysis decisions | In Dependency-Track | In Patchline, through approvals, exported as VEX |
 
 ## 1. Turn it on
@@ -24,6 +24,21 @@ PATCHLINE_OSV_REFRESH=6h                       # how often to fetch changes
 On first start Patchline downloads each ecosystem's full export once: Maven about 10 MB, npm about 220 MB, PyPI about 40 MB, Go about 13 MB. After that it fetches only the records that changed (`modified_id.csv`). The data lives in the SQLite database, which grows by roughly 80 MB with npm. The startup log shows `osv synced ecosystem=… records=…`.
 
 Until every configured ecosystem has synced once, uploads are analyzed but nothing is resolved, so a half-loaded database never looks like a fix.
+
+### OS packages with Trivy
+
+OSV covers language packages. For the OS packages in container images (deb, rpm, apk), add a Trivy server as a second engine. The self-hosted setup has one under `--profile trivy`, and the demo runs one.
+
+```sh
+PATCHLINE_TRIVY_URL=http://trivy:8080
+PATCHLINE_TRIVY_TOKEN=<the server's --token>
+PATCHLINE_TRIVY_SCOPE=os        # all: language packages too, merged with OSV
+```
+
+- OS packages need the `distro` qualifier in their purl (`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`), as `trivy image --format cyclonedx` writes it. Packages without it are skipped.
+- Debian and Ubuntu advisories name source packages: Patchline reads Trivy's `aquasecurity:trivy:SrcName` properties (or Syft's `upstream` qualifier), so `libssl1.1` is checked as `openssl`.
+- One upload is one scan per OS release. If Trivy cannot be reached, the upload is retried and nothing resolves in the meantime.
+- Checked: for a `debian:11.6-slim` SBOM, Patchline reports the same 474 package × vulnerability pairs as `trivy sbom`.
 
 ## 2. Upload SBOMs from CI
 

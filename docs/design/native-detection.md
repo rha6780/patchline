@@ -2,7 +2,7 @@
 
 English | [한국어](native-detection.ko.md)
 
-Status: phases 1–3 implemented, phase 4 planned.
+Status: phases 1–4 implemented.
 
 ## Goal
 
@@ -11,7 +11,7 @@ Patchline keeps its Dependency-Track integration and can also detect vulnerabili
 | Dependency-Track feature | In Patchline |
 |---|---|
 | SBOM upload and storage per project version | Phase 1 (done) |
-| Matching against vulnerability data | Phase 1 (OSV), phase 4 (Trivy as an optional engine) |
+| Matching against vulnerability data | Phase 1 (OSV), phase 4 (Trivy as an optional engine), done |
 | Re-analysis when the data changes | Phase 1 |
 | Component search and impact analysis | Phase 2 (done) |
 | Analysis decisions and VEX | Phase 3 (done) |
@@ -68,7 +68,12 @@ Done.
 
 ### Phase 4: Trivy as an optional engine
 
-The engine is an interface: OSV is built in; a Trivy server can be added for OS packages and images. Trivy's server API is undocumented, so it stays optional.
+Done. Engines implement `detect.Engine` (`Ready`, `MatchAll` over a snapshot); `detect.Combined` runs several and merges their matches per component.
+- `PATCHLINE_TRIVY_URL` adds a Trivy server. Patchline speaks its Twirp API in JSON: PutBlob with the packages grouped by OS release (from the purl's `distro` qualifier), then Scan, then DeleteBlobs. It reads the results back by the bom-ref each package was sent with, because Trivy re-encodes purls.
+- Source packages come from Trivy's `SrcName`/`SrcVersion`/`SrcRelease`/`SrcEpoch` properties or Syft's `upstream` qualifier. Without them, Debian advisories (keyed by source package) are missed.
+- `PATCHLINE_TRIVY_SCOPE=all` also sends language packages; matches merge with OSV's by id and alias.
+- Verified against `debian:11.6-slim`: the same 474 package × vulnerability pairs as `trivy sbom`.
+- The Twirp API is not documented as stable, so the engine stays optional and is tested against a pinned Trivy (0.76.1).
 
 ## Risks
 

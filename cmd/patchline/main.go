@@ -18,6 +18,7 @@ import (
 
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/config"
+	"github.com/rha6780/patchline/internal/detect"
 	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/intake"
 	"github.com/rha6780/patchline/internal/inventory"
@@ -29,6 +30,7 @@ import (
 	"github.com/rha6780/patchline/internal/sink/slack"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/source/osv"
+	"github.com/rha6780/patchline/internal/source/trivy"
 	"github.com/rha6780/patchline/internal/store"
 	"github.com/rha6780/patchline/internal/web"
 )
@@ -128,12 +130,16 @@ func run() error {
 	proc.OnChange = func() { sla.Wake(); notifier.Wake() }
 
 	// Patchline's own detection: SBOMs uploaded to /ingest/sbom are matched
-	// against a local OSV mirror, and re-analyzed when it changes.
-	var osvJob *job.OSV
+	// against a local OSV mirror (re-analyzed when it changes) and, when
+	// configured, a Trivy server for OS packages.
+	var (
+		osvJob  *job.OSV
+		engines detect.Combined
+	)
 	if len(cfg.OSVEcosystems) > 0 {
 		syncer := &osv.Syncer{Store: st, BaseURL: cfg.OSVURL, Ecosystems: cfg.OSVEcosystems,
 			TempDir: filepath.Dir(cfg.DatabasePath), Logger: logger}
-		proc.Matcher = osv.Engine{DB: st, Syncer: syncer}
+		engines = append(engines, osv.Engine{DB: st, Syncer: syncer})
 		osvJob = &job.OSV{Syncer: syncer, Interval: cfg.OSVRefresh, Logger: logger,
 			OnChanged: func(ctx context.Context) {
 				key := "reanalyze-" + time.Now().UTC().Format(time.RFC3339Nano)
@@ -143,9 +149,19 @@ func run() error {
 				}
 				proc.Wake()
 			}}
-		logger.Info("native detection enabled", "ecosystems", cfg.OSVEcosystems, "osv_url", cfg.OSVURL, "refresh", cfg.OSVRefresh)
-	} else {
-		logger.Info("PATCHLINE_OSV_ECOSYSTEMS=off: SBOMs uploaded to Patchline are stored but not matched")
+		logger.Info("native detection: osv", "ecosystems", cfg.OSVEcosystems, "osv_url", cfg.OSVURL, "refresh", cfg.OSVRefresh)
+	}
+	if cfg.TrivyURL != "" {
+		engines = append(engines, &trivy.Engine{URL: cfg.TrivyURL, Token: cfg.TrivyToken, All: cfg.TrivyAll})
+		logger.Info("native detection: trivy", "url", cfg.TrivyURL, "language_packages", cfg.TrivyAll)
+	}
+	switch len(engines) {
+	case 0:
+		logger.Info("no detection engine (PATCHLINE_OSV_ECOSYSTEMS=off, no PATCHLINE_TRIVY_URL): uploaded SBOMs are stored but not matched")
+	case 1:
+		proc.Matcher = engines[0]
+	default:
+		proc.Matcher = engines
 	}
 
 	var workers sync.WaitGroup

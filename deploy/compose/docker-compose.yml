@@ -93,6 +93,9 @@ services:
       PATCHLINE_SLACK_DEFAULT_CHANNEL: ${PATCHLINE_SLACK_DEFAULT_CHANNEL:-}
       PATCHLINE_NOTIFY_MIN_SEVERITY: ${PATCHLINE_NOTIFY_MIN_SEVERITY:-medium}
       PATCHLINE_NOTIFY_LANG: ${PATCHLINE_NOTIFY_LANG:-en}
+      # SBOMs uploaded to Patchline: OS packages through the demo's Trivy server.
+      PATCHLINE_TRIVY_URL: http://trivy:8080
+      PATCHLINE_TRIVY_TOKEN: ${TRIVY_TOKEN:-patchline-demo-trivy}
     volumes:
       - patchline-data:/data
       - ../../examples/inventory:/etc/patchline/inventory:ro

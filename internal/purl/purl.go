@@ -18,16 +18,30 @@ type PURL struct {
 	Namespace string
 	Name      string
 	Version   string
+	// Qualifiers such as arch, distro, epoch, upstream.
+	Qualifiers map[string]string
 }
 
 // Parse reads "pkg:type/namespace/name@version?qualifiers#subpath".
-// Qualifiers and subpath are dropped.
+// The subpath is dropped.
 func Parse(s string) (PURL, error) {
 	rest, ok := strings.CutPrefix(strings.TrimSpace(s), "pkg:")
 	if !ok {
 		return PURL{}, errors.New("purl: missing pkg: scheme")
 	}
+	quals := map[string]string{}
 	if i := strings.IndexAny(rest, "?#"); i >= 0 {
+		if rest[i] == '?' {
+			q := rest[i+1:]
+			if j := strings.IndexByte(q, '#'); j >= 0 {
+				q = q[:j]
+			}
+			for _, kv := range strings.Split(q, "&") {
+				if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
+					quals[strings.ToLower(k)] = unescape(v)
+				}
+			}
+		}
 		rest = rest[:i]
 	}
 	rest = strings.TrimLeft(rest, "/")
@@ -35,7 +49,7 @@ func Parse(s string) (PURL, error) {
 	if !ok || typ == "" || path == "" {
 		return PURL{}, errors.New("purl: want pkg:type/name")
 	}
-	var p PURL
+	p := PURL{Qualifiers: quals}
 	p.Type = strings.ToLower(typ)
 	// The version follows the last "@" of the last segment (npm scopes
 	// start with an encoded "@").

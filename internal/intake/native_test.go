@@ -20,8 +20,12 @@ type fakeMatcher struct {
 }
 
 func (f *fakeMatcher) Ready(context.Context) (bool, error) { return f.ready, nil }
-func (f *fakeMatcher) Match(_ context.Context, c store.Component) ([]osv.Match, error) {
-	return f.vulns[c.PURL], nil
+func (f *fakeMatcher) MatchAll(_ context.Context, comps []store.Component) (map[string][]osv.Match, error) {
+	out := map[string][]osv.Match{}
+	for _, c := range comps {
+		out[c.PURL] = f.vulns[c.PURL]
+	}
+	return out, nil
 }
 
 const (

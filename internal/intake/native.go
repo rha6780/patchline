@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/rha6780/patchline/internal/detect"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/sbom"
-	"github.com/rha6780/patchline/internal/source/osv"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -21,13 +21,8 @@ const (
 	EventReanalyze = "reanalyze"
 )
 
-// Matcher detects vulnerabilities in components.
-type Matcher interface {
-	// Ready reports whether the vulnerability data is complete enough that
-	// a component without matches can count as fixed.
-	Ready(ctx context.Context) (bool, error)
-	Match(ctx context.Context, c store.Component) ([]osv.Match, error)
-}
+// Matcher detects vulnerabilities in a snapshot's components.
+type Matcher = detect.Engine
 
 func (p *Processor) handlePatchline(ctx context.Context, it store.InboxItem) (string, error) {
 	switch it.EventType {
@@ -54,7 +49,7 @@ func (p *Processor) handleSBOM(ctx context.Context, it store.InboxItem) (string,
 	comps := make([]store.Component, 0, len(doc.Components))
 	for _, c := range doc.Components {
 		comps = append(comps, store.Component{PURL: c.PURL, Name: c.Name, Version: c.Version, Ecosystem: c.Ecosystem,
-			Package: c.Package, BOMRef: c.BOMRef})
+			Package: c.Package, BOMRef: c.BOMRef, SrcName: c.SrcName, SrcVersion: c.SrcVersion})
 	}
 	if err := p.Store.ReplaceComponents(ctx, SourcePatchline, id, comps); err != nil {
 		return "", err
@@ -133,12 +128,12 @@ func (p *Processor) analyze(ctx context.Context, sp store.SourceProject, comps [
 	_, repo, _ := p.lookup(sp.Name)
 	var ids []int64
 	created := 0
+	byPURL, err := p.Matcher.MatchAll(ctx, comps)
+	if err != nil {
+		return "", err
+	}
 	for _, c := range comps {
-		matches, err := p.Matcher.Match(ctx, c)
-		if err != nil {
-			return "", err
-		}
-		for _, m := range matches {
+		for _, m := range byPURL[c.PURL] {
 			id, aliases := finding.CanonicalID(m.ID, m.Aliases)
 			obs := finding.Observation{
 				Service: sp.Service, Registered: sp.Registered, Repository: repo, Environment: env,
@@ -146,7 +141,10 @@ func (p *Processor) analyze(ctx context.Context, sp store.SourceProject, comps [
 				VulnID: id, Aliases: aliases, Severity: m.Severity, Title: m.Summary,
 				Source: SourcePatchline, SourceProject: sp.ProjectID,
 			}
-			ev := map[string]any{"osv_id": m.ID, "affected_range": m.Range}
+			ev := map[string]any{"advisory": m.ID, "engine": m.Engine, "affected_range": m.Range}
+			if m.Engine == "osv" {
+				ev["osv_id"] = m.ID
+			}
 			if m.Fixed != "" {
 				ev["fixed_version"] = m.Fixed
 			}

@@ -98,6 +98,14 @@ type Config struct {
 	OSVURL string
 	// OSVRefresh is how often the OSV mirror is updated (PATCHLINE_OSV_REFRESH).
 	OSVRefresh time.Duration
+
+	// TrivyURL adds a Trivy server as a second engine for uploaded SBOMs
+	// (PATCHLINE_TRIVY_URL), for OS packages.
+	TrivyURL   string
+	TrivyToken string // PATCHLINE_TRIVY_TOKEN
+	// TrivyAll also sends language packages to Trivy
+	// (PATCHLINE_TRIVY_SCOPE=all; default os).
+	TrivyAll bool
 }
 
 // DefaultOSVEcosystems are matched when PATCHLINE_OSV_ECOSYSTEMS is unset.
@@ -275,6 +283,17 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			return Config{}, fmt.Errorf("PATCHLINE_OSV_REFRESH: want a duration of at least 1m such as 6h, got %q", v)
 		}
 		cfg.OSVRefresh = d
+	}
+	cfg.TrivyURL, _ = lookup("PATCHLINE_TRIVY_URL")
+	cfg.TrivyToken, _ = lookup("PATCHLINE_TRIVY_TOKEN")
+	if v, ok := lookup("PATCHLINE_TRIVY_SCOPE"); ok && v != "" {
+		switch strings.ToLower(v) {
+		case "os":
+		case "all":
+			cfg.TrivyAll = true
+		default:
+			return Config{}, fmt.Errorf("PATCHLINE_TRIVY_SCOPE: want os or all, got %q", v)
+		}
 	}
 	if !cfg.LocalAdmin && !cfg.OIDCEnabled() && !cfg.AllowAnonymous {
 		return Config{}, fmt.Errorf("PATCHLINE_LOCAL_ADMIN=false needs PATCHLINE_OIDC_ISSUER (or PATCHLINE_ALLOW_ANONYMOUS=true): otherwise nobody can sign in")
