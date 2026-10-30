@@ -90,7 +90,7 @@ func TestPages(t *testing.T) {
 		{"/findings/1", []string{"Log4Shell &lt;b&gt;", "Timeline", "Detected by Dependency-Track", "Fix PR merged",
 			"acme/storefront-api#12", "leaves the affected range", "no longer reported for the latest BOM",
 			"http://dt.local/projects/p-main/findings", "alice@example.com"}},
-		{"/services/storefront", []string{"Findings by environment", "<th>main</th>", "<th>prod</th>", "class=\"gap\"",
+		{"/services/storefront", []string{"Findings by environment", "<th>main<div class=\"meta branch\">main</div></th>", "<th>prod</th>", "class=\"gap\"",
 			"fixed in one environment but still open in another", "acme/never-scanned"}},
 		{"/services/stray-app", []string{"not mapped to a service"}},
 		{"/integrations", []string{"storefront-api", "3f2a9c1e0b7d", "refs/heads/main", "never-scanned", "Inventory projects without a BOM"}},
@@ -414,5 +414,26 @@ func TestVulnerabilityPage(t *testing.T) {
 	}
 	if _, body := get(t, u, "/vulnerabilities/CVE-2099-0001"); !strings.Contains(body, "Not in the OSV data") {
 		t.Error("unknown id not explained")
+	}
+}
+
+func TestServiceFilters(t *testing.T) {
+	u, _ := setup(t)
+	code, body := get(t, u, "/services/storefront")
+	if code != 200 || !strings.Contains(body, "Projects and branches") || !strings.Contains(body, `name="branch"`) ||
+		!strings.Contains(body, `<option value="main" >main</option>`) {
+		t.Fatalf("service page: %d", code)
+	}
+	_, body = get(t, u, "/services/storefront?q=log4j&environment=prod&open=1")
+	if !strings.Contains(body, "1 findings match") || strings.Contains(body, "<th>main") ||
+		!strings.Contains(body, `href="/findings?environment=prod&amp;open=1&amp;q=log4j&amp;service=storefront"`) {
+		t.Errorf("filtered service page")
+	}
+	if _, body := get(t, u, "/services/storefront?q=nothing-like-this"); !strings.Contains(body, "0 findings match") {
+		t.Error("empty search")
+	}
+	if code, body := get(t, u, "/findings?q=CVE-2021-44228&branch=main"); code != 200 || !strings.Contains(body, `value="CVE-2021-44228"`) ||
+		!strings.Contains(body, "Branch") {
+		t.Errorf("findings search: %d", code)
 	}
 }

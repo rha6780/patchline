@@ -217,3 +217,6 @@ table.compact td:first-child code { white-space: nowrap; overflow-wrap: normal; 
 .scroll.spaced { margin-top: 12px; }
 fieldset.plain { border: 0; padding: 0; margin: 0; gap: 12px; }
 fieldset.plain legend { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; padding: 0; margin-bottom: 4px; }
+.filter-grid label.wide { grid-column: span 2; }
+th .meta.branch { text-transform: none; letter-spacing: 0; font-weight: 400; }
+@media (max-width: 760px) { .filter-grid label.wide { grid-column: 1 / -1; } }

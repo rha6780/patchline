@@ -83,7 +83,7 @@ type Options struct {
 //	POST /webhooks/dependency-track    Dependency-Track outbound webhook
 //	POST /webhooks/gitea               Gitea / Forgejo / GitHub pull_request webhook
 //	POST /ingest/sbom                  SBOM upload for Patchline's own detection
-//	GET  /api/v1/findings              findings with owners (?service=&environment=&state=&assignee=&limit=)
+//	GET  /api/v1/findings              findings with owners (?q=&service=&environment=&branch=&repository=&severity=&state=&assignee=&open=1&limit=)
 //	GET  /api/v1/findings/{id}/events  a finding's timeline
 //	GET  /api/v1/findings/{id}/pull-requests  linked pull requests
 //	GET  /api/v1/components            where packages are used (?q=&ecosystem=&version=&limit=)
@@ -304,6 +304,8 @@ func (h *handler) listFindings(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	list, err := h.o.Findings.ListFindings(r.Context(), store.FindingFilter{
 		Service: q.Get("service"), Environment: q.Get("environment"), State: q.Get("state"), Assignee: q.Get("assignee"), Limit: limit,
+		Severity: q.Get("severity"), Branch: q.Get("branch"), Repository: q.Get("repository"), Query: q.Get("q"),
+		Open: q.Get("open") == "1",
 	})
 	if err != nil {
 		h.o.Logger.Error("list findings", "err", err)

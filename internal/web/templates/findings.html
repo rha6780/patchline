@@ -10,6 +10,7 @@
 
 <form class="filter-panel" method="get" action="/findings">
   <div class="filter-grid">
+    <label class="wide"><span>{{t $L "ui.filter.q"}}</span><input class="text" type="search" name="q" value="{{.Filter.Query}}" placeholder="CVE-2021-44228, log4j, openssl"></label>
     <label><span>{{t $L "ui.filter.service"}}</span>
       <select name="service"><option value="">{{t $L "ui.filter.any"}}</option>
         {{range .Services}}<option value="{{.}}" {{if eq . $.Filter.Service}}selected{{end}}>{{.}}</option>{{end}}
@@ -17,6 +18,10 @@
     <label><span>{{t $L "ui.filter.environment"}}</span>
       <select name="environment"><option value="">{{t $L "ui.filter.any"}}</option>
         {{range .Environments}}<option value="{{.}}" {{if eq . $.Filter.Environment}}selected{{end}}>{{.}}</option>{{end}}
+      </select></label>
+    <label><span>{{t $L "ui.filter.branch"}}</span>
+      <select name="branch"><option value="">{{t $L "ui.filter.any"}}</option>
+        {{range .Branches}}<option value="{{.}}" {{if eq . $.Filter.Branch}}selected{{end}}>{{.}}</option>{{end}}
       </select></label>
     <label><span>{{t $L "ui.filter.severity"}}</span>
       <select name="severity"><option value="">{{t $L "ui.filter.any"}}</option>
@@ -32,6 +37,7 @@
         <option value="week" {{if eq .Due "week"}}selected{{end}}>{{t $L "ui.filter.week"}}</option>
       </select></label>
   </div>
+  {{if .Filter.Repository}}<input type="hidden" name="repository" value="{{.Filter.Repository}}">{{end}}
   <div class="filter-actions">
     <label class="toggle"><input type="checkbox" name="open" value="1" {{if .Filter.Open}}checked{{end}}><span>{{t $L "ui.filter.open_only"}}</span></label>
     <span class="spacer"></span>

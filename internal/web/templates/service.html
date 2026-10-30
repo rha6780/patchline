@@ -7,23 +7,72 @@
   <div><dt>{{t $L "ui.fact.owners"}}</dt><dd>{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}</dd></div>
   <div><dt>{{t $L "ui.fact.slack"}}</dt><dd>{{if .Service.SlackChannel}}{{.Service.SlackChannel}}{{else}}—{{end}}</dd></div>
   <div><dt>{{t $L "ui.fact.exposure"}}</dt><dd>{{.Service.Exposure}}</dd></div>
-  <div><dt>{{t $L "ui.fact.repositories"}}</dt><dd>{{range .Service.Repositories}}<div>{{.Repo}} <span class="meta">→ {{join .Projects ", "}}</span></div>{{end}}</dd></div>
+  <div><dt>{{t $L "ui.fact.repositories"}}</dt><dd>{{range .Service.Repositories}}<div><a href="?repository={{.Repo}}">{{.Repo}}</a> <span class="meta">→ {{join .Projects ", "}}</span></div>{{end}}</dd></div>
 </dl>
 {{else}}
 <p class="muted">{{t $L "ui.unmapped"}}</p>
 {{end}}
 
+{{if .Projects}}
+<h2>{{t $L "ui.projects_branches"}}</h2>
+<div class="scroll">
+<table class="compact">
+  <thead><tr><th>{{t $L "ui.col.project"}}</th><th>{{t $L "ui.filter.environment"}}</th><th>{{t $L "ui.filter.branch"}}</th><th>{{t $L "ui.col.commit"}}</th><th>{{t $L "ui.col.last_bom"}}</th><th>{{t $L "ui.col.source"}}</th></tr></thead>
+  <tbody>
+  {{range .Projects}}
+  <tr>
+    <td>{{.Project}}{{if .Repository}}<div class="meta">{{.Repository}}</div>{{end}}</td>
+    <td><a href="?environment={{.Environment}}">{{.Environment}}</a></td>
+    <td>{{if .Branch}}<a href="?branch={{.Branch}}"><code>{{.Branch}}</code></a>{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{if .Commit}}<code>{{short .Commit}}</code>{{else}}<span class="muted">—</span>{{end}}</td>
+    <td class="nowrap">{{if .LastBOMAt}}{{ts .LastBOMAt}}{{else}}<span class="muted">{{t $L "ui.never"}}</span>{{end}}</td>
+    <td>{{sourceLabel $L .Source}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}
+
 <h2>{{t $L "ui.by_env"}}</h2>
-<p class="muted">{{if .Gaps}}{{t $L "ui.env_summary_gaps" .Open .Gaps}}{{else}}{{t $L "ui.env_summary" .Open}}{{end}}</p>
+<form class="filter-panel" method="get" action="/services/{{pathEscape .Name}}">
+  <div class="filter-grid">
+    <label class="wide"><span>{{t $L "ui.filter.q"}}</span><input class="text" type="search" name="q" value="{{.F.Query}}" placeholder="CVE-2021-44228, log4j, openssl"></label>
+    <label><span>{{t $L "ui.filter.severity"}}</span>
+      <select name="severity"><option value="">{{t $L "ui.filter.any"}}</option>
+        {{range .Severities}}<option value="{{.}}" {{if eq . $.F.Severity}}selected{{end}}>{{.}}</option>{{end}}
+      </select></label>
+    <label><span>{{t $L "ui.filter.environment"}}</span>
+      <select name="environment"><option value="">{{t $L "ui.filter.any"}}</option>
+        {{range .EnvOpts}}<option value="{{.}}" {{if eq . $.F.Environment}}selected{{end}}>{{.}}</option>{{end}}
+      </select></label>
+    <label><span>{{t $L "ui.filter.branch"}}</span>
+      <select name="branch"><option value="">{{t $L "ui.filter.any"}}</option>
+        {{range .BranchOpts}}<option value="{{.}}" {{if eq . $.F.Branch}}selected{{end}}>{{.}}</option>{{end}}
+      </select></label>
+    {{if .RepoOpts}}<label><span>{{t $L "ui.filter.repository"}}</span>
+      <select name="repository"><option value="">{{t $L "ui.filter.any"}}</option>
+        {{range .RepoOpts}}<option value="{{.}}" {{if eq . $.F.Repository}}selected{{end}}>{{.}}</option>{{end}}
+      </select></label>{{end}}
+  </div>
+  <div class="filter-actions">
+    <label class="toggle"><input type="checkbox" name="open" value="1" {{if .F.Open}}checked{{end}}><span>{{t $L "ui.filter.open_only"}}</span></label>
+    <span class="spacer"></span>
+    {{if .Filtered}}<a class="btn ghost" href="/services/{{pathEscape .Name}}">{{t $L "ui.filter.reset"}}</a>{{end}}
+    <button class="btn primary" type="submit">{{t $L "ui.filter.apply"}}</button>
+  </div>
+</form>
+
+<p class="muted">{{if .Filtered}}{{t $L "ui.service_filtered" .Shown}} · <a href="{{.ListURL}}">{{t $L "ui.open_in_list"}}</a>{{else if .Gaps}}{{t $L "ui.env_summary_gaps" .Open .Gaps}}{{else}}{{t $L "ui.env_summary" .Open}}{{end}}</p>
 {{if .Rows}}
 <div class="scroll">
 <table>
-  <thead><tr><th>{{t $L "ui.col.severity"}}</th><th>{{t $L "ui.col.vulnerability"}}</th><th>{{t $L "ui.col.component"}}</th>{{range .Envs}}<th>{{.}}</th>{{end}}</tr></thead>
+  <thead><tr><th>{{t $L "ui.col.severity"}}</th><th>{{t $L "ui.col.vulnerability"}}</th><th>{{t $L "ui.col.component"}}</th>{{range .Envs}}<th>{{.}}{{with index $.EnvBranches .}}<div class="meta branch">{{join . ", "}}</div>{{end}}</th>{{end}}</tr></thead>
   <tbody>
   {{range $row := .Rows}}
   <tr {{if $row.Gap}}class="gap"{{end}}>
     <td><span class="pill {{sevClass $row.Severity}}">{{$row.Severity}}</span></td>
-    <td>{{$row.VulnID}}</td>
+    <td><a href="/vulnerabilities/{{pathEscape $row.VulnID}}">{{$row.VulnID}}</a></td>
     <td><code>{{$row.Component}}</code></td>
     {{range $.Envs}}{{$c := cell $row.Cells .}}
     <td>{{if $c}}<a class="state {{stateClass $c.State}}" href="/findings/{{$c.ID}}">{{stateLabel $L $c.State}}</a><div class="meta">{{$c.ComponentVersion}}</div>{{else}}<span class="muted">—</span>{{end}}</td>
@@ -33,5 +82,6 @@
   </tbody>
 </table>
 </div>
+{{else if .Filtered}}<p class="empty">{{t $L "ui.empty.findings"}}</p>
 {{else}}<p class="empty">{{t $L "ui.empty.service"}}</p>{{end}}
 {{end}}

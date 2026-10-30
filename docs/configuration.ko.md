@@ -15,7 +15,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | Overview: 열린 Finding, 서비스 × 심각도, 조치 필요 건, 최근 해결, MTTR | `/` |
 | Finding 목록: 빠른 필터(열림, 기한 초과, 7일 내 기한, 열린 critical, 검증대기)와 서비스·환경·상태·심각도 필터 | `/findings` |
 | Finding 상세: 정보, 수정 PR, 근거 타임라인 | `/findings/{id}` |
-| 서비스: 담당자, 저장소, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조) | `/services/{name}` |
+| 서비스: 담당자, 저장소, 프로젝트별 브랜치·커밋, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조). 검색, 심각도, 환경, 브랜치, 저장소로 필터 | `/services/{name}` |
 | Integrations: DT 프로젝트별 마지막 BOM·커밋, BOM이 없는 인벤토리 프로젝트, 실패한 Webhook·알림 | `/integrations` |
 | 구성요소: 패키지 사용처 검색, 취약점 영향 분석 | `/components`, `/vulnerabilities/{id}` |
 | 승인: 대기 중인 위험 수용·기한 연장 요청, 최근 결정(`exceptions.request` 또는 `exceptions.approve`) | `/approvals` |
@@ -33,7 +33,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `POST` | `/webhooks/dependency-track` | Dependency-Track Outbound Webhook(`?token=` 또는 `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` Webhook(HMAC 서명 또는 토큰) |
 | `POST` | `/ingest/sbom` | CycloneDX(JSON·XML)·SPDX(JSON) SBOM 업로드, 자체 탐지([가이드](integrations/native-detection.ko.md)). Webhook 토큰으로 인증 |
-| `GET` | `/api/v1/findings` | 서비스 담당자와 처리 담당자를 포함한 Finding 목록. 필터 `service`, `environment`, `state`, `assignee`, `limit` |
+| `GET` | `/api/v1/findings` | 서비스 담당자와 처리 담당자를 포함한 Finding 목록. 필터: `q`(취약점 ID·별칭, 구성요소, 제목), `service`, `environment`, `branch`(그 Finding을 보고한 최신 SBOM의 브랜치·태그: `main`, `v1.4.0`), `repository`, `severity`(실효 심각도), `state`, `assignee`, `open=1`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Finding에 연결된 PR |
 | `GET` | `/api/v1/components` | 저장된 SBOM에서 패키지 사용처 검색. `q`, `ecosystem`, `version`(예: `<2.17.0`), `limit` |

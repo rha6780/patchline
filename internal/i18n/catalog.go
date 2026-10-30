@@ -481,6 +481,14 @@ var en = map[string]string{
 	"ui.err.token_name":       "Give the token a name (up to 100 characters).",
 	"ui.err.token_perms":      "Pick at least one permission.",
 	"ui.err.token_revoked":    "That token was already revoked.",
+
+	// Search, branch and repository filters
+	"ui.filter.q":          "Search",
+	"ui.filter.branch":     "Branch",
+	"ui.filter.repository": "Repository",
+	"ui.projects_branches": "Projects and branches",
+	"ui.service_filtered":  "%d findings match",
+	"ui.open_in_list":      "open in the findings list →",
 }
 
 var ko = map[string]string{
@@ -954,4 +962,12 @@ var ko = map[string]string{
 	"ui.err.token_name":       "토큰 이름을 입력하세요(최대 100자).",
 	"ui.err.token_perms":      "권한을 하나 이상 선택하세요.",
 	"ui.err.token_revoked":    "이미 폐기된 토큰입니다.",
+
+	// Search, branch and repository filters
+	"ui.filter.q":          "검색",
+	"ui.filter.branch":     "브랜치",
+	"ui.filter.repository": "저장소",
+	"ui.projects_branches": "프로젝트와 브랜치",
+	"ui.service_filtered":  "조건에 맞는 Finding %d건",
+	"ui.open_in_list":      "Finding 목록에서 보기 →",
 }

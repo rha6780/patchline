@@ -49,6 +49,8 @@ type Store interface {
 	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
 	FindingSightings(ctx context.Context, findingID int64) ([]store.Sighting, error)
 	FindingFacets(ctx context.Context) (services, environments []string, err error)
+	Branches(ctx context.Context) ([]string, error)
+	ServiceProjects(ctx context.Context, service string) ([]store.ProjectRef, error)
 	ListSourceProjects(ctx context.Context) ([]store.SourceProjectStatus, error)
 	ListInboxProblems(ctx context.Context, limit int) ([]store.InboxProblem, error)
 	ListNotificationProblems(ctx context.Context, limit int) ([]store.NotificationProblem, error)
@@ -346,7 +348,7 @@ func (u *UI) overview(w http.ResponseWriter, r *http.Request) {
 // ---- findings list ----------------------------------------------------
 
 // filterParams are the query parameters the findings page understands.
-var filterParams = []string{"service", "environment", "severity", "state", "due", "assignee", "open"}
+var filterParams = []string{"q", "service", "environment", "branch", "repository", "severity", "state", "due", "assignee", "open"}
 
 type preset struct {
 	Key    string // i18n key
@@ -384,6 +386,7 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 	f := store.FindingFilter{
 		Service: q.Get("service"), Environment: q.Get("environment"),
 		State: q.Get("state"), Severity: q.Get("severity"), Assignee: q.Get("assignee"), Open: q.Get("open") == "1", Limit: 500,
+		Query: q.Get("q"), Branch: q.Get("branch"), Repository: q.Get("repository"),
 	}
 	due := q.Get("due")
 	switch due {
@@ -401,6 +404,11 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	services, envs, err := u.o.Store.FindingFacets(r.Context())
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	branches, err := u.o.Store.Branches(r.Context())
 	if err != nil {
 		u.fail(w, err)
 		return
@@ -455,7 +463,7 @@ func (u *UI) findings(w http.ResponseWriter, r *http.Request) {
 	u.render(w, r, "findings", "ui.findings", map[string]any{
 		"Findings": list, "Filter": f, "Severities": severities, "States": states, "Due": due,
 		"Now": store.FormatTime(u.o.Now()), "Presets": presets, "Active": active,
-		"Services": services, "Environments": envs,
+		"Services": services, "Environments": envs, "Branches": branches,
 	})
 }
 
@@ -557,15 +565,46 @@ type envRow struct {
 
 func (u *UI) service(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	list, err := u.o.Store.ListFindings(r.Context(), store.FindingFilter{Service: name, Limit: 10000})
+	q := r.URL.Query()
+	filter := store.FindingFilter{Service: name, Severity: q.Get("severity"), Environment: q.Get("environment"),
+		Branch: q.Get("branch"), Repository: q.Get("repository"), Query: strings.TrimSpace(q.Get("q")),
+		Open: q.Get("open") == "1", Limit: 10000}
+	filtered := filter != store.FindingFilter{Service: name, Limit: 10000}
+	list, err := u.o.Store.ListFindings(r.Context(), filter)
 	if err != nil {
 		u.fail(w, err)
 		return
 	}
 	svc, registered := u.o.Inventory.Service(name)
-	if !registered && len(list) == 0 {
+	projects, err := u.o.Store.ServiceProjects(r.Context(), name)
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	if !registered && len(list) == 0 && len(projects) == 0 && !filtered {
 		http.NotFound(w, r)
 		return
+	}
+
+	// Filter menus: what the service has, whatever is filtered now.
+	envOpts, branchOpts, repoOpts := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	envBranches := map[string][]string{}
+	for _, p := range projects {
+		envOpts[p.Environment] = true
+		if p.Branch != "" {
+			branchOpts[p.Branch] = true
+			if !slices.Contains(envBranches[p.Environment], p.Branch) {
+				envBranches[p.Environment] = append(envBranches[p.Environment], p.Branch)
+			}
+		}
+		if p.Repository != "" {
+			repoOpts[p.Repository] = true
+		}
+	}
+	if svc != nil {
+		for _, repo := range svc.Repositories {
+			repoOpts[repo.Repo] = true
+		}
 	}
 
 	envSet := map[string]bool{}
@@ -614,9 +653,19 @@ func (u *UI) service(w http.ResponseWriter, r *http.Request) {
 			gaps++
 		}
 	}
+	// The same filters on the findings list.
+	listQuery := url.Values{"service": {name}}
+	for _, k := range []string{"q", "severity", "environment", "branch", "repository", "open"} {
+		if v := q.Get(k); v != "" {
+			listQuery.Set(k, v)
+		}
+	}
 	u.render(w, r, "service", name, map[string]any{
 		"Name": name, "Service": svc, "Registered": registered, "Envs": envs, "Rows": table,
-		"Open": open, "Gaps": gaps,
+		"Open": open, "Gaps": gaps, "Projects": projects, "EnvBranches": envBranches,
+		"F": filter, "Filtered": filtered, "Severities": severities, "ListURL": findingsURL(canonical(listQuery)),
+		"EnvOpts": sortedKeys(envOpts), "BranchOpts": sortedKeys(branchOpts), "RepoOpts": sortedKeys(repoOpts),
+		"Shown": len(list),
 	})
 }
 
@@ -868,6 +917,15 @@ func humanDuration(l i18n.Lang, d time.Duration) string {
 	default:
 		return l.T("ui.mttr.minutes", int(d.Minutes()))
 	}
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func dateOnly(s string) string {

@@ -416,8 +416,16 @@ type FindingFilter struct {
 	Service     string
 	Environment string
 	State       string
-	Severity    string
-	Assignee    string
+	// Severity is the effective severity (what pages show).
+	Severity   string
+	Assignee   string
+	Repository string
+	// Branch keeps findings reported by a source project whose latest SBOM
+	// came from that branch or tag ("main", "refs/heads/main", "v1.4.0").
+	Branch string
+	// Query searches the vulnerability id and aliases, the component and
+	// the title (case-insensitive).
+	Query string
 	// Open limits the result to findings that still need action.
 	Open bool
 	// DueBefore limits the result to open findings due before this time.
@@ -430,8 +438,9 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 	var where []string
 	var args []any
 	for _, c := range []struct{ col, v string }{
-		{"service", f.Service}, {"environment", f.Environment}, {"state", f.State}, {"severity", f.Severity},
-		{"assignee", f.Assignee},
+		{"service", f.Service}, {"environment", f.Environment}, {"state", f.State},
+		{"COALESCE(NULLIF(effective_severity, ''), severity)", f.Severity},
+		{"assignee", f.Assignee}, {"repository", f.Repository},
 	} {
 		if c.v != "" {
 			where = append(where, c.col+" = ?")
@@ -440,6 +449,19 @@ func (s *Store) ListFindings(ctx context.Context, f FindingFilter) ([]Finding, e
 	}
 	if f.Open || f.DueBefore != "" {
 		where = append(where, "state NOT IN ('resolved', 'not_affected', 'risk_accepted')")
+	}
+	if b := strings.TrimSpace(f.Branch); b != "" {
+		where = append(where, `EXISTS (SELECT 1 FROM finding_sightings g JOIN source_projects p
+			ON p.source = g.source AND p.project_id = g.project_id
+			WHERE g.finding_id = findings.id AND p.last_ref IN (?, ?, ?))`)
+		args = append(args, b, "refs/heads/"+b, "refs/tags/"+b)
+	}
+	if t := strings.TrimSpace(f.Query); t != "" {
+		like := "%" + escapeLike(strings.ToLower(t)) + "%"
+		where = append(where, `(lower(vuln_id) LIKE ? ESCAPE '\' OR lower(aliases) LIKE ? ESCAPE '\'
+			OR lower(component_purl) LIKE ? ESCAPE '\' OR lower(component_name) LIKE ? ESCAPE '\'
+			OR lower(title) LIKE ? ESCAPE '\')`)
+		args = append(args, like, like, like, like, like)
 	}
 	if f.DueBefore != "" {
 		where = append(where, "due_at IS NOT NULL AND due_at < ?")

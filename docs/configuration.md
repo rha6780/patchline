@@ -15,7 +15,7 @@ The header switches between English and Korean and between system, light and dar
 | Overview: open findings, service × severity, needs attention, recently resolved, MTTR | `/` |
 | Findings with quick filters (open, overdue, due within 7 days, open critical, awaiting verification) and filters by service, environment, state and severity | `/findings` |
 | Finding: facts, fix pull requests, evidence timeline | `/findings/{id}` |
-| Service: owners, repositories, findings per environment (highlights fixed-on-`main`-but-open-in-`prod`) | `/services/{name}` |
+| Service: owners, repositories, projects with their branch and commit, findings per environment (highlights fixed-on-`main`-but-open-in-`prod`), filtered by search, severity, environment, branch and repository | `/services/{name}` |
 | Integrations: Dependency-Track projects with last BOM and commit, inventory projects without a BOM, failed webhooks and notifications | `/integrations` |
 | Components: where packages are used, and what a vulnerability affects | `/components`, `/vulnerabilities/{id}` |
 | Approvals: pending risk acceptances and due date extensions, recent decisions (`exceptions.request` or `exceptions.approve`) | `/approvals` |
@@ -33,7 +33,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `POST` | `/webhooks/dependency-track` | Dependency-Track outbound webhook (`?token=` or `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` webhook (HMAC signature, or the token) |
 | `POST` | `/ingest/sbom` | CycloneDX (JSON or XML) or SPDX (JSON) SBOM upload for built-in detection ([guide](integrations/native-detection.md)). Authenticated with the webhook token |
-| `GET` | `/api/v1/findings` | Findings with owners and assignee; filters `service`, `environment`, `state`, `assignee`, `limit` |
+| `GET` | `/api/v1/findings` | Findings with owners and assignee. Filters: `q` (vulnerability id or alias, component, title), `service`, `environment`, `branch` (of the latest SBOM that reports it: `main`, `v1.4.0`), `repository`, `severity` (effective), `state`, `assignee`, `open=1`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
 | `GET` | `/api/v1/components` | Where packages are used in the stored SBOMs. `q`, `ecosystem`, `version` (e.g. `<2.17.0`), `limit` |
