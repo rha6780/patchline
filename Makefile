@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMPOSE  = docker compose -f deploy/compose/docker-compose.yml
 SELF     = docker compose --project-directory deploy/self-hosted -f deploy/self-hosted/docker-compose.yml
 
-.PHONY: build run test vet fmt tidy docker demo-up demo-seed demo-down demo-logs up down logs
+.PHONY: build run test vet fmt tidy docker demo-up demo-seed demo-seed-dt demo-down demo-logs up down logs
 
 build:
 	go build -trimpath -ldflags "-X main.version=$(VERSION)" -o bin/patchline ./cmd/patchline
@@ -25,15 +25,20 @@ tidy:
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t patchline:$(VERSION) .
 
+# Demo: Patchline + Trivy; PROFILE=dependency-track adds Dependency-Track.
 demo-up:
-	$(COMPOSE) up -d --build
+	$(COMPOSE) $(foreach p,$(PROFILE),--profile $(p)) up -d --build
 
-# Wires Dependency-Track to Patchline and uploads the sample SBOM (needs curl, jq).
+# Uploads the sample SBOMs to Patchline (needs curl, jq).
 demo-seed:
 	sh deploy/compose/seed.sh
 
+# Wires Dependency-Track to Patchline and uploads the sample SBOM there.
+demo-seed-dt:
+	sh deploy/compose/seed.sh dt
+
 demo-down:
-	$(COMPOSE) down
+	$(COMPOSE) --profile dependency-track down
 
 demo-logs:
 	$(COMPOSE) logs -f patchline

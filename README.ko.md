@@ -31,14 +31,14 @@ Renovate ── 수정 PR ──▶ Gitea / Forgejo / GitHub ─ webhook ┘   �
 
 ## 시작하기
 
-Dependency-Track까지 포함한 전체 흐름을 로컬에서 돌려 볼 수 있습니다(메모리 8 GB 이상을 할당한 Docker 필요).
+로컬에서 1분 정도면 돌려 볼 수 있습니다(Docker, `curl`, `jq` 필요).
 
 ```sh
-cp deploy/compose/.env.example deploy/compose/.env
-make demo-up
+make demo-up      # Patchline + Trivy 서버
+make demo-seed    # 샘플 SBOM 업로드, Patchline이 OSV와 Trivy로 대조
 ```
 
-이어서 [deploy/compose/README.md](deploy/compose/README.md)를 따라 API 키를 만들고, Dependency-Track이 Patchline으로 알림을 보내도록 설정하고, 샘플 SBOM을 올립니다. 데모 포트는 Patchline `18080`, Dependency-Track API `18081`, UI `18082`입니다.
+http://localhost:18080에 접속하세요. [deploy/compose/README.md](deploy/compose/README.md)에 둘러볼 곳, 수정 후 해결되는 과정, Dependency-Track 추가 방법(`make demo-up PROFILE=dependency-track && make demo-seed-dt`)이 있습니다.
 
 서버나 로컬 PC에 설치하려면 [deploy/self-hosted](deploy/self-hosted/README.ko.md)를 쓰세요. 이미 있는 Dependency-Track에 연결하거나 둘을 함께 띄울 수 있고, 인벤토리와 설정은 `.env`로 지정합니다.
 

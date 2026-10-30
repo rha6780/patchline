@@ -12,7 +12,7 @@ Thanks for your interest in Patchline. Bug reports, documentation fixes and pull
 
 ## Development setup
 
-You need Go (the version in [`go.mod`](go.mod)) and, for the demo, Docker with at least 8 GB of memory.
+You need Go (the version in [`go.mod`](go.mod)) and, for the demo, Docker (8 GB of memory with the optional Dependency-Track).
 
 ```sh
 git clone https://github.com/rha6780/patchline.git
@@ -21,7 +21,7 @@ make build && ./bin/patchline    # :8080, no setup needed
 make test
 ```
 
-For an end-to-end run with Dependency-Track, use the [compose demo](deploy/compose/README.md) (`make demo-up`).
+For an end-to-end run, use the [compose demo](deploy/compose/README.md) (`make demo-up && make demo-seed`; `PROFILE=dependency-track` and `make demo-seed-dt` add Dependency-Track).
 
 | Command | |
 |---|---|
@@ -31,7 +31,7 @@ For an end-to-end run with Dependency-Track, use the [compose demo](deploy/compo
 | `make vet` | `go vet ./...` |
 | `make fmt` | `gofmt -w .` |
 | `make docker` | Build the container image |
-| `make demo-up` / `demo-down` / `demo-logs` | Compose demo |
+| `make demo-up` / `demo-seed` / `demo-seed-dt` / `demo-down` / `demo-logs` | Compose demo |
 
 ## Pull requests
 

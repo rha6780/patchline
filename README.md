@@ -31,14 +31,14 @@ Vulnerabilities come from Dependency-Track, from Patchline's own matching of upl
 
 ## Getting started
 
-Try the whole flow locally with Dependency-Track (Docker with at least 8 GB of memory):
+Try it locally in about a minute (Docker, `curl`, `jq`):
 
 ```sh
-cp deploy/compose/.env.example deploy/compose/.env
-make demo-up
+make demo-up      # Patchline + a Trivy server
+make demo-seed    # uploads sample SBOMs; Patchline matches them against OSV and Trivy
 ```
 
-Then follow [deploy/compose/README.md](deploy/compose/README.md) to create the API key, point Dependency-Track at Patchline and upload a sample SBOM. Demo ports: Patchline `18080`, Dependency-Track API `18081`, UI `18082`.
+Open http://localhost:18080. [deploy/compose/README.md](deploy/compose/README.md) walks through the findings, component search, a fix that resolves, and adding Dependency-Track (`make demo-up PROFILE=dependency-track && make demo-seed-dt`).
 
 To run it on a server or your own machine, use [deploy/self-hosted](deploy/self-hosted/README.md): Patchline with your existing Dependency-Track, or both together, with your inventory and settings in `.env`.
 

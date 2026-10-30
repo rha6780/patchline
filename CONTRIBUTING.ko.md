@@ -12,7 +12,7 @@ Patchline에 관심 가져 주셔서 고맙습니다. 버그 제보, 문서 수�
 
 ## 개발 환경
 
-Go([`go.mod`](go.mod)에 적힌 버전)가 필요하고, 데모를 돌리려면 메모리 8 GB 이상을 할당한 Docker가 필요합니다.
+Go([`go.mod`](go.mod)에 적힌 버전)가 필요하고, 데모를 돌리려면 Docker가 필요합니다(선택 사항인 Dependency-Track까지 띄우면 메모리 8 GB 이상).
 
 ```sh
 git clone https://github.com/rha6780/patchline.git
@@ -21,7 +21,7 @@ make build && ./bin/patchline    # :8080, 별도 설정 없이 실행
 make test
 ```
 
-Dependency-Track까지 포함한 전체 흐름은 [Compose 데모](deploy/compose/README.md)(`make demo-up`)로 확인할 수 있습니다.
+전체 흐름은 [Compose 데모](deploy/compose/README.md)(`make demo-up && make demo-seed`)로 확인할 수 있습니다. `PROFILE=dependency-track`과 `make demo-seed-dt`로 Dependency-Track을 추가합니다.
 
 | 명령 | |
 |---|---|
@@ -31,7 +31,7 @@ Dependency-Track까지 포함한 전체 흐름은 [Compose 데모](deploy/compos
 | `make vet` | `go vet ./...` |
 | `make fmt` | `gofmt -w .` |
 | `make docker` | 컨테이너 이미지 빌드 |
-| `make demo-up` / `demo-down` / `demo-logs` | Compose 데모 |
+| `make demo-up` / `demo-seed` / `demo-seed-dt` / `demo-down` / `demo-logs` | Compose 데모 |
 
 ## Pull Request
 
