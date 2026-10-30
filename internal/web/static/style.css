@@ -32,6 +32,10 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
   font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+/* A column at least as tall as the window: on short pages the main area
+   grows and the footer stays at the bottom (dvh follows mobile toolbars). */
+body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.top { flex-shrink: 0; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
@@ -50,8 +54,8 @@ code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: va
 nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 nav a { color: var(--muted); padding: 4px 0; border-bottom: 2px solid transparent; }
 nav a[aria-current="page"] { color: var(--text); border-color: var(--accent-strong); }
-main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
-footer.site { margin-top: 24px; background: var(--surface); border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+main { max-width: 1180px; width: 100%; margin: 0 auto; padding: 24px 16px 48px; flex: 1 0 auto; }
+footer.site { flex-shrink: 0; margin-top: 24px; background: var(--surface); border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 .foot { max-width: 1180px; margin: 0 auto; padding: 28px 16px 8px; display: grid; gap: 24px 32px;
   grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)); }
 .foot-about p { margin: 8px 0 0; max-width: 40ch; }
