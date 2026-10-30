@@ -210,3 +210,6 @@ table.compact td:first-child code { white-space: nowrap; overflow-wrap: normal; 
   background: var(--surface-2); color: var(--text); }
 .filter-grid input.text:focus { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 .decision-note { grid-column: 1 / -1; margin: 0; }
+.scroll.spaced { margin-top: 12px; }
+fieldset.plain { border: 0; padding: 0; margin: 0; gap: 12px; }
+fieldset.plain legend { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; padding: 0; margin-bottom: 4px; }

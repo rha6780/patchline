@@ -37,6 +37,49 @@
 <p class="note">{{t $L "ui.secret.warning"}}</p>
 {{end}}
 
+{{if can $P "tokens.manage"}}
+<h2 id="tokens">{{t $L "ui.tokens"}}</h2>
+<p class="lead">{{t $L "ui.tokens_lead"}}</p>
+{{if .NewToken}}
+<div class="request">
+  <strong>{{t $L "ui.generated_once"}}</strong>
+  <div class="secret">{{.NewToken}}</div>
+  <p class="meta">{{t $L "ui.token_use"}}</p>
+</div>
+{{end}}
+<form class="card form" method="post" action="/settings/tokens">
+  <input type="hidden" name="csrf" value="{{$P.CSRF}}">
+  <label><span>{{t $L "ui.token_name"}}</span><input type="text" name="name" maxlength="100" required placeholder="gitea-ci-storefront"></label>
+  <fieldset class="row plain"><legend>{{t $L "ui.token_perms"}}</legend>
+    {{range .TokenPermissions}}<label class="toggle"><input type="checkbox" name="perm.{{.}}" value="1"><span><code>{{.}}</code> {{t $L (print "perm." .)}}</span></label>{{end}}
+  </fieldset>
+  <label><span>{{t $L "ui.token_expiry"}}</span><select name="days">
+    <option value="90">{{t $L "ui.days" 90}}</option><option value="30">{{t $L "ui.days" 30}}</option>
+    <option value="365">{{t $L "ui.days" 365}}</option><option value="0">{{t $L "ui.never"}}</option>
+  </select></label>
+  <div class="row"><button class="btn primary" type="submit">{{t $L "ui.token_create"}}</button></div>
+</form>
+{{if .Tokens}}
+<div class="scroll spaced">
+<table class="compact">
+  <thead><tr><th>{{t $L "ui.token_name"}}</th><th>{{t $L "ui.token_perms"}}</th><th>{{t $L "ui.col.by"}}</th><th>{{t $L "ui.token_last_used"}}</th><th>{{t $L "ui.token_expiry"}}</th><th></th></tr></thead>
+  <tbody>
+  {{range .Tokens}}
+  <tr>
+    <td>{{.Name}}<div class="meta"><code>{{.Prefix}}…</code></div></td>
+    <td>{{range .Permissions}}<code>{{.}}</code> {{end}}</td>
+    <td>{{or .CreatedByName .CreatedBy}}<div class="meta">{{ts .CreatedAt}}</div></td>
+    <td class="nowrap">{{if .LastUsedAt}}{{ts (deref .LastUsedAt)}}{{else}}<span class="muted">{{t $L "ui.never"}}</span>{{end}}</td>
+    <td class="nowrap">{{if .RevokedAt}}<span class="tag warn">{{t $L "ui.token_revoked_tag"}}</span>{{else if .ExpiresAt}}{{if lt (deref .ExpiresAt) $.Now}}<span class="tag warn">{{t $L "ui.token_expired"}}</span>{{else}}{{day (deref .ExpiresAt)}}{{end}}{{else}}{{t $L "ui.never"}}{{end}}</td>
+    <td>{{if not .RevokedAt}}<form method="post" action="/settings/tokens/{{.ID}}/revoke"><input type="hidden" name="csrf" value="{{$P.CSRF}}"><button class="btn danger small" type="submit">{{t $L "ui.token_revoke"}}</button></form>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}
+{{end}}
+
 {{if .Audit}}
 <h2>{{t $L "ui.audit"}}</h2>
 <div class="scroll">

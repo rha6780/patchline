@@ -15,6 +15,8 @@
 | `exceptions.approve` | 다른 사람의 요청 승인·반려 |
 | `settings.webhooks` | Webhook 토큰과 Git Webhook Secret 확인(일부만 표시)·교체 |
 | `audit.read` | 감사 로그 확인 |
+| `tokens.manage` | API 토큰 생성·폐기 |
+| `sbom.upload` | `/ingest/sbom`에 SBOM 업로드(API 토큰용) |
 | `*` | 위 전부 |
 
 Webhook(`/webhooks/*`)과 헬스체크에는 로그인이 필요 없습니다. 각자의 비밀값으로 인증합니다.
@@ -152,6 +154,24 @@ users:                                 # 이메일 또는 subject
 - 저장한 값은 초기화하기 전까지 환경변수 대신 쓰입니다.
 - 값은 Patchline DB에 저장되므로 DB 파일과 백업에 대한 접근을 제한하세요.
 - 화면에는 저장된 값의 마지막 몇 글자만 표시합니다.
+
+### API 토큰
+
+도구는 세션 대신 API 토큰을 씁니다. 예를 들어 SBOM을 올리는 CI, VEX를 가져가는 스캐너, Finding을 읽는 스크립트입니다. `tokens.manage` 권한이 있으면 **설정 → API 토큰**에서 만듭니다.
+
+| | |
+|---|---|
+| 권한 | `findings.read`(조회 API: Finding, 구성요소, 영향 분석, VEX)와 `sbom.upload`(`/ingest/sbom`) 중 선택. 변경 권한은 토큰에 줄 수 없음 |
+| 만료 | 30일, 90일, 365일 또는 만료 없음 |
+| 값 | `plt_…`. 한 번만 표시하고, Patchline에는 SHA-256만 저장 |
+| 범위 | `/api/*`와 `/ingest/sbom`. 토큰으로 웹 UI는 열 수 없음 |
+| 폐기 | 언제든 가능. 생성·폐기는 감사 로그에 남고, 목록에서 마지막 사용 시각을 볼 수 있음 |
+
+```sh
+curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main"
+```
+
+`/ingest/sbom`에는 공유 Webhook 토큰 대신 `sbom.upload` 권한의 토큰을 쓸 수 있습니다. 파이프라인마다 토큰을 따로 주고 따로 폐기할 수 있습니다.
 
 ### 감사 로그
 

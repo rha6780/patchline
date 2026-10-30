@@ -460,6 +460,27 @@ var en = map[string]string{
 	"just.protected_by_mitigating_control": "Protected by a mitigating control",
 	"ui.err.justification":                 "Pick a justification.",
 	"ui.vex":                               "VEX",
+
+	// API tokens
+	"ui.tokens":               "API tokens",
+	"ui.tokens_lead":          "For tools: CI uploading SBOMs, scanners fetching VEX and findings. A token works on /api and /ingest/sbom only, never in the web UI.",
+	"ui.token_use":            "Send it as \"Authorization: Bearer <token>\". Store it in your CI's secrets.",
+	"ui.token_name":           "Name",
+	"ui.token_perms":          "Permissions",
+	"perm.findings.read":      "read findings, components, impact and VEX",
+	"perm.sbom.upload":        "upload SBOMs to /ingest/sbom",
+	"ui.token_expiry":         "Expires",
+	"ui.days":                 "in %d days",
+	"ui.token_create":         "Create token",
+	"ui.token_last_used":      "Last used",
+	"ui.token_revoked_tag":    "revoked",
+	"ui.token_expired":        "expired",
+	"ui.token_revoke":         "Revoke",
+	"ui.notice.token_created": "Token created.",
+	"ui.notice.token_revoked": "Token revoked.",
+	"ui.err.token_name":       "Give the token a name (up to 100 characters).",
+	"ui.err.token_perms":      "Pick at least one permission.",
+	"ui.err.token_revoked":    "That token was already revoked.",
 }
 
 var ko = map[string]string{
@@ -912,4 +933,25 @@ var ko = map[string]string{
 	"just.protected_by_mitigating_control": "완화 통제로 보호",
 	"ui.err.justification":                 "근거를 선택하세요.",
 	"ui.vex":                               "VEX",
+
+	// API tokens
+	"ui.tokens":               "API 토큰",
+	"ui.tokens_lead":          "도구용입니다. CI의 SBOM 업로드, 스캐너의 VEX·Finding 조회에 씁니다. 토큰은 /api와 /ingest/sbom에서만 동작하고 웹 UI에서는 쓸 수 없습니다.",
+	"ui.token_use":            "\"Authorization: Bearer <토큰>\" 헤더로 보냅니다. CI의 Secret에 저장하세요.",
+	"ui.token_name":           "이름",
+	"ui.token_perms":          "권한",
+	"perm.findings.read":      "Finding·구성요소·영향 분석·VEX 조회",
+	"perm.sbom.upload":        "/ingest/sbom에 SBOM 업로드",
+	"ui.token_expiry":         "만료",
+	"ui.days":                 "%d일 후",
+	"ui.token_create":         "토큰 만들기",
+	"ui.token_last_used":      "마지막 사용",
+	"ui.token_revoked_tag":    "폐기됨",
+	"ui.token_expired":        "만료됨",
+	"ui.token_revoke":         "폐기",
+	"ui.notice.token_created": "토큰을 만들었습니다.",
+	"ui.notice.token_revoked": "토큰을 폐기했습니다.",
+	"ui.err.token_name":       "토큰 이름을 입력하세요(최대 100자).",
+	"ui.err.token_perms":      "권한을 하나 이상 선택하세요.",
+	"ui.err.token_revoked":    "이미 폐기된 토큰입니다.",
 }

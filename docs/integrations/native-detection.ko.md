@@ -48,7 +48,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 | `project` | Dependency-Track 프로젝트 이름과 똑같이 인벤토리에서 찾음(`dependency_track_projects`, 기본값: `repo`의 마지막 부분) |
 | `version` | 환경(예: `main`, `prod`) |
 | 커밋 | BOM metadata의 `patchline:git:commit` / `patchline:git:ref`([CI의 SBOM 생성](sbom-ci.ko.md)과 같음). SPDX는 `patchline:git:commit=<sha>` annotation |
-| 토큰 | `PATCHLINE_WEBHOOK_TOKEN` 또는 **설정 → Webhook**에서 지정한 값 |
+| 토큰 | `sbom.upload` 권한의 [API 토큰](../access-control.ko.md#api-토큰)(파이프라인마다 하나) 또는 공유 `PATCHLINE_WEBHOOK_TOKEN` |
 
 응답은 `202`와 `{"format": "CycloneDX", "components": 3, "without_purl": 0}`이고, 대조는 바로 이어서 실행됩니다.
 
@@ -89,7 +89,7 @@ Patchline만 보고한 Finding은 Patchline에서 판정합니다. 위험 수용
 프로젝트 버전마다 VEX를 내보냅니다. 최신 SBOM이 보고하는 모든 취약점과 그 판정이 들어갑니다.
 
 ```sh
-curl -sS "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" -b "patchline_session=…" > storefront-api.vex.json
+curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" > storefront-api.vex.json
 ```
 
 | Finding | VEX 분석 |

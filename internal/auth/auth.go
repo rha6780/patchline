@@ -63,6 +63,7 @@ type Store interface {
 	SaveAuthState(ctx context.Context, a store.AuthState) error
 	TakeAuthState(ctx context.Context, state string) (store.AuthState, error)
 	TimeFromNow(d time.Duration) string
+	TokenByHash(ctx context.Context, hash string) (store.APIToken, error)
 	LocalStore
 }
 
@@ -188,6 +189,23 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		}
 		if public(r.URL.Path) {
 			next.ServeHTTP(w, r)
+			return
+		}
+		if raw, ok := bearerToken(r); ok && strings.HasPrefix(r.URL.Path, "/api/") {
+			// Tools: an API token instead of a session, for the API only.
+			p, err := a.TokenPrincipal(r.Context(), raw)
+			if err != nil {
+				a.logger.Error("load api token", "err", err)
+				http.Error(w, "could not check the token", http.StatusInternalServerError)
+				return
+			}
+			if p == nil || !p.Can(FindingsRead) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":"invalid, expired or revoked token, or no findings.read"}` + "\n"))
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), p)))
 			return
 		}
 		p, err := a.principal(r)

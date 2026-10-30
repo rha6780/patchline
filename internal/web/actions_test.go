@@ -373,3 +373,39 @@ func TestLoginPages(t *testing.T) {
 		t.Fatalf("password page: %d", code)
 	}
 }
+
+func TestAPITokenSettings(t *testing.T) {
+	u, st, _ := writableUI(t, nil)
+	ctx := context.Background()
+	admin := person("ops", auth.TokensManage)
+	if rec := post(t, as(person("dev", auth.SettingsWebhooks), u), "/settings/tokens", url.Values{"name": {"ci"}, "perm.sbom.upload": {"1"}}); rec.Code != http.StatusForbidden {
+		t.Fatalf("without tokens.manage: %d", rec.Code)
+	}
+	if rec := post(t, as(admin, u), "/settings/tokens", url.Values{"name": {"ci"}}); !strings.Contains(location(rec), "error=token_perms") {
+		t.Fatalf("no permissions: %s", location(rec))
+	}
+	rec := post(t, as(admin, u), "/settings/tokens", url.Values{"name": {"gitea-ci"}, "perm.sbom.upload": {"1"}, "perm.tokens.manage": {"1"}, "days": {"30"}})
+	loc, _, _ := strings.Cut(location(rec), "#") // browsers do not send the fragment
+	if !strings.HasPrefix(loc, "/settings?notice=token_created&token=") {
+		t.Fatalf("create: %s", loc)
+	}
+	_, body := get(t, as(admin, u), loc)
+	raw := regexp.MustCompile(`plt_[A-Za-z0-9_-]{40,}`).FindString(body)
+	if raw == "" {
+		t.Fatal("token not shown")
+	}
+	if _, again := get(t, as(admin, u), loc); strings.Contains(again, raw) {
+		t.Fatal("token shown twice")
+	}
+	tokens, _ := st.ListTokens(ctx)
+	if len(tokens) != 1 || tokens[0].Name != "gitea-ci" || len(tokens[0].Permissions) != 1 || tokens[0].Permissions[0] != "sbom.upload" ||
+		tokens[0].ExpiresAt == nil || !strings.HasPrefix(raw, tokens[0].Prefix) {
+		t.Fatalf("stored = %+v (a token can only get tool permissions)", tokens)
+	}
+	if rec := post(t, as(admin, u), "/settings/tokens/"+itoa(tokens[0].ID)+"/revoke", url.Values{}); !strings.Contains(location(rec), "notice=token_revoked") {
+		t.Fatalf("revoke: %s", location(rec))
+	}
+	if _, body := get(t, as(admin, u), "/settings"); !strings.Contains(body, "revoked") {
+		t.Error("revoked token not marked")
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/sbom"
 )
@@ -28,7 +29,15 @@ func (h *handler) ingestSBOM(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load webhook settings")
 		return
 	}
-	if !h.authorized(r, token) {
+	// CI authenticates with the shared webhook token or an API token
+	// holding sbom.upload.
+	byToken, err := h.o.Auth.RequestAllows(r, auth.SBOMUpload)
+	if err != nil {
+		h.o.Logger.Error("check api token", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not check the token")
+		return
+	}
+	if !byToken && !h.authorized(r, token) {
 		writeError(w, http.StatusUnauthorized, "invalid or missing token")
 		return
 	}

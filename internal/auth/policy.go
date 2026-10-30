@@ -33,13 +33,21 @@ const (
 	SettingsWebhooks Permission = "settings.webhooks"
 	// AuditRead views the audit log.
 	AuditRead Permission = "audit.read"
+	// TokensManage creates and revokes API tokens.
+	TokensManage Permission = "tokens.manage"
+	// SBOMUpload uploads SBOMs to /ingest/sbom (for API tokens).
+	SBOMUpload Permission = "sbom.upload"
 
 	// All grants every permission.
 	All Permission = "*"
 )
 
 // Permissions lists every permission in display order.
-var Permissions = []Permission{FindingsRead, FindingsAssign, ExceptionsRequest, ExceptionsApprove, SettingsWebhooks, AuditRead}
+var Permissions = []Permission{FindingsRead, FindingsAssign, ExceptionsRequest, ExceptionsApprove, SettingsWebhooks, AuditRead, TokensManage, SBOMUpload}
+
+// TokenPermissions are the permissions an API token can hold: tools read
+// and upload; changes stay with people.
+var TokenPermissions = []Permission{FindingsRead, SBOMUpload}
 
 func known(p Permission) bool { return p == All || slices.Contains(Permissions, p) }
 

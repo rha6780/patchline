@@ -34,6 +34,9 @@ type Actions interface {
 	SettingUpdatedAt(ctx context.Context, key string) (string, error)
 	SetSetting(ctx context.Context, key, value string, by store.Actor) error
 	ListAudit(ctx context.Context, limit int) ([]store.AuditEntry, error)
+	CreateToken(ctx context.Context, t store.APIToken, hash string, by store.Actor) (int64, error)
+	ListTokens(ctx context.Context) ([]store.APIToken, error)
+	RevokeToken(ctx context.Context, id int64, by store.Actor) error
 }
 
 // AnalysisWriter records analysis decisions in Dependency-Track.
@@ -342,11 +345,23 @@ type secretRow struct {
 
 func (u *UI) settings(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
-	if !p.Can(auth.SettingsWebhooks) && !p.Can(auth.AuditRead) {
+	if !p.Can(auth.SettingsWebhooks) && !p.Can(auth.AuditRead) && !p.Can(auth.TokensManage) {
 		u.forbid(w, r)
 		return
 	}
 	data := map[string]any{}
+	if p.Can(auth.TokensManage) {
+		tokens, err := u.o.Actions.ListTokens(r.Context())
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		data["Tokens"], data["TokenPermissions"] = tokens, auth.TokenPermissions
+		data["Now"] = store.FormatTime(u.o.Now())
+		if kind, value, ok := generatedSecrets.take(r.URL.Query().Get("token")); ok && kind == "api-token" {
+			data["NewToken"] = value
+		}
+	}
 	if p.Can(auth.SettingsWebhooks) {
 		var rows []secretRow
 		for _, s := range []struct{ key, field, env, envValue string }{
@@ -436,6 +451,67 @@ func (u *UI) saveSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	back(w, r, "/settings", "notice", "saved")
+}
+
+// ---- API tokens -------------------------------------------------------
+
+// createToken issues an API token. Its value is shown once.
+func (u *UI) createToken(w http.ResponseWriter, r *http.Request) {
+	p := auth.FromContext(r.Context())
+	if !p.Can(auth.TokensManage) {
+		u.forbid(w, r)
+		return
+	}
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	if name == "" || len(name) > 100 {
+		back(w, r, "/settings", "error", "token_name")
+		return
+	}
+	var perms []string
+	for _, perm := range auth.TokenPermissions {
+		if r.PostFormValue("perm."+string(perm)) == "1" {
+			perms = append(perms, string(perm))
+		}
+	}
+	if len(perms) == 0 {
+		back(w, r, "/settings", "error", "token_perms")
+		return
+	}
+	t := store.APIToken{Name: name, Permissions: perms}
+	if days, err := strconv.Atoi(r.PostFormValue("days")); err == nil && days > 0 {
+		exp := store.FormatTime(u.o.Now().Add(time.Duration(days) * 24 * time.Hour))
+		t.ExpiresAt = &exp
+	}
+	raw, prefix, hash := auth.NewToken()
+	t.Prefix = prefix
+	if _, err := u.o.Actions.CreateToken(r.Context(), t, hash, p.Actor()); err != nil {
+		u.fail(w, err)
+		return
+	}
+	u.o.Logger.Info("api token created", "name", name, "permissions", perms, "by", p.Subject)
+	http.Redirect(w, r, "/settings?notice=token_created&token="+generatedSecrets.put("api-token", raw)+"#tokens", http.StatusSeeOther)
+}
+
+func (u *UI) revokeToken(w http.ResponseWriter, r *http.Request) {
+	p := auth.FromContext(r.Context())
+	if !p.Can(auth.TokensManage) {
+		u.forbid(w, r)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := u.o.Actions.RevokeToken(r.Context(), id, p.Actor()); errors.Is(err, store.ErrTokenRevoked) {
+		back(w, r, "/settings", "error", "token_revoked")
+		return
+	} else if err != nil {
+		u.fail(w, err)
+		return
+	}
+	u.o.Logger.Info("api token revoked", "id", id, "by", p.Subject)
+	back(w, r, "/settings", "notice", "token_revoked")
 }
 
 // ---- helpers ----------------------------------------------------------

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/store"
@@ -410,5 +411,48 @@ func TestVEX(t *testing.T) {
 		if rec.Code != http.StatusNotFound && rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d", q, rec.Code)
 		}
+	}
+}
+
+func TestIngestWithAPIToken(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	a, err := auth.New(ctx, auth.Options{LocalAdmin: true}, auth.DefaultPolicy(), st, quiet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mint := func(perm string) string {
+		raw, prefix, hash := auth.NewToken()
+		if _, err := st.CreateToken(ctx, store.APIToken{Name: perm, Prefix: prefix, Permissions: []string{perm}}, hash, store.Actor{Subject: "u"}); err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	h := New(Options{DB: st, Inbox: st, Findings: st, Snapshots: st, WebhookToken: "shared", Auth: a, Logger: quiet})
+	bom, _ := os.ReadFile(filepath.Join("..", "..", "examples", "sbom", "storefront-api.cdx.json"))
+	send := func(path, token string) int {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(bom)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := send("/ingest/sbom?project=app&version=main", mint("sbom.upload")); code != http.StatusAccepted {
+		t.Fatalf("upload token: %d", code)
+	}
+	if code := send("/ingest/sbom?project=app&version=main", mint("findings.read")); code != http.StatusUnauthorized {
+		t.Fatalf("read token: %d", code)
+	}
+	if code := send("/ingest/sbom?project=app&version=main", "shared"); code != http.StatusAccepted {
+		t.Fatalf("webhook token: %d", code)
+	}
+	// A read token fetches the API (VEX here) without a session.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/vex?project=nope&version=main", nil)
+	req.Header.Set("Authorization", "Bearer "+mint("findings.read"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("vex with token: %d %s", rec.Code, rec.Body)
 	}
 }

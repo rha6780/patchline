@@ -48,7 +48,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 | `project` | Looked up in the inventory like a Dependency-Track project name (`dependency_track_projects`, default: last segment of `repo`) |
 | `version` | The environment, e.g. `main`, `prod` |
 | Commit | `patchline:git:commit` / `patchline:git:ref` in the BOM metadata, as in [SBOM in CI](sbom-ci.md). SPDX: an annotation `patchline:git:commit=<sha>` |
-| Token | `PATCHLINE_WEBHOOK_TOKEN`, or the value set under **Settings → Webhooks** |
+| Token | An [API token](../access-control.md#api-tokens) with `sbom.upload` (one per pipeline), or the shared `PATCHLINE_WEBHOOK_TOKEN` |
 
 The answer is `202` with `{"format": "CycloneDX", "components": 3, "without_purl": 0}`; matching happens right after.
 
@@ -89,7 +89,7 @@ The decision is kept with the finding (who approved it, when, why) and shown on 
 Each project version's VEX lists every vulnerability its latest SBOM reports, with its decision:
 
 ```sh
-curl -sS "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" -b "patchline_session=…" > storefront-api.vex.json
+curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main" > storefront-api.vex.json
 ```
 
 | Finding | VEX analysis |

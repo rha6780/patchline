@@ -12,6 +12,8 @@
 #   exceptions.approve   approve or reject other people's requests
 #   settings.webhooks    view and rotate the webhook token and secret
 #   audit.read           view the audit log
+#   tokens.manage        create and revoke API tokens
+#   sbom.upload          upload SBOMs to /ingest/sbom (meant for API tokens)
 #   "*"                  everything
 
 default: [findings.read]
@@ -19,7 +21,7 @@ default: [findings.read]
 groups:
   developers: [findings.assign, exceptions.request]
   sec-team: [findings.assign, exceptions.request, exceptions.approve, audit.read]
-  platform-ops: [settings.webhooks, audit.read]
+  platform-ops: [settings.webhooks, audit.read, tokens.manage]
 
 # Individual people, by email or subject, for example a break-glass admin.
 users:

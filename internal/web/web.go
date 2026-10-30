@@ -141,6 +141,8 @@ func New(o Options) (*UI, error) {
 		u.mux.HandleFunc("GET /approvals", u.approvals)
 		u.mux.HandleFunc("GET /settings", u.settings)
 		u.mux.HandleFunc("POST /settings/webhooks", u.saveSecret)
+		u.mux.HandleFunc("POST /settings/tokens", u.createToken)
+		u.mux.HandleFunc("POST /settings/tokens/{id}/revoke", u.revokeToken)
 	}
 	return u, nil
 }

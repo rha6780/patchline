@@ -15,6 +15,8 @@ Every page and API call needs a sign-in. There are two ways in:
 | `exceptions.approve` | Approve or reject other people's requests |
 | `settings.webhooks` | View (as hints) and rotate the webhook token and the Git webhook secret |
 | `audit.read` | View the audit log |
+| `tokens.manage` | Create and revoke API tokens |
+| `sbom.upload` | Upload SBOMs to `/ingest/sbom` (meant for API tokens) |
 | `*` | All of the above |
 
 Webhooks (`/webhooks/*`) and health checks never need a session; they authenticate with their own secrets.
@@ -144,6 +146,24 @@ Where the decision is recorded depends on who reports the finding:
 ### Webhook settings
 
 With `settings.webhooks`, **Settings → Webhooks** rotates `PATCHLINE_WEBHOOK_TOKEN` and `PATCHLINE_GITEA_WEBHOOK_SECRET` without a restart. A generated value is shown once. A saved value replaces the environment variable until it is reset; it is stored in Patchline's database, so restrict access to the database file and its backups. The page never shows a whole stored value, only its last characters.
+
+### API tokens
+
+Tools use API tokens instead of a session: CI uploading SBOMs, a scanner fetching VEX, a script reading findings. With `tokens.manage`, **Settings → API tokens** creates one:
+
+| | |
+|---|---|
+| Permissions | `findings.read` (the read API: findings, components, impact, VEX) and/or `sbom.upload` (`/ingest/sbom`); tokens never get the permissions that change things |
+| Expiry | 30, 90 or 365 days, or never |
+| Value | `plt_…`, shown once; Patchline keeps only its SHA-256 |
+| Scope | `/api/*` and `/ingest/sbom`; a token does not open the web UI |
+| Revoke | Any time; creation and revocation are in the audit log, and the list shows when each token was last used |
+
+```sh
+curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?project=storefront-api&version=main"
+```
+
+For `/ingest/sbom`, a token with `sbom.upload` replaces the shared webhook token: each pipeline gets its own token, revoked on its own.
 
 ### Audit log
 
