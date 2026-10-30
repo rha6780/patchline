@@ -46,6 +46,7 @@ type Store interface {
 	GetFinding(ctx context.Context, id int64) (store.Finding, error)
 	FindingEvents(ctx context.Context, findingID int64) ([]store.FindingEvent, error)
 	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
+	FindingSightings(ctx context.Context, findingID int64) ([]store.Sighting, error)
 	FindingFacets(ctx context.Context) (services, environments []string, err error)
 	ListSourceProjects(ctx context.Context) ([]store.SourceProjectStatus, error)
 	ListInboxProblems(ctx context.Context, limit int) ([]store.InboxProblem, error)
@@ -482,6 +483,11 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 		u.fail(w, err)
 		return
 	}
+	sightings, err := u.o.Store.FindingSightings(r.Context(), id)
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
 	var timeline []timelineItem
 	for _, e := range events {
 		timeline = append(timeline, timelineItem{Kind: e.Kind, At: e.OccurredAt, Text: notify.Describe(langOf(r), e), Icon: eventIcon(e.Kind)})
@@ -491,7 +497,7 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 		svc, _ = u.o.Inventory.Service(f.Service)
 	}
 	data := map[string]any{
-		"F": f, "Service": svc, "Timeline": timeline, "PRs": prs, "DTLink": u.dtLink(f),
+		"F": f, "Service": svc, "Timeline": timeline, "PRs": prs, "DTLink": u.dtLink(f), "Sightings": sightings,
 		"Now": store.FormatTime(u.o.Now()),
 	}
 	if u.o.Actions != nil {
@@ -708,6 +714,7 @@ func (u *UI) funcs() template.FuncMap {
 			return u.o.Actions != nil && p.Can(auth.Permission(perm))
 		},
 		"kindLabel":   notify.RequestKindLabel,
+		"sourceLabel": notify.SourceLabel,
 		"statusLabel": notify.RequestStatusLabel,
 		"day":         func(s string) string { return dateOnly(s) },
 		"dayPtr": func(s *string) string {

@@ -27,7 +27,7 @@ CI ── SBOM + 커밋 ──▶ Dependency-Track ── webhook ──▶ Patc
 Renovate ── 수정 PR ──▶ Gitea / Forgejo / GitHub ─ webhook ┘   └── 인벤토리(YAML), CISA KEV
 ```
 
-지금은 Dependency-Track을 취약점 수집원으로 사용합니다. 다른 도구도 수집원으로 연동할 수 있도록 지원할 예정입니다.
+취약점은 Dependency-Track, Patchline에 올린 SBOM을 [OSV](https://osv.dev)와 직접 대조한 결과, 또는 둘 다에서 들어옵니다. 같은 취약점은 Finding 하나로 합쳐집니다.
 
 ## 시작하기
 

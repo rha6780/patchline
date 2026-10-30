@@ -4,6 +4,7 @@
 
 - [동작 방식](how-it-works.ko.md): Finding 상태, 수집, 해결 판정, PR 연결, 기한, 알림
 - [설정](configuration.ko.md): 환경변수, 엔드포인트, 웹 UI
+- [설계: 자체 탐지](design/native-detection.ko.md): Dependency-Track과 함께 탐지하는 구조와 다음 단계
 - [로그인과 권한](access-control.ko.md): OIDC(FusionAuth, Keycloak 등), 그룹 → 권한 매핑, 담당자 지정, 승인
 
 ## 연동
@@ -15,12 +16,13 @@ Patchline은 이미 쓰고 있는 도구들 사이에서 동작합니다. 가이
 | Dependency-Track | 취약점 수집원: Finding, 분석 판정, BOM 처리 | [dependency-track.ko.md](integrations/dependency-track.ko.md) |
 | CI의 SBOM 생성(Trivy, CycloneDX) | Dependency-Track이 분석할 BOM을 만들고 커밋을 근거로 남김 | [sbom-ci.ko.md](integrations/sbom-ci.ko.md) |
 | Trivy 분석기 | Dependency-Track 분석에 Trivy 취약점 DB를 추가 | [trivy.ko.md](integrations/trivy.ko.md) |
+| 자체 탐지 | Patchline에 올린 SBOM을 OSV와 대조. Dependency-Track 유무와 상관없이 동작 | [native-detection.ko.md](integrations/native-detection.ko.md) |
 | Renovate | 수정 PR을 만들고, Patchline이 이를 Finding과 연결 | [renovate.ko.md](integrations/renovate.ko.md) |
 | Gitea / Forgejo / GitHub | Pull request Webhook | [git-webhooks.ko.md](integrations/git-webhooks.ko.md) |
 | Slack | Finding당 메시지 1개, 갱신과 스레드 이력 | [slack.ko.md](integrations/slack.ko.md) |
 | CISA KEV, EPSS | 심각도를 올리고 기한을 앞당기는 위험 신호 | [kev-epss.ko.md](integrations/kev-epss.ko.md) |
 
-지금은 Dependency-Track을 취약점 수집원으로 사용합니다. 다른 도구도 수집원으로 연동할 수 있도록 지원할 예정입니다.
+지금은 Dependency-Track과 Patchline 자체 SBOM 대조가 취약점 수집원입니다. 두 곳의 결과는 하나로 합쳐집니다.
 
 ## 연결 구조
 

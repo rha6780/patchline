@@ -73,6 +73,7 @@ func TestFromLookupOverrides(t *testing.T) {
 	}
 	d := Default()
 	want.OIDCScopes, want.OIDCGroupsClaims, want.SessionTTL, want.LocalAdmin = d.OIDCScopes, d.OIDCGroupsClaims, d.SessionTTL, d.LocalAdmin
+	want.OSVEcosystems, want.OSVURL, want.OSVRefresh = d.OSVEcosystems, d.OSVURL, d.OSVRefresh
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
@@ -133,6 +134,24 @@ func TestOIDC(t *testing.T) {
 			t.Errorf("%s: want an error", name)
 		} else if (name == "client id" || name == "public url") && !strings.Contains(err.Error(), "required") {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestOSVSettings(t *testing.T) {
+	cfg, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_OSV_ECOSYSTEMS": "maven, PyPI,crates.io", "PATCHLINE_OSV_REFRESH": "12h"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cfg.OSVEcosystems, []string{"Maven", "PyPI", "crates.io"}) || cfg.OSVRefresh != 12*time.Hour {
+		t.Fatalf("got %v %v", cfg.OSVEcosystems, cfg.OSVRefresh)
+	}
+	if cfg, _ := FromLookup(lookupFrom(map[string]string{"PATCHLINE_OSV_ECOSYSTEMS": "off"})); len(cfg.OSVEcosystems) != 0 {
+		t.Errorf("off = %v", cfg.OSVEcosystems)
+	}
+	for _, v := range []map[string]string{{"PATCHLINE_OSV_ECOSYSTEMS": "Debian"}, {"PATCHLINE_OSV_REFRESH": "1s"}} {
+		if _, err := FromLookup(lookupFrom(v)); err == nil {
+			t.Errorf("%v: want an error", v)
 		}
 	}
 }

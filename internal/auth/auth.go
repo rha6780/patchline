@@ -162,7 +162,8 @@ func (a *Authenticator) Routes(mux *http.ServeMux) {
 
 // public paths are served without a session.
 func public(path string) bool {
-	for _, p := range []string{"/healthz", "/readyz", "/webhooks/", "/static/", "/auth/", "/prefs", "/login", "/signed-out"} {
+	// /webhooks/ and /ingest/ authenticate with their own secrets.
+	for _, p := range []string{"/healthz", "/readyz", "/webhooks/", "/ingest/", "/static/", "/auth/", "/prefs", "/login", "/signed-out"} {
 		if path == p || (strings.HasSuffix(p, "/") && strings.HasPrefix(path, p)) {
 			return true
 		}

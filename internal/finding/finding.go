@@ -84,6 +84,25 @@ type Observation struct {
 
 	// EPSS is the exploit prediction score (0..1), when the source has it.
 	EPSS *float64
+
+	// Source and SourceProject say who reported the observation. Empty
+	// means Dependency-Track, project DTProjectUUID.
+	Source        string
+	SourceProject string
+}
+
+// Sources of observations.
+const (
+	SourceDependencyTrack = "dependencytrack"
+	SourcePatchline       = "patchline"
+)
+
+// Reporter returns the source and source project of the observation.
+func (o Observation) Reporter() (source, project string) {
+	if o.Source == "" {
+		return SourceDependencyTrack, o.DTProjectUUID
+	}
+	return o.Source, o.SourceProject
 }
 
 // CanonicalID picks a stable identifier from a set of ids that refer to the

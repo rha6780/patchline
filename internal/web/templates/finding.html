@@ -14,6 +14,7 @@
   <div><dt>{{t $L "ui.fact.assignee"}}</dt><dd>{{if $f.Assignee}}👤 {{$f.Assignee}}{{else}}<span class="muted">{{t $L "ui.unassigned"}}</span>{{end}}</dd></div>
   <div><dt>{{t $L "ui.fact.owners"}}</dt><dd>{{if .Service}}{{if .Service.Owners}}{{join .Service.Owners ", "}}{{else}}—{{end}}{{if .Service.SlackChannel}} · {{.Service.SlackChannel}}{{end}}{{else}}—{{end}}</dd></div>
   {{if $f.Aliases}}<div><dt>{{t $L "ui.fact.aliases"}}</dt><dd>{{join $f.Aliases ", "}}</dd></div>{{end}}
+  {{if .Sightings}}<div><dt>{{t $L "ui.fact.sources"}}</dt><dd>{{range $i, $s := .Sightings}}{{if $i}}<br>{{end}}{{sourceLabel $L $s.Source}} <span class="meta">{{$s.Project}}</span>{{end}}</dd></div>{{end}}
   <div><dt>{{t $L "ui.fact.first_seen"}}</dt><dd>{{ts $f.FirstSeenAt}}</dd></div>
   {{if $f.ResolvedAt}}<div><dt>{{t $L "ui.fact.resolved"}}</dt><dd>{{ts (deref $f.ResolvedAt)}}</dd></div>{{end}}
 </dl>

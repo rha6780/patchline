@@ -75,6 +75,7 @@ type Options struct {
 //	GET  /readyz                       readiness: the database answers
 //	POST /webhooks/dependency-track    Dependency-Track outbound webhook
 //	POST /webhooks/gitea               Gitea / Forgejo / GitHub pull_request webhook
+//	POST /ingest/sbom                  SBOM upload for Patchline's own detection
 //	GET  /api/v1/findings              findings with owners (?service=&environment=&state=&assignee=&limit=)
 //	GET  /api/v1/findings/{id}/events  a finding's timeline
 //	GET  /api/v1/findings/{id}/pull-requests  linked pull requests
@@ -98,6 +99,7 @@ func New(o Options) http.Handler {
 	if o.Inbox != nil {
 		mux.HandleFunc("POST /webhooks/dependency-track", h.dependencyTrackWebhook)
 		mux.HandleFunc("POST /webhooks/gitea", h.giteaWebhook)
+		mux.HandleFunc("POST /ingest/sbom", h.ingestSBOM)
 	}
 	if o.Findings != nil {
 		mux.HandleFunc("GET /api/v1/findings", h.listFindings)

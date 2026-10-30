@@ -167,13 +167,13 @@ var en = map[string]string{
 	"ui.env_summary":             "%d open · no environment gaps",
 	"ui.empty.service":           "No findings for this service.",
 	"ui.integrations":            "Integrations",
-	"ui.dt_projects":             "Dependency-Track projects",
+	"ui.dt_projects":             "Projects",
 	"ui.col.project":             "Project",
 	"ui.col.last_bom":            "Last BOM",
 	"ui.col.commit":              "Commit",
 	"ui.stale":                   "over 7 days",
 	"ui.never":                   "never",
-	"ui.empty.projects":          "No project has reported yet. Point a Dependency-Track notification rule at /webhooks/dependency-track.",
+	"ui.empty.projects":          "No project has reported yet. Point a Dependency-Track notification rule at /webhooks/dependency-track, or upload an SBOM to /ingest/sbom.",
 	"ui.missing":                 "Inventory projects without a BOM",
 	"ui.empty.missing":           "Every inventory project has reported.",
 	"ui.inbox_failures":          "Webhook processing failures",
@@ -398,6 +398,13 @@ var en = map[string]string{
 	"ui.err.password_long":       "Use at most 72 characters.",
 	"ui.err.password_default":    "Choose something other than \"admin\".",
 	"ui.err.password_same":       "The new password must differ from the current one.",
+
+	// Native detection
+	"source.dependencytrack":      "Dependency-Track",
+	"source.patchline":            "Patchline (OSV)",
+	"ui.fact.sources":             "Reported by",
+	"ev.detected_patchline":       "Detected by Patchline (OSV, %s)",
+	"ev.detected_patchline_plain": "Detected by Patchline (OSV)",
 }
 
 var ko = map[string]string{
@@ -557,13 +564,13 @@ var ko = map[string]string{
 	"ui.env_summary":             "열림 %d건 · 환경 간 차이 없음",
 	"ui.empty.service":           "이 서비스의 Finding이 없습니다.",
 	"ui.integrations":            "연동 상태",
-	"ui.dt_projects":             "Dependency-Track 프로젝트",
+	"ui.dt_projects":             "프로젝트",
 	"ui.col.project":             "프로젝트",
 	"ui.col.last_bom":            "마지막 BOM",
 	"ui.col.commit":              "커밋",
 	"ui.stale":                   "7일 넘음",
 	"ui.never":                   "없음",
-	"ui.empty.projects":          "아직 보고한 프로젝트가 없습니다. Dependency-Track 알림 규칙을 /webhooks/dependency-track으로 설정하세요.",
+	"ui.empty.projects":          "아직 보고한 프로젝트가 없습니다. Dependency-Track 알림 규칙을 /webhooks/dependency-track으로 설정하거나, SBOM을 /ingest/sbom에 올리세요.",
 	"ui.missing":                 "BOM이 없는 인벤토리 프로젝트",
 	"ui.empty.missing":           "모든 인벤토리 프로젝트가 보고했습니다.",
 	"ui.inbox_failures":          "Webhook 처리 실패",
@@ -788,4 +795,11 @@ var ko = map[string]string{
 	"ui.err.password_long":       "72자 이하로 정하세요.",
 	"ui.err.password_default":    "\"admin\"이 아닌 비밀번호를 정하세요.",
 	"ui.err.password_same":       "새 비밀번호는 현재 비밀번호와 달라야 합니다.",
+
+	// Native detection
+	"source.dependencytrack":      "Dependency-Track",
+	"source.patchline":            "Patchline (OSV)",
+	"ui.fact.sources":             "탐지한 곳",
+	"ev.detected_patchline":       "Patchline에서 탐지 (OSV, %s)",
+	"ev.detected_patchline_plain": "Patchline에서 탐지 (OSV)",
 }

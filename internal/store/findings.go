@@ -67,8 +67,10 @@ func (f Finding) DisplaySeverity() string {
 
 // UpsertFinding records an observation. A new (service, environment,
 // component, vulnerability) creates a finding in state "new" together with a
-// "detected" event carrying evidence; a known one only refreshes its
-// descriptive fields.
+// "detected" event carrying evidence; a known one refreshes its descriptive
+// fields when the observation comes from the finding's primary source (or
+// from Dependency-Track, which takes over as primary). Either way the
+// source project is recorded as a sighting.
 func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evidence map[string]any) (id int64, created bool, err error) {
 	aliases, err := json.Marshal(nonNil(obs.Aliases))
 	if err != nil {
@@ -86,11 +88,12 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 		}
 	}()
 
-	var prevSeverity, prevState string
+	source, project := obs.Reporter()
+	var prevSeverity, prevState, primary string
 	err = tx.QueryRowContext(ctx, `
-		SELECT id, severity, state FROM findings
+		SELECT id, severity, state, primary_source FROM findings
 		WHERE service = ? AND environment = ? AND component_purl = ? AND vuln_id = ?`,
-		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id, &prevSeverity, &prevState)
+		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id, &prevSeverity, &prevState, &primary)
 
 	switch {
 	case err == nil:
@@ -115,6 +118,17 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 				return 0, false, err
 			}
 		}
+		describe := source == primary || source == finding.SourceDependencyTrack
+		if !describe {
+			// Another source's sighting: keep the primary source's severity
+			// and title, so they do not flip between sources.
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE findings SET registered = ?, repository = ?, epss = COALESCE(?, epss), updated_at = ?
+				WHERE id = ?`, obs.Registered, obs.Repository, obs.EPSS, now, id); err != nil {
+				return 0, false, err
+			}
+			break
+		}
 		if prevSeverity != obs.Severity {
 			ev, mErr := json.Marshal(map[string]any{"from": prevSeverity, "to": obs.Severity, "observation": evidence})
 			if mErr != nil {
@@ -133,13 +147,13 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 			    component_name = ?, component_version = ?,
 			    dt_project_uuid = ?, dt_component_uuid = ?, dt_vulnerability_uuid = ?,
 			    dt_vuln_source = ?, dt_vuln_id = ?, epss = COALESCE(?, epss),
-			    updated_at = ?
+			    primary_source = ?, updated_at = ?
 			WHERE id = ?`,
 			string(aliases), obs.Severity, obs.Title, obs.Registered, obs.Repository,
 			obs.ComponentName, obs.ComponentVersion,
 			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID,
 			obs.DTVulnSource, obs.DTVulnID, obs.EPSS,
-			now, id)
+			source, now, id)
 		if err != nil {
 			return 0, false, err
 		}
@@ -150,13 +164,13 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 				service, environment, component_purl, vuln_id, aliases, severity, state,
 				registered, repository, component_name, component_version, title,
 				dt_project_uuid, dt_component_uuid, dt_vulnerability_uuid, dt_vuln_source, dt_vuln_id,
-				epss, first_seen_at, sla_started_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				epss, primary_source, first_seen_at, sla_started_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			RETURNING id`,
 			obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID, string(aliases), obs.Severity, finding.StateNew,
 			obs.Registered, obs.Repository, obs.ComponentName, obs.ComponentVersion, obs.Title,
 			obs.DTProjectUUID, obs.DTComponentUUID, obs.DTVulnerabilityUUID, obs.DTVulnSource, obs.DTVulnID,
-			obs.EPSS, now, now, now).Scan(&id)
+			obs.EPSS, source, now, now, now).Scan(&id)
 		if err != nil {
 			return 0, false, err
 		}
@@ -178,6 +192,15 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 		return 0, false, err
 	}
 
+	if project != "" {
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO finding_sightings (finding_id, source, project_id, first_seen_at, last_seen_at)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (finding_id, source, project_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
+			id, source, project, now, now); err != nil {
+			return 0, false, err
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		return 0, false, err
 	}
@@ -265,11 +288,18 @@ const (
 )
 
 // ResolveMissing resolves the findings of a Dependency-Track project that
-// are not in keep (the ids present in the project's latest findings), when
-// the lifecycle allows it. Closed findings (not affected, risk accepted)
-// are left alone. It returns the ids it resolved.
-func (s *Store) ResolveMissing(ctx context.Context, dtProjectUUID string, keep []int64, evidence map[string]any) (resolved []int64, err error) {
-	ev, err := json.Marshal(map[string]any{"reason": ReasonAbsentFromSnapshot, "snapshot": evidence})
+// are no longer reported; see ResolveMissingIn.
+func (s *Store) ResolveMissing(ctx context.Context, dtProjectUUID string, keep []int64, evidence map[string]any) ([]int64, error) {
+	return s.ResolveMissingIn(ctx, finding.SourceDependencyTrack, dtProjectUUID, keep, evidence)
+}
+
+// ResolveMissingIn records the latest snapshot of a source project: the
+// project stops reporting the findings not in keep (the ids present in the
+// snapshot). Those that no other source project reports any more are
+// resolved, when the lifecycle allows it; closed findings (not affected,
+// risk accepted) are left alone. It returns the ids it resolved.
+func (s *Store) ResolveMissingIn(ctx context.Context, source, project string, keep []int64, evidence map[string]any) (resolved []int64, err error) {
+	ev, err := json.Marshal(map[string]any{"reason": ReasonAbsentFromSnapshot, "source": source, "snapshot": evidence})
 	if err != nil {
 		return nil, err
 	}
@@ -289,24 +319,29 @@ func (s *Store) ResolveMissing(ctx context.Context, dtProjectUUID string, keep [
 		}
 	}()
 
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, state FROM findings WHERE dt_project_uuid = ?`, dtProjectUUID)
+	rows, err := tx.QueryContext(ctx, `
+		SELECT f.id, f.state,
+		       (SELECT COUNT(*) FROM finding_sightings o
+		        WHERE o.finding_id = f.id AND NOT (o.source = ? AND o.project_id = ?))
+		FROM finding_sightings g JOIN findings f ON f.id = g.finding_id
+		WHERE g.source = ? AND g.project_id = ?`, source, project, source, project)
 	if err != nil {
 		return nil, err
 	}
 	type row struct {
-		id    int64
-		state finding.State
+		id     int64
+		state  finding.State
+		others int
 	}
-	var candidates []row
+	var gone []row
 	for rows.Next() {
 		var r row
-		if err = rows.Scan(&r.id, &r.state); err != nil {
+		if err = rows.Scan(&r.id, &r.state, &r.others); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		if !keepSet[r.id] && finding.CanTransition(r.state, finding.StateResolved) {
-			candidates = append(candidates, r)
+		if !keepSet[r.id] {
+			gone = append(gone, r)
 		}
 	}
 	rows.Close()
@@ -314,7 +349,14 @@ func (s *Store) ResolveMissing(ctx context.Context, dtProjectUUID string, keep [
 		return nil, err
 	}
 
-	for _, r := range candidates {
+	for _, r := range gone {
+		if _, err = tx.ExecContext(ctx, `DELETE FROM finding_sightings WHERE finding_id = ? AND source = ? AND project_id = ?`,
+			r.id, source, project); err != nil {
+			return nil, err
+		}
+		if r.others > 0 || !finding.CanTransition(r.state, finding.StateResolved) {
+			continue
+		}
 		if _, err = tx.ExecContext(ctx,
 			`UPDATE findings SET state = ?, resolved_at = ?, updated_at = ? WHERE id = ?`,
 			finding.StateResolved, now, now, r.id); err != nil {
@@ -332,6 +374,37 @@ func (s *Store) ResolveMissing(ctx context.Context, dtProjectUUID string, keep [
 		return nil, err
 	}
 	return resolved, nil
+}
+
+// Sighting is a source project that currently reports a finding.
+type Sighting struct {
+	Source      string `json:"source"`
+	Project     string `json:"project"`
+	FirstSeenAt string `json:"first_seen_at"`
+	LastSeenAt  string `json:"last_seen_at"`
+}
+
+// FindingSightings returns the source projects reporting a finding.
+func (s *Store) FindingSightings(ctx context.Context, findingID int64) ([]Sighting, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT g.source, COALESCE(p.name || CASE WHEN p.version != '' THEN '@' || p.version ELSE '' END, g.project_id),
+		       g.first_seen_at, g.last_seen_at
+		FROM finding_sightings g
+		LEFT JOIN source_projects p ON p.source = g.source AND p.project_id = g.project_id
+		WHERE g.finding_id = ? ORDER BY g.source, g.project_id`, findingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Sighting{}
+	for rows.Next() {
+		var g Sighting
+		if err := rows.Scan(&g.Source, &g.Project, &g.FirstSeenAt, &g.LastSeenAt); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
 }
 
 // FindingFilter narrows ListFindings. Empty fields match everything.

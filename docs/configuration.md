@@ -31,6 +31,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/readyz` | Readiness (database) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track outbound webhook (`?token=` or `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` webhook (HMAC signature, or the token) |
+| `POST` | `/ingest/sbom` | CycloneDX or SPDX (JSON) SBOM upload for built-in detection ([guide](integrations/native-detection.md)). Authenticated with the webhook token |
 | `GET` | `/api/v1/findings` | Findings with owners and assignee; filters `service`, `environment`, `state`, `assignee`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
@@ -62,6 +63,9 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` or `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown limit |
+| `PATCHLINE_OSV_ECOSYSTEMS` | `Maven,npm,PyPI,Go` | OSV ecosystems for built-in detection (also `crates.io`, `NuGet`, `RubyGems`, `Packagist`). `off` only stores SBOMs |
+| `PATCHLINE_OSV_URL` | OSV exports | Where the OSV exports are served, for an internal mirror |
+| `PATCHLINE_OSV_REFRESH` | `6h` | How often OSV changes are fetched |
 | `PATCHLINE_PUBLIC_URL` | — | Where users reach Patchline; required with OIDC (redirect URI `/auth/callback`). `https://` makes the session cookie Secure |
 | `PATCHLINE_LOCAL_ADMIN` | `true` | Built-in `admin` account (starts as `admin` / `admin`, password change forced). `false` needs OIDC |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | Let requests without a session read; only behind an authenticating proxy |

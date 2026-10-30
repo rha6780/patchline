@@ -31,6 +31,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `GET` | `/readyz` | Readiness(DB) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track Outbound Webhook(`?token=` 또는 `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` Webhook(HMAC 서명 또는 토큰) |
+| `POST` | `/ingest/sbom` | CycloneDX·SPDX(JSON) SBOM 업로드, 자체 탐지([가이드](integrations/native-detection.ko.md)). Webhook 토큰으로 인증 |
 | `GET` | `/api/v1/findings` | 서비스 담당자와 처리 담당자를 포함한 Finding 목록. 필터 `service`, `environment`, `state`, `assignee`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Finding에 연결된 PR |
@@ -62,6 +63,9 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` 또는 `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | 정상 종료 제한 시간 |
+| `PATCHLINE_OSV_ECOSYSTEMS` | `Maven,npm,PyPI,Go` | 자체 탐지에서 대조할 OSV 생태계(`crates.io`, `NuGet`, `RubyGems`, `Packagist`도 가능). `off`면 SBOM을 저장만 함 |
+| `PATCHLINE_OSV_URL` | OSV export | OSV export 주소. 사내 미러를 쓸 때 지정 |
+| `PATCHLINE_OSV_REFRESH` | `6h` | OSV 변경분을 받는 주기 |
 | `PATCHLINE_PUBLIC_URL` | — | 사용자가 접속하는 Patchline 주소. OIDC를 쓰면 필수(Redirect URI `/auth/callback`). `https://`면 세션 쿠키에 Secure가 붙음 |
 | `PATCHLINE_LOCAL_ADMIN` | `true` | 내장 `admin` 계정(`admin` / `admin`으로 시작, 비밀번호 변경 강제). `false`로 하려면 OIDC 필요 |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | 세션 없는 요청도 조회 허용. 인증 프록시 뒤에서만 사용 |

@@ -27,7 +27,7 @@ CI ── SBOM + commit ──▶ Dependency-Track ── webhook ──▶ Patc
 Renovate ── fix PR ──▶ Gitea / Forgejo / GitHub ── webhook ─┘   └── inventory (YAML), CISA KEV
 ```
 
-Dependency-Track is the vulnerability source today; support for other tools as sources is planned.
+Vulnerabilities come from Dependency-Track, from Patchline's own matching of uploaded SBOMs against [OSV](https://osv.dev), or both; the same vulnerability from both is one finding.
 
 ## Getting started
 

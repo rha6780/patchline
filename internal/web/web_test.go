@@ -325,3 +325,24 @@ func TestSignInLink(t *testing.T) {
 		t.Error("sign-in link shown to a signed-in user")
 	}
 }
+
+func TestFindingSources(t *testing.T) {
+	u, st := setup(t)
+	ctx := context.Background()
+	id, _, err := st.UpsertFinding(ctx, finding.Observation{Service: "storefront", Registered: true, Environment: "main",
+		ComponentRef: "pkg:npm/lodash@4.17.15", ComponentName: "lodash", ComponentVersion: "4.17.15", VulnID: "CVE-2020-8203",
+		Severity: finding.SeverityHigh, Source: finding.SourcePatchline, SourceProject: "storefront-api@main"},
+		map[string]any{"source": finding.SourcePatchline, "osv_id": "GHSA-p6mc-m468-83gw"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body := get(t, u, "/findings/"+strconv.FormatInt(id, 10))
+	for _, want := range []string{"Reported by", "Patchline (OSV)", "storefront-api@main", "Detected by Patchline (OSV, GHSA-p6mc-m468-83gw)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("finding page lacks %q", want)
+		}
+	}
+	if _, body := get(t, u, "/integrations"); !strings.Contains(body, "Dependency-Track</td>") {
+		t.Error("integrations page lacks the source column")
+	}
+}

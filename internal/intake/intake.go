@@ -21,7 +21,7 @@ import (
 )
 
 // SourceDependencyTrack is the inbox source name for Dependency-Track.
-const SourceDependencyTrack = "dependencytrack"
+const SourceDependencyTrack = finding.SourceDependencyTrack
 
 // DefaultEnvironment is used when a Dependency-Track project has no version.
 const DefaultEnvironment = "default"
@@ -45,6 +45,10 @@ type Store interface {
 	ApplyState(ctx context.Context, key store.DTKey, to finding.State, evidence map[string]any) (int, error)
 	InsertInboxAt(ctx context.Context, source, eventType, dedupKey string, payload []byte, notBefore time.Time) (int64, bool, error)
 	ResolveMissing(ctx context.Context, dtProjectUUID string, keep []int64, evidence map[string]any) ([]int64, error)
+	ResolveMissingIn(ctx context.Context, source, project string, keep []int64, evidence map[string]any) ([]int64, error)
+	ReplaceComponents(ctx context.Context, source, project string, components []store.Component) error
+	Components(ctx context.Context, source, project string) ([]store.Component, error)
+	SourceProjects(ctx context.Context, source string) ([]store.SourceProject, error)
 	OpenFindingsInRepository(ctx context.Context, repository string, environments []string) ([]store.Finding, error)
 	LinkPullRequest(ctx context.Context, l store.PullRequestLink) (bool, error)
 	ClosePullRequest(ctx context.Context, repository string, number int, merged bool, mergeSHA string) ([]int64, error)
@@ -56,8 +60,11 @@ type Processor struct {
 	Inventory *inventory.Inventory
 	// DT is optional. Without it, BOM_PROCESSED events are recorded but
 	// findings only arrive through NEW_VULNERABILITY / NEW_VULNERABLE_DEPENDENCY.
-	DT     FindingsFetcher
-	Logger *slog.Logger
+	DT FindingsFetcher
+	// Matcher detects vulnerabilities in SBOMs uploaded to Patchline. Nil
+	// stores uploads without matching them.
+	Matcher Matcher
+	Logger  *slog.Logger
 	// OnChange is called after an item created or changed findings
 	// (for example to wake the notifier). Optional.
 	OnChange func()
@@ -188,6 +195,8 @@ func (p *Processor) handle(ctx context.Context, it store.InboxItem) (note string
 		return p.handleDependencyTrack(ctx, it)
 	case SourceGitea:
 		return p.handleGitea(ctx, it)
+	case SourcePatchline:
+		return p.handlePatchline(ctx, it)
 	default:
 		return "", fmt.Errorf("%w %q", errUnknownSource, it.Source)
 	}

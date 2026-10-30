@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -235,5 +236,66 @@ func TestSecurityHeaders(t *testing.T) {
 	if !strings.Contains(rec.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") || rec.Header().Get("X-Frame-Options") != "DENY" ||
 		rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("headers = %v", rec.Header())
+	}
+}
+
+func TestIngestSBOM(t *testing.T) {
+	st := newStore(t)
+	woken := 0
+	h := New(Options{DB: st, Inbox: st, Findings: st, WebhookToken: "s3cret", OnInbox: func() { woken++ }, Logger: quiet})
+	bom, err := os.ReadFile(filepath.Join("..", "..", "examples", "sbom", "storefront-api.cdx.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := func(req *http.Request) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	jsonReq := func(query, token string, body []byte) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/ingest/sbom?"+query, strings.NewReader(string(body)))
+		r.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			r.Header.Set("Authorization", "Bearer "+token)
+		}
+		return r
+	}
+
+	if rec := send(jsonReq("project=storefront-api&version=main", "", bom)); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: %d", rec.Code)
+	}
+	if rec := send(jsonReq("version=main", "s3cret", bom)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("no project: %d", rec.Code)
+	}
+	if rec := send(jsonReq("project=x", "s3cret", []byte(`<bom/>`))); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "XML") {
+		t.Fatalf("xml: %d %s", rec.Code, rec.Body)
+	}
+	rec := send(jsonReq("project=storefront-api&version=main", "s3cret", bom))
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"components":3`) || woken != 1 {
+		t.Fatalf("json upload: %d %s (woken %d)", rec.Code, rec.Body, woken)
+	}
+
+	// Multipart, the way Dependency-Track's upload is usually scripted.
+	var buf strings.Builder
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("project", "storefront-api")
+	_ = mw.WriteField("version", "prod")
+	fw, _ := mw.CreateFormFile("bom", "bom.json")
+	_, _ = fw.Write(bom)
+	_ = mw.Close()
+	r := httptest.NewRequest(http.MethodPost, "/ingest/sbom?token=s3cret", strings.NewReader(buf.String()))
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	if rec := send(r); rec.Code != http.StatusAccepted {
+		t.Fatalf("multipart upload: %d %s", rec.Code, rec.Body)
+	}
+
+	items, _ := st.PendingInbox(context.Background(), 5, 10)
+	if len(items) != 2 || items[0].Source != "patchline" || items[0].EventType != "sbom" {
+		t.Fatalf("inbox = %+v", items)
+	}
+	var up struct{ Project, Version string }
+	_ = json.Unmarshal(items[1].Payload, &up)
+	if up.Project != "storefront-api" || up.Version != "prod" {
+		t.Errorf("multipart payload = %+v", up)
 	}
 }

@@ -67,7 +67,7 @@ func TestResolveMissingAndReopen(t *testing.T) {
 		t.Errorf("last event = %+v", last)
 	}
 	resolvedEv := events[len(events)-2]
-	if string(resolvedEv.Evidence) != `{"reason":"absent_from_latest_bom","snapshot":{"commit":"abc1234"}}` {
+	if string(resolvedEv.Evidence) != `{"reason":"absent_from_latest_bom","snapshot":{"commit":"abc1234"},"source":"dependencytrack"}` {
 		t.Errorf("resolution evidence = %s", resolvedEv.Evidence)
 	}
 }

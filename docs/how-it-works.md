@@ -50,6 +50,7 @@ A finding is resolved by evidence, not by someone closing it.
 3. A resolved finding that is reported again (by a later BOM or a `NEW_VULNERABILITY` notification) becomes **reopened**.
 4. Each Dependency-Track project version is reconciled separately, so `main` and `prod` resolve independently.
 5. Findings closed by a decision (not affected, risk accepted) are left as they are.
+6. With [built-in detection](integrations/native-detection.md), SBOMs uploaded to Patchline resolve findings the same way. When Dependency-Track and Patchline both report a finding, it resolves only once neither reports it.
 
 The commit comes from the `patchline:git:commit` and `patchline:git:ref` properties in the BOM's metadata; see [SBOM in CI](integrations/sbom-ci.md#attach-the-commit).
 

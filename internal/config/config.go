@@ -90,6 +90,23 @@ type Config struct {
 	// AllowAnonymous lets requests without a session read
 	// (PATCHLINE_ALLOW_ANONYMOUS), for use behind an authenticating proxy.
 	AllowAnonymous bool
+
+	// OSVEcosystems are matched against SBOMs uploaded to Patchline
+	// (PATCHLINE_OSV_ECOSYSTEMS, comma-separated; "off" disables matching).
+	OSVEcosystems []string
+	// OSVURL serves the OSV exports (PATCHLINE_OSV_URL), for internal mirrors.
+	OSVURL string
+	// OSVRefresh is how often the OSV mirror is updated (PATCHLINE_OSV_REFRESH).
+	OSVRefresh time.Duration
+}
+
+// DefaultOSVEcosystems are matched when PATCHLINE_OSV_ECOSYSTEMS is unset.
+var DefaultOSVEcosystems = []string{"Maven", "npm", "PyPI", "Go"}
+
+// knownEcosystems are the OSV ecosystems Patchline can match, by lower-case name.
+var knownEcosystems = map[string]string{
+	"maven": "Maven", "npm": "npm", "pypi": "PyPI", "go": "Go", "crates.io": "crates.io",
+	"nuget": "NuGet", "rubygems": "RubyGems", "packagist": "Packagist",
 }
 
 // OIDCEnabled reports whether sign-in is configured.
@@ -119,6 +136,10 @@ func Default() Config {
 		OIDCGroupsClaims: []string{"groups"},
 		SessionTTL:       12 * time.Hour,
 		LocalAdmin:       true,
+
+		OSVEcosystems: DefaultOSVEcosystems,
+		OSVURL:        "https://osv-vulnerabilities.storage.googleapis.com",
+		OSVRefresh:    6 * time.Hour,
 	}
 }
 
@@ -232,6 +253,28 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			}
 			*b.dst = p
 		}
+	}
+	if v, ok := lookup("PATCHLINE_OSV_ECOSYSTEMS"); ok && v != "" {
+		cfg.OSVEcosystems = nil
+		if !strings.EqualFold(strings.TrimSpace(v), "off") {
+			for _, e := range strings.Split(v, ",") {
+				name, ok := knownEcosystems[strings.ToLower(strings.TrimSpace(e))]
+				if !ok {
+					return Config{}, fmt.Errorf("PATCHLINE_OSV_ECOSYSTEMS: unknown ecosystem %q (want Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist or off)", strings.TrimSpace(e))
+				}
+				cfg.OSVEcosystems = append(cfg.OSVEcosystems, name)
+			}
+		}
+	}
+	if v, ok := lookup("PATCHLINE_OSV_URL"); ok && v != "" {
+		cfg.OSVURL = v
+	}
+	if v, ok := lookup("PATCHLINE_OSV_REFRESH"); ok && v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < time.Minute {
+			return Config{}, fmt.Errorf("PATCHLINE_OSV_REFRESH: want a duration of at least 1m such as 6h, got %q", v)
+		}
+		cfg.OSVRefresh = d
 	}
 	if !cfg.LocalAdmin && !cfg.OIDCEnabled() && !cfg.AllowAnonymous {
 		return Config{}, fmt.Errorf("PATCHLINE_LOCAL_ADMIN=false needs PATCHLINE_OIDC_ISSUER (or PATCHLINE_ALLOW_ANONYMOUS=true): otherwise nobody can sign in")

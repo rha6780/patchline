@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/rha6780/patchline/internal/sink/console"
 	"github.com/rha6780/patchline/internal/sink/slack"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
+	"github.com/rha6780/patchline/internal/source/osv"
 	"github.com/rha6780/patchline/internal/store"
 	"github.com/rha6780/patchline/internal/web"
 )
@@ -125,11 +127,36 @@ func run() error {
 	// SLA job runs first and wakes the notifier.
 	proc.OnChange = func() { sla.Wake(); notifier.Wake() }
 
+	// Patchline's own detection: SBOMs uploaded to /ingest/sbom are matched
+	// against a local OSV mirror, and re-analyzed when it changes.
+	var osvJob *job.OSV
+	if len(cfg.OSVEcosystems) > 0 {
+		syncer := &osv.Syncer{Store: st, BaseURL: cfg.OSVURL, Ecosystems: cfg.OSVEcosystems,
+			TempDir: filepath.Dir(cfg.DatabasePath), Logger: logger}
+		proc.Matcher = osv.Engine{DB: st, Syncer: syncer}
+		osvJob = &job.OSV{Syncer: syncer, Interval: cfg.OSVRefresh, Logger: logger,
+			OnChanged: func(ctx context.Context) {
+				key := "reanalyze-" + time.Now().UTC().Format(time.RFC3339Nano)
+				if _, _, err := st.InsertInbox(ctx, intake.SourcePatchline, intake.EventReanalyze, key, []byte("{}")); err != nil {
+					logger.Error("schedule re-analysis", "err", err)
+					return
+				}
+				proc.Wake()
+			}}
+		logger.Info("native detection enabled", "ecosystems", cfg.OSVEcosystems, "osv_url", cfg.OSVURL, "refresh", cfg.OSVRefresh)
+	} else {
+		logger.Info("PATCHLINE_OSV_ECOSYSTEMS=off: SBOMs uploaded to Patchline are stored but not matched")
+	}
+
 	var workers sync.WaitGroup
 	workers.Add(3)
 	go func() { defer workers.Done(); proc.Run(ctx) }()
 	go func() { defer workers.Done(); sla.Run(ctx) }()
 	go func() { defer workers.Done(); notifier.Run(ctx) }()
+	if osvJob != nil {
+		workers.Add(1)
+		go func() { defer workers.Done(); osvJob.Run(ctx) }()
+	}
 
 	authn, err := newAuthenticator(ctx, cfg, st, logger)
 	if err != nil {

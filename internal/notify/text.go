@@ -208,6 +208,17 @@ func Describe(l i18n.Lang, e store.FindingEvent) string {
 	}
 	switch e.Kind {
 	case finding.EventDetected:
+		var ev struct {
+			Source string `json:"source"`
+			OSVID  string `json:"osv_id"`
+		}
+		_ = json.Unmarshal(e.Evidence, &ev)
+		if ev.Source == finding.SourcePatchline {
+			if ev.OSVID != "" {
+				return l.T("ev.detected_patchline", ev.OSVID)
+			}
+			return l.T("ev.detected_patchline_plain")
+		}
 		return l.T("ev.detected")
 	case finding.EventNotified:
 		var ev struct {
@@ -330,6 +341,15 @@ func slaText(l i18n.Lang, ev map[string]any) string {
 		text += l.T("sla.no_due")
 	}
 	return text
+}
+
+// SourceLabel names a source of findings.
+func SourceLabel(l i18n.Lang, source string) string {
+	key := "source." + source
+	if !i18n.Has(key) {
+		return source
+	}
+	return l.T(key)
 }
 
 // RequestKindLabel names a request kind (risk acceptance, due extension).

@@ -50,6 +50,7 @@ Finding은 누군가 닫아서가 아니라 증거로 해결됩니다.
 3. 해결된 Finding이 다시 보고되면(이후 BOM 또는 `NEW_VULNERABILITY` 알림) **재발**로 바뀝니다.
 4. Dependency-Track 프로젝트 버전마다 따로 비교하므로 `main`과 `prod`는 각각 해결됩니다.
 5. 판정으로 닫힌 Finding(해당 없음, 위험 수용)은 그대로 둡니다.
+6. [자체 탐지](integrations/native-detection.ko.md)를 쓰면 Patchline에 올린 SBOM도 같은 방식으로 해결 판정을 합니다. Dependency-Track과 Patchline이 모두 보고한 Finding은 둘 다 보고를 멈춰야 해결됩니다.
 
 커밋은 BOM `metadata`의 `patchline:git:commit`, `patchline:git:ref` 속성에서 읽습니다. 넣는 방법은 [CI의 SBOM 생성](integrations/sbom-ci.ko.md)을 참고하세요.
 
