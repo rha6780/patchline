@@ -62,26 +62,33 @@ Documentation and UI text are kept in English and Korean.
 patchline/
 ├── cmd/patchline/          # main entrypoint
 ├── internal/
-│   ├── auth/               # OIDC sign-in, sessions, access policy
+│   ├── app/                # changes people make: assign, request, decide (+ Dependency-Track write-back)
+│   ├── api/                # JSON API /api/v1 with its own response types and openapi.yaml
+│   ├── server/             # HTTP root: health, webhooks, SBOM ingest; mounts api, web and auth
+│   ├── web/                # server-rendered pages + embedded CSS; calls app for changes
+│   ├── auth/               # OIDC and local sign-in, sessions, API tokens, access policy
 │   ├── config/             # environment variables
-│   ├── server/             # HTTP: webhook inbox, internal API, UI routes
 │   ├── finding/            # model, state transitions, event log
+│   ├── intake/             # inbox processor: webhook deliveries and SBOMs → findings
+│   ├── detect/             # detection engine interface; combines engines
+│   ├── impact/             # component search, what a vulnerability affects
+│   ├── sbom/, purl/, vex/  # SBOM parsing, package URLs, CycloneDX VEX
+│   ├── source/             # inputs: dependencytrack, gitea, kev, osv, trivy
+│   ├── notify/             # notifier per sink: one message per finding, updates, thread; routes
+│   ├── sink/               # outputs: slack, webhook, console
 │   ├── policy/             # severity + SLA rules
 │   ├── inventory/          # Git-managed service inventory
-│   ├── i18n/               # English and Korean text
-│   ├── intake/             # inbox processor: webhook deliveries → findings
-│   ├── notify/             # notifier: one message per finding, updates, thread history
-│   ├── source/             # inputs: dependencytrack, gitea, kev
-│   ├── sink/               # outputs: slack, console
+│   ├── job/                # scheduled jobs: SLA evaluation, reminders, KEV and OSV refresh
 │   ├── store/              # persistence + migrations
-│   ├── version/            # best-effort cross-ecosystem version comparison
-│   ├── job/                # scheduled jobs: SLA evaluation, reminders, KEV refresh
-│   └── web/                # server-rendered pages + embedded CSS
+│   ├── i18n/               # English and Korean text
+│   └── version/            # best-effort cross-ecosystem version comparison
 ├── examples/               # sample inventory, policy, access policy, SBOM
 ├── deploy/compose/         # docker compose demo
 ├── deploy/self-hosted/     # docker compose for on-premises / local use
 └── docs/                   # how it works, configuration, integration guides
 ```
+
+Dependencies point inwards: `server`, `web` and `api` handle HTTP and call `app`, `impact` and the `store`; `app` holds the rules for changes, so the pages and the API cannot drift apart. Adapters for other systems live in `source/` (inputs) and `sink/` (notifications); a new chat or ticket system is a new `notify.Sink`.
 
 ### Tech stack
 

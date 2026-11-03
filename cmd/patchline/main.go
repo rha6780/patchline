@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/config"
 	"github.com/rha6780/patchline/internal/detect"
@@ -164,14 +165,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	webOpts := web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger,
-		OnChange: func() { sla.Wake(); notifier.Wake() }, PublicURL: cfg.PublicURL,
-		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret,
-		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local(), Impact: st}
+	// Changes people make (assignment, requests, decisions) go through one
+	// service, which writes decisions back to Dependency-Track.
+	svc := &app.Service{Store: st, OnChange: func() { sla.Wake(); notifier.Wake() }, Now: time.Now}
 	if dt != nil {
-		webOpts.DT = dt
+		svc.DT = dt
 	}
-	ui, err := web.New(webOpts)
+	ui, err := web.New(web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger,
+		App: svc, PublicURL: cfg.PublicURL,
+		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret,
+		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local(), Impact: st})
 	if err != nil {
 		return err
 	}

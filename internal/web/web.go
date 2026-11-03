@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/i18n"
@@ -70,7 +71,10 @@ type Options struct {
 	// Actions enables the pages and forms that change things. Nil keeps
 	// the UI read-only.
 	Actions Actions
-	// DT writes approved risk acceptances to Dependency-Track.
+	// App makes the changes. When nil, one is built from Store, Actions,
+	// DT, OnChange and Now.
+	App *app.Service
+	// DT writes approved decisions to Dependency-Track.
 	DT AnalysisWriter
 	// OnChange is called after a change (to wake the notifier).
 	OnChange func()
@@ -93,6 +97,7 @@ type Options struct {
 // UI is the web handler.
 type UI struct {
 	o     Options
+	app   *app.Service
 	pages map[string]*template.Template
 	mux   *http.ServeMux
 }
@@ -111,7 +116,10 @@ func New(o Options) (*UI, error) {
 	if o.OnChange == nil {
 		o.OnChange = func() {}
 	}
-	u := &UI{o: o, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
+	u := &UI{o: o, app: o.App, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
+	if u.app == nil && o.Actions != nil {
+		u.app = &app.Service{Store: appStore{o.Store, o.Actions}, DT: o.DT, OnChange: o.OnChange, Now: o.Now}
+	}
 	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide", "approvals", "settings", "signedout", "login", "password", "components", "vulnerability"} {
 		t, err := template.New("layout.html").Funcs(u.funcs()).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html")
 		if err != nil {
@@ -545,8 +553,8 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 		data["MinDue"] = minDue.Add(24 * time.Hour).UTC().Format("2006-01-02")
 		// Decisions on Dependency-Track findings need the write-back;
 		// Patchline-only findings are decided here.
-		data["CanDecide"] = !inDT(f) || u.o.DT != nil
-		data["InDT"] = inDT(f)
+		data["CanDecide"] = !app.InDT(f) || u.app.DT != nil
+		data["InDT"] = app.InDT(f)
 		data["Justifications"] = store.Justifications
 	}
 	u.render(w, r, "finding", f.VulnID, data)
@@ -893,6 +901,12 @@ func orderEnvironments(set map[string]bool) []string {
 }
 
 const storeTimeLayout = "2006-01-02T15:04:05.000Z"
+
+// appStore joins what the UI reads and changes into the service's store.
+type appStore struct {
+	Store
+	Actions
+}
 
 func parseTime(s string) (time.Time, error) { return time.Parse(storeTimeLayout, s) }
 

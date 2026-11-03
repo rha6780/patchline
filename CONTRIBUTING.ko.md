@@ -62,26 +62,33 @@ make test
 patchline/
 ├── cmd/patchline/          # 진입점
 ├── internal/
-│   ├── auth/               # OIDC 로그인, 세션, 접근 정책
+│   ├── app/                # 사람이 하는 변경: 지정, 요청, 승인 (+ Dependency-Track 반영)
+│   ├── api/                # JSON API /api/v1, 전용 응답 타입과 openapi.yaml
+│   ├── server/             # HTTP 루트: 헬스 체크, Webhook, SBOM 수신. api·web·auth 연결
+│   ├── web/                # 서버 렌더링 화면 + 내장 CSS. 변경은 app 호출
+│   ├── auth/               # OIDC·로컬 로그인, 세션, API 토큰, 접근 정책
 │   ├── config/             # 환경변수
-│   ├── server/             # HTTP: Webhook Inbox, 내부 API, UI 라우트
 │   ├── finding/            # 모델, 상태 전이, 이벤트 로그
+│   ├── intake/             # Inbox 처리기: Webhook 수신분과 SBOM → Finding
+│   ├── detect/             # 탐지 엔진 인터페이스, 엔진 결합
+│   ├── impact/             # 구성요소 검색, 취약점 영향 범위
+│   ├── sbom/, purl/, vex/  # SBOM 파싱, 패키지 URL, CycloneDX VEX
+│   ├── source/             # 입력: dependencytrack, gitea, kev, osv, trivy
+│   ├── notify/             # sink별 Notifier: Finding당 메시지 1개, 갱신, 스레드, 라우팅
+│   ├── sink/               # 출력: slack, webhook, console
 │   ├── policy/             # 등급 + SLA 규칙
 │   ├── inventory/          # Git으로 관리하는 서비스 인벤토리
-│   ├── i18n/               # 영어·한국어 문구
-│   ├── intake/             # Inbox 처리기: Webhook 수신분 → Finding
-│   ├── notify/             # Notifier: Finding당 메시지 1개, 갱신, 스레드 이력
-│   ├── source/             # 입력: dependencytrack, gitea, kev
-│   ├── sink/               # 출력: slack, console
+│   ├── job/                # 스케줄 작업: SLA 평가, 재알림, KEV·OSV 갱신
 │   ├── store/              # 저장소 + 마이그레이션
-│   ├── version/            # 생태계 공통 버전 비교(best-effort)
-│   ├── job/                # 스케줄 작업: SLA 평가, 재알림, KEV 갱신
-│   └── web/                # 서버 렌더링 화면 + 내장 CSS
+│   ├── i18n/               # 영어·한국어 문구
+│   └── version/            # 생태계 공통 버전 비교(best-effort)
 ├── examples/               # 샘플 인벤토리, 정책, 접근 정책, SBOM
 ├── deploy/compose/         # docker compose 데모
 ├── deploy/self-hosted/     # 직접 설치용 docker compose(온프렘, 로컬)
 └── docs/                   # 동작 방식, 설정, 연동 가이드
 ```
+
+의존 방향은 안쪽으로 향합니다. `server`, `web`, `api`는 HTTP를 처리하고 `app`, `impact`, `store`를 호출합니다. 변경 규칙은 `app`에만 있어서 화면과 API의 동작이 어긋나지 않습니다. 외부 시스템 어댑터는 `source/`(입력)와 `sink/`(알림)에 둡니다. 새 채팅·티켓 시스템은 `notify.Sink`를 하나 구현하면 됩니다.
 
 ### 기술 스택
 

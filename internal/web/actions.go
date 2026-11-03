@@ -3,22 +3,18 @@ package web
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/auth"
-	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/i18n"
-	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -40,12 +36,7 @@ type Actions interface {
 }
 
 // AnalysisWriter records analysis decisions in Dependency-Track.
-type AnalysisWriter interface {
-	SetAnalysis(ctx context.Context, a dependencytrack.AnalysisUpdate) error
-}
-
-// maxReason bounds request reasons and decision notes.
-const maxReason = 2000
+type AnalysisWriter = app.AnalysisWriter
 
 // back redirects to path with a notice or an error key (shown by the page
 // through the i18n catalog).
@@ -57,130 +48,45 @@ func (u *UI) forbid(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, langOf(r).T("ui.err.forbidden"), http.StatusForbidden)
 }
 
-func (u *UI) findingFor(w http.ResponseWriter, r *http.Request) (store.Finding, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.NotFound(w, r)
-		return store.Finding{}, false
-	}
-	f, err := u.o.Store.GetFinding(r.Context(), id)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return store.Finding{}, false
-	}
-	if err != nil {
-		u.fail(w, err)
-		return store.Finding{}, false
-	}
-	return f, true
-}
-
 // ---- assignment -------------------------------------------------------
 
 func (u *UI) assign(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
-	if !p.Can(auth.FindingsAssign) {
-		u.forbid(w, r)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
 		return
 	}
-	f, ok := u.findingFor(w, r)
-	if !ok {
-		return
-	}
-	assignee := strings.TrimSpace(r.PostFormValue("assignee"))
+	assignee := r.PostFormValue("assignee")
 	if r.PostFormValue("me") == "1" {
 		assignee = p.Identity()
 	}
-	if len(assignee) > 254 {
-		back(w, r, findingPath(f.ID), "error", "assignee")
+	if err := u.app.Assign(r.Context(), p, id, assignee); err != nil {
+		u.refused(w, r, findingPath(id), err)
 		return
 	}
-	changed, err := u.o.Actions.AssignFinding(r.Context(), f.ID, assignee, p.Actor())
-	if err != nil {
-		u.fail(w, err)
-		return
-	}
-	if changed {
-		u.o.OnChange()
-	}
-	back(w, r, findingPath(f.ID), "notice", "assigned")
+	back(w, r, findingPath(id), "notice", "assigned")
 }
 
 // ---- requests ---------------------------------------------------------
 
 func (u *UI) request(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
-	if !p.Can(auth.ExceptionsRequest) {
-		u.forbid(w, r)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
 		return
 	}
-	f, ok := u.findingFor(w, r)
-	if !ok {
+	in := app.RequestInput{FindingID: id, Kind: r.PostFormValue("kind"), Reason: r.PostFormValue("reason"),
+		Justification: r.PostFormValue("justification"), Due: r.PostFormValue("due")}
+	if _, err := u.app.Request(r.Context(), p, in); err != nil {
+		u.refused(w, r, findingPath(id), err)
 		return
 	}
-	path := findingPath(f.ID)
-	if !finding.State(f.State).Open() {
-		back(w, r, path, "error", "closed")
-		return
-	}
-	reason := strings.TrimSpace(r.PostFormValue("reason"))
-	if reason == "" || len(reason) > maxReason {
-		back(w, r, path, "error", "reason")
-		return
-	}
-	req := store.ExceptionRequest{FindingID: f.ID, Kind: r.PostFormValue("kind"), Reason: reason}
-	switch req.Kind {
-	case store.RequestRiskAcceptance, store.RequestFalsePositive, store.RequestNotAffected:
-		if req.Kind == store.RequestNotAffected {
-			req.Justification = r.PostFormValue("justification")
-			if !slices.Contains(store.Justifications, req.Justification) {
-				back(w, r, path, "error", "justification")
-				return
-			}
-		}
-		// A decision on a Dependency-Track finding is written there; one on
-		// a finding only Patchline reports stays in Patchline.
-		if inDT(f) && u.o.DT == nil {
-			back(w, r, path, "error", "no_dt")
-			return
-		}
-	case store.RequestDueExtension:
-		day, err := time.Parse("2006-01-02", r.PostFormValue("due"))
-		if err != nil {
-			back(w, r, path, "error", "due")
-			return
-		}
-		// The end of the chosen day, so "due 2026-12-01" means all of it.
-		due := day.Add(24*time.Hour - time.Millisecond).UTC()
-		floor := u.o.Now()
-		if f.DueAt != nil {
-			if t, err := parseTime(*f.DueAt); err == nil && t.After(floor) {
-				floor = t
-			}
-		}
-		if !due.After(floor) {
-			back(w, r, path, "error", "due_earlier")
-			return
-		}
-		s := store.FormatTime(due)
-		req.RequestedDue = &s
-	default:
-		http.Error(w, "unknown request kind", http.StatusBadRequest)
-		return
-	}
-	if _, err := u.o.Actions.CreateRequest(r.Context(), req, p.Actor()); errors.Is(err, store.ErrPendingRequest) {
-		back(w, r, path, "error", "pending")
-		return
-	} else if err != nil {
-		u.fail(w, err)
-		return
-	}
-	u.o.OnChange()
-	back(w, r, path, "notice", "requested")
+	back(w, r, findingPath(id), "notice", "requested")
 }
 
-// decide approves, rejects or withdraws a request. Approvers cannot decide
-// their own requests; only the requester can withdraw one.
+// decide approves, rejects or withdraws a request.
 func (u *UI) decide(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -188,123 +94,40 @@ func (u *UI) decide(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	req, err := u.o.Actions.GetRequest(r.Context(), id)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		u.fail(w, err)
-		return
-	}
+	action := r.PostFormValue("action")
+	req, err := u.app.Decide(r.Context(), p, id, action, r.PostFormValue("note"))
 	path := findingPath(req.FindingID)
 	if r.PostFormValue("from") == "approvals" {
 		path = "/approvals"
 	}
-	note := strings.TrimSpace(r.PostFormValue("note"))
-	if len(note) > maxReason {
-		back(w, r, path, "error", "reason")
+	if err != nil {
+		u.refused(w, r, path, err)
 		return
 	}
+	status := map[string]string{app.Approve: store.RequestApproved, app.Reject: store.RequestRejected,
+		app.Cancel: store.RequestCancelled}[action]
+	back(w, r, path, "notice", status)
+}
 
-	d := store.Decision{RequestID: id, Note: note, By: p.Actor()}
-	switch r.PostFormValue("action") {
-	case "approve", "reject":
-		if !p.Can(auth.ExceptionsApprove) {
-			u.forbid(w, r)
-			return
+// refused answers a change the service did not make: a message on the
+// page for a refusal, 403 and 404 for permissions and missing records.
+func (u *UI) refused(w http.ResponseWriter, r *http.Request, path string, err error) {
+	var e *app.Error
+	switch {
+	case errors.Is(err, app.ErrForbidden):
+		u.forbid(w, r)
+	case errors.Is(err, app.ErrNotFound):
+		http.NotFound(w, r)
+	case errors.As(err, &e) && (e.Code == "kind" || e.Code == "action"):
+		http.Error(w, "unknown "+e.Code, http.StatusBadRequest)
+	case errors.As(err, &e):
+		if e.Err != nil {
+			u.o.Logger.Warn("change refused", "path", r.URL.Path, "code", e.Code, "err", e.Err)
 		}
-		if req.RequestedBy == p.Subject {
-			back(w, r, path, "error", "own_request")
-			return
-		}
-		d.Status = store.RequestRejected
-		if r.PostFormValue("action") == "approve" {
-			d.Status = store.RequestApproved
-		}
-	case "cancel":
-		if req.RequestedBy != p.Subject || !p.Authenticated {
-			u.forbid(w, r)
-			return
-		}
-		d.Status = store.RequestCancelled
+		back(w, r, path, "error", e.Code)
 	default:
-		http.Error(w, "unknown action", http.StatusBadRequest)
-		return
-	}
-	if req.Status != store.RequestPending {
-		back(w, r, path, "error", "not_pending")
-		return
-	}
-
-	if d.Status == store.RequestApproved && isDecision(req.Kind) {
-		f, err := u.o.Store.GetFinding(r.Context(), req.FindingID)
-		if err != nil {
-			u.fail(w, err)
-			return
-		}
-		if inDT(f) {
-			if err := u.writeToDT(r.Context(), f, req, p); err != nil {
-				u.o.Logger.Warn("write decision to dependency-track", "request", id, "kind", req.Kind, "err", err)
-				back(w, r, path, "error", "dt_write")
-				return
-			}
-			d.Evidence = map[string]any{"recorded_in": "dependency-track"}
-		} else {
-			d.Evidence = map[string]any{"recorded_in": "patchline"}
-		}
-	}
-	if err := u.o.Actions.DecideRequest(r.Context(), d); errors.Is(err, store.ErrNotPending) {
-		back(w, r, path, "error", "not_pending")
-		return
-	} else if err != nil {
 		u.fail(w, err)
-		return
 	}
-	u.o.OnChange()
-	back(w, r, path, "notice", d.Status)
-}
-
-// isDecision reports whether a request kind closes the finding with an
-// analysis decision.
-func isDecision(kind string) bool {
-	switch kind {
-	case store.RequestRiskAcceptance, store.RequestNotAffected, store.RequestFalsePositive:
-		return true
-	}
-	return false
-}
-
-// inDT reports whether Dependency-Track knows the finding, so decisions
-// about it belong there.
-func inDT(f store.Finding) bool {
-	return f.DTProjectUUID != "" && f.DTComponentUUID != "" && f.DTVulnerabilityUUID != ""
-}
-
-// writeToDT records the decision in Dependency-Track, so it lives where
-// the analysis lives. The PROJECT_AUDIT_CHANGE that follows is a no-op:
-// the finding is already closed.
-func (u *UI) writeToDT(ctx context.Context, f store.Finding, req store.ExceptionRequest, p *auth.Principal) error {
-	if u.o.DT == nil {
-		return errors.New("dependency-track is not configured (PATCHLINE_DT_URL, PATCHLINE_DT_API_KEY)")
-	}
-	reason := oneLine(req.Reason)
-	a := dependencytrack.AnalysisUpdate{
-		ProjectUUID: f.DTProjectUUID, ComponentUUID: f.DTComponentUUID, VulnerabilityUUID: f.DTVulnerabilityUUID,
-		Justification: "NOT_SET", Response: "NOT_SET", Details: reason,
-	}
-	what := ""
-	switch req.Kind {
-	case store.RequestRiskAcceptance:
-		a.State, a.Response, a.Suppressed, what = "EXPLOITABLE", "WILL_NOT_FIX", true, "Risk accepted"
-	case store.RequestNotAffected:
-		a.State, a.Justification, what = "NOT_AFFECTED", strings.ToUpper(req.Justification), "Not affected ("+req.Justification+")"
-	case store.RequestFalsePositive:
-		a.State, what = "FALSE_POSITIVE", "False positive"
-	}
-	a.Comment = fmt.Sprintf("%s in Patchline (request #%d): requested by %s, approved by %s. %s",
-		what, req.ID, labelOr(req.RequestedByName, req.RequestedBy), p.Label(), reason)
-	return u.o.DT.SetAnalysis(ctx, a)
 }
 
 func (u *UI) approvals(w http.ResponseWriter, r *http.Request) {
@@ -517,15 +340,6 @@ func (u *UI) revokeToken(w http.ResponseWriter, r *http.Request) {
 // ---- helpers ----------------------------------------------------------
 
 func findingPath(id int64) string { return "/findings/" + strconv.FormatInt(id, 10) }
-
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
-
-func labelOr(name, subject string) string {
-	if name != "" {
-		return name
-	}
-	return subject
-}
 
 func hint(secret string) string {
 	if len(secret) <= 8 {
