@@ -39,11 +39,12 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/api/v1/components` | Where packages are used in the stored SBOMs. `q`, `ecosystem`, `version` (e.g. `<2.17.0`), `limit` |
 | `GET` | `/api/v1/vulnerabilities/{id}` | What a CVE or GHSA affects: affected snapshots, fixed versions, findings from every source |
 | `GET` | `/api/v1/vex` | CycloneDX 1.5 VEX of a project version (`project`, `version`, `download=1` for a file) |
+| `GET` | `/api/v1/openapi.yaml` | OpenAPI 3.1 description of the API, with every field |
 | `GET` | `/login` | Sign-in page (local admin, single sign-on) |
 | `POST` | `/auth/local`, `/account/password` | Local admin sign-in and password change |
 | `GET` | `/auth/login`, `/auth/callback`; `POST /auth/logout` | OIDC sign-in, when configured; sign-out |
 
-`/api/v1/*` needs a session with `findings.read` and answers `401` otherwise (unless `PATCHLINE_ALLOW_ANONYMOUS=true`).
+`/api/v1/*` needs a session or an [API token](access-control.md#api-tokens) with `findings.read` and answers `401` otherwise (unless `PATCHLINE_ALLOW_ANONYMOUS=true`). Errors are `{"error": "..."}`. Fields may be added within `v1`; clients should ignore the ones they do not know. The OpenAPI file is also in the repository at [`internal/api/openapi.yaml`](../internal/api/openapi.yaml), for generating clients.
 
 ## Configuration
 

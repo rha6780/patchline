@@ -1,4 +1,4 @@
-package server
+package api
 
 import (
 	"context"
@@ -31,8 +31,7 @@ func (h *handler) vex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projects, err := h.o.Snapshots.SourceProjects(ctx, finding.SourcePatchline)
 	if err != nil {
-		h.o.Logger.Error("vex projects", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not load the project")
+		h.fail(w, "vex projects", err, "could not load the project")
 		return
 	}
 	id := sbom.ProjectID(name, version)
@@ -48,14 +47,12 @@ func (h *handler) vex(w http.ResponseWriter, r *http.Request) {
 	}
 	findings, err := h.o.Snapshots.SnapshotFindings(ctx, finding.SourcePatchline, id)
 	if err != nil {
-		h.o.Logger.Error("vex findings", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not load findings")
+		h.fail(w, "vex findings", err, "could not load findings")
 		return
 	}
 	comps, err := h.o.Snapshots.Components(ctx, finding.SourcePatchline, id)
 	if err != nil {
-		h.o.Logger.Error("vex components", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not load components")
+		h.fail(w, "vex components", err, "could not load components")
 		return
 	}
 	doc := vex.Build(*project, findings, comps, h.o.Version, time.Now())

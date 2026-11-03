@@ -10,16 +10,15 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/rha6780/patchline/internal/api"
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/source/gitea"
-	"github.com/rha6780/patchline/internal/store"
 )
 
 // MaxWebhookBody bounds a webhook payload. BOM notifications embed the
@@ -36,18 +35,11 @@ type Inbox interface {
 	InsertInbox(ctx context.Context, source, eventType, dedupKey string, payload []byte) (int64, bool, error)
 }
 
-// Findings reads findings for the API.
-type Findings interface {
-	ListFindings(ctx context.Context, f store.FindingFilter) ([]store.Finding, error)
-	FindingEvents(ctx context.Context, findingID int64) ([]store.FindingEvent, error)
-	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
-}
-
 // Options wires the handler's dependencies.
 type Options struct {
 	DB        Pinger
 	Inbox     Inbox
-	Findings  Findings
+	Findings  api.Findings
 	Inventory *inventory.Inventory
 	// WebhookToken, when set, must be sent as ?token=... or
 	// "Authorization: Bearer ...". Leave empty only for local development.
@@ -66,7 +58,7 @@ type Options struct {
 	// Impact, when set, serves component search and vulnerability impact.
 	Impact impact.Store
 	// Snapshots, when set, serves VEX for the SBOMs uploaded to Patchline.
-	Snapshots Snapshots
+	Snapshots api.Snapshots
 	// Version is Patchline's version, named as the tool in VEX documents.
 	Version string
 	// UI, when set, serves every path not handled above (the web pages).
@@ -83,12 +75,7 @@ type Options struct {
 //	POST /webhooks/dependency-track    Dependency-Track outbound webhook
 //	POST /webhooks/gitea               Gitea / Forgejo / GitHub pull_request webhook
 //	POST /ingest/sbom                  SBOM upload for Patchline's own detection
-//	GET  /api/v1/findings              findings with owners (?q=&service=&environment=&branch=&repository=&severity=&state=&assignee=&open=1&limit=)
-//	GET  /api/v1/findings/{id}/events  a finding's timeline
-//	GET  /api/v1/findings/{id}/pull-requests  linked pull requests
-//	GET  /api/v1/components            where packages are used (?q=&ecosystem=&version=&limit=)
-//	GET  /api/v1/vulnerabilities/{id}  what a CVE / GHSA affects
-//	GET  /api/v1/vex                   CycloneDX VEX of a project version (?project=&version=)
+//	     /api/v1/...                   the JSON API (package api)
 func New(o Options) http.Handler {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
@@ -111,18 +98,8 @@ func New(o Options) http.Handler {
 		mux.HandleFunc("POST /webhooks/gitea", h.giteaWebhook)
 		mux.HandleFunc("POST /ingest/sbom", h.ingestSBOM)
 	}
-	if o.Findings != nil {
-		mux.HandleFunc("GET /api/v1/findings", h.listFindings)
-		mux.HandleFunc("GET /api/v1/findings/{id}/events", h.findingEvents)
-		mux.HandleFunc("GET /api/v1/findings/{id}/pull-requests", h.findingPullRequests)
-	}
-	if o.Snapshots != nil {
-		mux.HandleFunc("GET /api/v1/vex", h.vex)
-	}
-	if o.Impact != nil {
-		mux.HandleFunc("GET /api/v1/components", h.components)
-		mux.HandleFunc("GET /api/v1/vulnerabilities/{id}", h.vulnerability)
-	}
+	api.Register(mux, api.Options{Findings: o.Findings, Inventory: o.Inventory, Impact: o.Impact,
+		Snapshots: o.Snapshots, Version: o.Version, Logger: o.Logger})
 	if o.UI != nil {
 		mux.Handle("/", o.UI)
 	}
@@ -274,99 +251,6 @@ func (h *handler) giteaWebhook(w http.ResponseWriter, r *http.Request) {
 		h.o.OnInbox()
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"inbox_id": id, "duplicate": !inserted})
-}
-
-func (h *handler) findingPullRequests(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid finding id")
-		return
-	}
-	prs, err := h.o.Findings.FindingPullRequests(r.Context(), id)
-	if err != nil {
-		h.o.Logger.Error("finding pull requests", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not load pull requests")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"pull_requests": prs})
-}
-
-// findingView adds inventory context to a stored finding.
-type findingView struct {
-	store.Finding
-	Owners       []string `json:"owners"`
-	SlackChannel string   `json:"slack_channel,omitempty"`
-	Exposure     string   `json:"exposure,omitempty"`
-}
-
-func (h *handler) listFindings(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	list, err := h.o.Findings.ListFindings(r.Context(), store.FindingFilter{
-		Service: q.Get("service"), Environment: q.Get("environment"), State: q.Get("state"), Assignee: q.Get("assignee"), Limit: limit,
-		Severity: q.Get("severity"), Branch: q.Get("branch"), Repository: q.Get("repository"), Query: q.Get("q"),
-		Open: q.Get("open") == "1",
-	})
-	if err != nil {
-		h.o.Logger.Error("list findings", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not list findings")
-		return
-	}
-	out := make([]findingView, 0, len(list))
-	for _, f := range list {
-		v := findingView{Finding: f, Owners: []string{}}
-		if f.Registered {
-			if s, ok := h.o.Inventory.Service(f.Service); ok {
-				v.Owners = append(v.Owners, s.Owners...)
-				v.SlackChannel = s.SlackChannel
-				v.Exposure = string(s.Exposure)
-			}
-		}
-		out = append(out, v)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"findings": out})
-}
-
-func (h *handler) findingEvents(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid finding id")
-		return
-	}
-	events, err := h.o.Findings.FindingEvents(r.Context(), id)
-	if err != nil {
-		h.o.Logger.Error("finding events", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not load events")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": events})
-}
-
-func (h *handler) components(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	uses, err := impact.Search(r.Context(), h.o.Impact, impact.Query{Text: q.Get("q"), Ecosystem: q.Get("ecosystem"),
-		Version: q.Get("version"), Limit: limit})
-	if errors.Is(err, impact.ErrBadConstraint) {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err != nil {
-		h.o.Logger.Error("search components", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not search components")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"components": uses})
-}
-
-func (h *handler) vulnerability(w http.ResponseWriter, r *http.Request) {
-	rep, err := impact.Analyze(r.Context(), h.o.Impact, r.PathValue("id"))
-	if err != nil {
-		h.o.Logger.Error("vulnerability impact", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not analyze the vulnerability")
-		return
-	}
-	writeJSON(w, http.StatusOK, rep)
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

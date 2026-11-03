@@ -1,0 +1,367 @@
+openapi: 3.1.0
+info:
+  title: Patchline API
+  version: "1"
+  description: |
+    Read findings, their timelines and fix pull requests, search the stored
+    SBOMs, and upload SBOMs for Patchline's own detection.
+
+    Authenticate with an API token (`Authorization: Bearer plt_...`) or a
+    signed-in session. `/api/v1/*` needs `findings.read`; `/ingest/sbom`
+    needs `sbom.upload` (or the shared webhook token).
+
+    Fields may be added within version 1; clients should ignore fields they
+    do not know.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /
+security:
+  - token: []
+  - session: []
+
+paths:
+  /api/v1/findings:
+    get:
+      summary: List findings
+      operationId: listFindings
+      parameters:
+        - {name: q, in: query, description: "Vulnerability id or alias, component name or purl, or title (substring, case-insensitive)", schema: {type: string}}
+        - {name: service, in: query, schema: {type: string}}
+        - {name: environment, in: query, schema: {type: string}}
+        - {name: branch, in: query, description: "Branch or tag of the latest SBOM that reports the finding (`main`, `refs/heads/main`, `v1.4.0`)", schema: {type: string}}
+        - {name: repository, in: query, description: "owner/name", schema: {type: string}}
+        - {name: severity, in: query, description: Effective severity, schema: {$ref: "#/components/schemas/Severity"}}
+        - {name: state, in: query, schema: {$ref: "#/components/schemas/State"}}
+        - {name: assignee, in: query, schema: {type: string}}
+        - {name: open, in: query, description: "`1` returns open findings only", schema: {type: string, enum: ["1"]}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1}}
+      responses:
+        "200":
+          description: Findings, most urgent first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [findings]
+                properties:
+                  findings: {type: array, items: {$ref: "#/components/schemas/Finding"}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /api/v1/findings/{id}/events:
+    get:
+      summary: A finding's timeline
+      operationId: findingEvents
+      parameters: [{$ref: "#/components/parameters/FindingID"}]
+      responses:
+        "200":
+          description: Events, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events: {type: array, items: {$ref: "#/components/schemas/Event"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /api/v1/findings/{id}/pull-requests:
+    get:
+      summary: Fix pull requests linked to a finding
+      operationId: findingPullRequests
+      parameters: [{$ref: "#/components/parameters/FindingID"}]
+      responses:
+        "200":
+          description: Pull requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pull_requests]
+                properties:
+                  pull_requests: {type: array, items: {$ref: "#/components/schemas/PullRequest"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /api/v1/components:
+    get:
+      summary: Where packages are used in the stored SBOMs
+      operationId: searchComponents
+      parameters:
+        - {name: q, in: query, description: "purl, name or package (substring)", schema: {type: string}}
+        - {name: ecosystem, in: query, description: "OSV ecosystem: Maven, npm, PyPI, Go, ...", schema: {type: string}}
+        - {name: version, in: query, description: "Constraint such as `< 2.17.0` or `>= 2.0, < 2.17.0`", schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1}}
+      responses:
+        "200":
+          description: Component uses
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [components]
+                properties:
+                  components: {type: array, items: {$ref: "#/components/schemas/ComponentUse"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /api/v1/vulnerabilities/{id}:
+    get:
+      summary: What a vulnerability affects
+      operationId: vulnerabilityImpact
+      parameters:
+        - {name: id, in: path, required: true, description: "CVE, GHSA or another OSV id", schema: {type: string}}
+      responses:
+        "200":
+          description: Impact
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Impact"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /api/v1/vex:
+    get:
+      summary: CycloneDX 1.5 VEX of a project version
+      description: Every vulnerability the project's latest SBOM uploaded to Patchline reports, with the decision on it.
+      operationId: vex
+      parameters:
+        - {name: project, in: query, required: true, schema: {type: string}}
+        - {name: version, in: query, schema: {type: string}}
+        - {name: download, in: query, description: "`1` adds Content-Disposition", schema: {type: string, enum: ["1"]}}
+      responses:
+        "200":
+          description: A CycloneDX 1.5 document with `vulnerabilities` only
+          content:
+            application/json:
+              schema: {type: object}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /api/v1/openapi.yaml:
+    get:
+      summary: This document
+      operationId: openapi
+      responses:
+        "200":
+          description: OpenAPI 3.1
+          content:
+            application/yaml: {}
+
+  /ingest/sbom:
+    post:
+      summary: Upload an SBOM for Patchline's own detection
+      description: |
+        CycloneDX (JSON or XML) or SPDX JSON, as the body with `project` and
+        `version` in the query, or as multipart form fields `project`,
+        `version` and `bom`. The repository, ref and commit are read from
+        the SBOM's metadata properties.
+      operationId: ingestSBOM
+      security:
+        - token: []
+      parameters:
+        - {name: project, in: query, schema: {type: string}}
+        - {name: version, in: query, description: Becomes the environment, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {type: object}}
+          application/xml: {schema: {type: string}}
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                project: {type: string}
+                version: {type: string}
+                bom: {type: string, format: binary}
+      responses:
+        "202":
+          description: Stored; it is analyzed in the background
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inbox_id: {type: integer}
+                  duplicate: {type: boolean}
+                  format: {type: string, description: "CycloneDX or SPDX"}
+                  components: {type: integer}
+                  without_purl: {type: integer, description: Components that cannot be matched}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "413": {description: Payload too large}
+
+components:
+  securitySchemes:
+    token:
+      type: http
+      scheme: bearer
+      description: "API token (`plt_...`) created under Settings → API tokens"
+    session:
+      type: apiKey
+      in: cookie
+      name: patchline_session
+
+  parameters:
+    FindingID:
+      name: id
+      in: path
+      required: true
+      schema: {type: integer}
+
+  responses:
+    BadRequest:
+      description: Invalid parameters
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+    Unauthorized:
+      description: No session or token, or no permission
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+    NotFound:
+      description: Not found
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+
+    Severity:
+      type: string
+      enum: [critical, high, medium, low, info, unassigned]
+
+    State:
+      type: string
+      enum: [needs_review, new, in_progress, awaiting_verification, not_affected, risk_accepted, resolved, reopened]
+
+    Finding:
+      type: object
+      required: [id, service, registered, environment, component_ref, vuln_id, aliases, severity, kev, state, first_seen_at, updated_at, owners]
+      properties:
+        id: {type: integer}
+        service: {type: string}
+        registered: {type: boolean, description: The service is in the inventory}
+        repository: {type: string}
+        environment: {type: string}
+        component_ref: {type: string, description: purl}
+        component_name: {type: string}
+        component_version: {type: string}
+        vuln_id: {type: string, description: "Canonical id (CVE when known)"}
+        aliases: {type: array, items: {type: string}}
+        title: {type: string}
+        severity: {type: string, description: Scanner severity}
+        effective_severity: {type: string, description: After the remediation policy (KEV, EPSS, exposure)}
+        sla_reasons: {type: array, items: {type: string}}
+        epss: {type: number}
+        kev: {type: boolean}
+        state: {$ref: "#/components/schemas/State"}
+        due_at: {type: string, format: date-time}
+        due_override: {type: string, format: date-time, description: Approved due date extension}
+        sla_started_at: {type: string, format: date-time}
+        first_seen_at: {type: string, format: date-time}
+        resolved_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        assignee: {type: string}
+        analysis: {$ref: "#/components/schemas/Analysis"}
+        dt_project_uuid: {type: string}
+        dt_vuln_source: {type: string}
+        dt_vuln_id: {type: string}
+        owners: {type: array, items: {type: string}, description: Service owners from the inventory}
+        slack_channel: {type: string}
+        exposure: {type: string}
+
+    Analysis:
+      type: object
+      required: [state]
+      properties:
+        state: {type: string, description: "CycloneDX analysis state: exploitable, not_affected, false_positive, ..."}
+        justification: {type: string}
+        response: {type: string}
+        detail: {type: string}
+        by: {type: string}
+        at: {type: string, format: date-time}
+
+    Event:
+      type: object
+      required: [id, kind, evidence, occurred_at]
+      properties:
+        id: {type: integer}
+        kind: {type: string, description: "detected, state_changed, severity_changed, sla_changed, pr_linked, assigned, ..."}
+        from_state: {type: string}
+        to_state: {type: string}
+        evidence: {type: object, description: Depends on kind}
+        occurred_at: {type: string, format: date-time}
+
+    PullRequest:
+      type: object
+      required: [finding_id, repository, number, url, state, verdict]
+      properties:
+        finding_id: {type: integer}
+        repository: {type: string}
+        number: {type: integer}
+        url: {type: string}
+        title: {type: string}
+        state: {type: string, enum: [open, merged, closed]}
+        package: {type: string}
+        from_version: {type: string}
+        to_version: {type: string}
+        verdict: {type: string, enum: [fixes, insufficient, unknown]}
+        verdict_detail: {type: string}
+        head_sha: {type: string}
+        merge_sha: {type: string}
+        created_at: {type: string, format: date-time}
+
+    ComponentUse:
+      type: object
+      required: [purl, name, version, source, project_id, project, environment, service, registered, open_findings]
+      properties:
+        purl: {type: string}
+        name: {type: string}
+        version: {type: string}
+        ecosystem: {type: string}
+        package: {type: string}
+        source: {type: string, description: "patchline or dependencytrack"}
+        project_id: {type: string}
+        project: {type: string}
+        environment: {type: string}
+        service: {type: string}
+        registered: {type: boolean}
+        last_bom_at: {type: string, format: date-time}
+        commit: {type: string}
+        open_findings: {type: integer}
+
+    Impact:
+      type: object
+      required: [id, aliases, advisories, packages, affected, unaffected, findings]
+      properties:
+        id: {type: string}
+        aliases: {type: array, items: {type: string}}
+        summary: {type: string}
+        severity: {type: string}
+        advisories: {type: array, items: {type: string}, description: OSV records found for the id}
+        packages:
+          type: array
+          items:
+            type: object
+            required: [ecosystem, package, ranges]
+            properties:
+              ecosystem: {type: string}
+              package: {type: string}
+              ranges: {type: array, items: {type: string}}
+        affected:
+          type: array
+          description: Stored snapshots with an affected version
+          items:
+            allOf:
+              - $ref: "#/components/schemas/ComponentUse"
+              - type: object
+                properties:
+                  advisory: {type: string}
+                  affected_range: {type: string}
+                  fixed_version: {type: string}
+                  finding: {$ref: "#/components/schemas/Finding"}
+        unaffected: {type: integer, description: Snapshots with the package in a version outside every range}
+        findings: {type: array, items: {$ref: "#/components/schemas/Finding"}, description: Every finding of the vulnerability from any source}

@@ -1,4 +1,4 @@
-package server
+package api
 
 import "github.com/rha6780/patchline/internal/finding"
 
