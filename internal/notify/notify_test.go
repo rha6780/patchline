@@ -192,7 +192,8 @@ func TestConsoleSink(t *testing.T) {
 	ctx := context.Background()
 	st, inv := setup(t)
 	var buf bytes.Buffer
-	n := &notify.Notifier{Store: st, Sink: console.New(&buf), Inventory: inv, Logger: quiet, DTUIURL: "http://dt.local/"}
+	n := &notify.Notifier{Store: st, Sink: console.New(&buf), Inventory: inv, Logger: quiet, DTUIURL: "http://dt.local/",
+		PublicURL: "https://patchline.example/"}
 	o := obs("storefront", true, "pkg:npm/a@1", finding.SeverityCritical)
 	upsert(t, st, o)
 	_, _ = n.RunOnce(ctx)
@@ -202,7 +203,7 @@ func TestConsoleSink(t *testing.T) {
 
 	out := buf.String()
 	for _, want := range []string{"[#sf] finding #1 [CRITICAL] CVE-2024-1", "alice@example.com",
-		"http://dt.local/projects/p-storefront/findings", "updated", "↳ [#sf] finding #1: State: 🆕 New → 🛠️ In progress"} {
+		"https://patchline.example/findings/1", "http://dt.local/projects/p-storefront/findings", "updated", "↳ [#sf] finding #1: State: 🆕 New → 🛠️ In progress"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("console output missing %q:\n%s", want, out)
 		}
@@ -224,3 +225,46 @@ func upsert(t *testing.T, st *store.Store, o finding.Observation) int64 {
 	}
 	return id
 }
+
+func TestRouteAndGroup(t *testing.T) {
+	ctx := context.Background()
+	st, inv := setup(t)
+	all, prodOnly := &recorder{}, &named{name: "prod"}
+	g := notify.Group{
+		{Store: st, Sink: all, Inventory: inv, Logger: quiet},
+		{Store: st, Sink: prodOnly, Inventory: inv, Logger: quiet,
+			Route: notify.Route{MinSeverity: finding.SeverityHigh, Environments: []string{"prod"}}},
+	}
+	upsert(t, st, obs("storefront", true, "pkg:npm/a@1", finding.SeverityCritical)) // main
+	p := obs("storefront", true, "pkg:npm/a@1", finding.SeverityCritical)
+	p.Environment = "prod"
+	upsert(t, st, p)
+	p.ComponentRef, p.ComponentName, p.Severity = "pkg:npm/m@1", "pkg:npm/m@1", finding.SeverityMedium
+	upsert(t, st, p) // below the prod sink's threshold
+
+	for _, n := range g {
+		if _, err := n.RunOnce(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(all.calls) != 3 {
+		t.Fatalf("default sink calls = %v", all.calls)
+	}
+	if got := strings.Join(prodOnly.calls, "|"); got != "post #sf new" {
+		t.Fatalf("prod sink calls = %q", got)
+	}
+	// The skipped main finding is recorded and not retried.
+	prodOnly.calls = nil
+	_, _ = g[1].RunOnce(ctx)
+	if len(prodOnly.calls) != 0 {
+		t.Fatalf("rerun sent %v", prodOnly.calls)
+	}
+}
+
+// named is a recorder with its own sink name, so it keeps its own progress.
+type named struct {
+	recorder
+	name string
+}
+
+func (n *named) Name() string { return n.name }

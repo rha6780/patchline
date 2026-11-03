@@ -50,7 +50,7 @@ func message() notify.Message {
 			FirstSeenAt: "2026-10-28T09:00:00.000Z",
 		},
 		Service: &inventory.Service{Name: "storefront", Owners: []string{"alice@example.com"}},
-		Link:    "http://dt.local/projects/p/findings",
+		DTLink:  "http://dt.local/projects/p/findings",
 	}
 }
 
@@ -127,7 +127,7 @@ func TestBlocks(t *testing.T) {
 		t.Errorf("PR field missing: %s", b)
 	}
 
-	m.Service, m.Finding.Registered, m.Link, m.PullRequests = nil, false, "", nil
+	m.Service, m.Finding.Registered, m.DTLink, m.PullRequests = nil, false, "", nil
 	b, _ = json.Marshal(Blocks(m))
 	if !strings.Contains(string(b), "not in inventory") || strings.Contains(string(b), "Open in Dependency-Track") {
 		t.Errorf("unregistered blocks: %s", b)

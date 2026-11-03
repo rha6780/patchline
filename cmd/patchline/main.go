@@ -28,6 +28,7 @@ import (
 	"github.com/rha6780/patchline/internal/server"
 	"github.com/rha6780/patchline/internal/sink/console"
 	"github.com/rha6780/patchline/internal/sink/slack"
+	"github.com/rha6780/patchline/internal/sink/webhook"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/source/osv"
 	"github.com/rha6780/patchline/internal/source/trivy"
@@ -108,22 +109,7 @@ func run() error {
 		logger.Warn("PATCHLINE_WEBHOOK_TOKEN not set: webhooks are accepted without authentication")
 	}
 
-	var sink notify.Sink = console.New(os.Stdout)
-	if cfg.SlackBotToken != "" {
-		sink = slack.New(cfg.SlackBotToken, "", nil)
-	} else {
-		logger.Info("PATCHLINE_SLACK_BOT_TOKEN not set: notifications are printed to stdout")
-	}
-	notifier := &notify.Notifier{
-		Store:          st,
-		Sink:           sink,
-		Inventory:      inv,
-		Logger:         logger,
-		DefaultChannel: cfg.SlackDefaultChannel,
-		MinSeverity:    cfg.NotifyMinSeverity,
-		DTUIURL:        cfg.DependencyTrackUIURL,
-		Lang:           i18n.Lang(cfg.NotifyLang),
-	}
+	notifier := notifiers(cfg, st, inv, logger)
 	sla := &job.SLA{Store: st, Policy: pol, Inventory: inv, Logger: logger, KEVURL: cfg.KEVURL, OnChange: notifier.Wake}
 	// New findings are posted once the policy has evaluated them, so the
 	// SLA job runs first and wakes the notifier.
@@ -236,6 +222,44 @@ func run() error {
 
 // newAuthenticator sets up sign-in: the local admin (created as
 // admin/admin on first start) and, when configured, OIDC.
+// notifiers returns one notifier per configured sink: Slack and the
+// webhook, or the console when neither is set.
+func notifiers(cfg config.Config, st *store.Store, inv *inventory.Inventory, logger *slog.Logger) notify.Group {
+	newNotifier := func(sink notify.Sink, r config.NotifyRoute) *notify.Notifier {
+		if r.MinSeverity == "" {
+			r.MinSeverity = cfg.NotifyMinSeverity
+		}
+		logger.Info("notifications", "sink", sink.Name(), "min_severity", r.MinSeverity,
+			"services", r.Services, "environments", r.Environments)
+		return &notify.Notifier{
+			Store:          st,
+			Sink:           sink,
+			Inventory:      inv,
+			Logger:         logger,
+			DefaultChannel: cfg.SlackDefaultChannel,
+			Route:          notify.Route{MinSeverity: r.MinSeverity, Services: r.Services, Environments: r.Environments},
+			PublicURL:      cfg.PublicURL,
+			DTUIURL:        cfg.DependencyTrackUIURL,
+			Lang:           i18n.Lang(cfg.NotifyLang),
+		}
+	}
+	var g notify.Group
+	if cfg.SlackBotToken != "" {
+		g = append(g, newNotifier(slack.New(cfg.SlackBotToken, "", nil), cfg.SlackRoute))
+	}
+	if cfg.NotifyWebhookURL != "" {
+		if cfg.NotifyWebhookSecret == "" {
+			logger.Warn("PATCHLINE_NOTIFY_WEBHOOK_SECRET not set: webhook notifications are not signed")
+		}
+		g = append(g, newNotifier(webhook.New(cfg.NotifyWebhookURL, cfg.NotifyWebhookSecret, nil), cfg.WebhookRoute))
+	}
+	if len(g) == 0 {
+		logger.Info("no PATCHLINE_SLACK_BOT_TOKEN or PATCHLINE_NOTIFY_WEBHOOK_URL: notifications are printed to stdout")
+		g = append(g, newNotifier(console.New(os.Stdout), config.NotifyRoute{}))
+	}
+	return g
+}
+
 func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, logger *slog.Logger) (*auth.Authenticator, error) {
 	policy, err := auth.LoadPolicy(cfg.AccessPolicyPath)
 	if err != nil {

@@ -19,7 +19,10 @@ PATCHLINE_SLACK_DEFAULT_CHANNEL=#security     # slack_channel이 없는 서비�
 PATCHLINE_NOTIFY_MIN_SEVERITY=medium          # 실효 심각도 기준: critical | high | medium | low | info
 PATCHLINE_NOTIFY_LANG=ko                      # en | ko
 PATCHLINE_DT_UI_URL=https://dtrack.example.com  # "Dependency-Track에서 열기" 링크 추가
+PATCHLINE_PUBLIC_URL=https://patchline.example.com  # "Patchline에서 열기" 링크 추가
 ```
+
+Slack에 일부 Finding만 보내려면 `PATCHLINE_SLACK_MIN_SEVERITY`(`PATCHLINE_NOTIFY_MIN_SEVERITY`보다 우선), `PATCHLINE_SLACK_SERVICES`, `PATCHLINE_SLACK_ENVIRONMENTS`(쉼표 구분)를 설정합니다. 다른 시스템에는 같은 변경을 [Webhook 알림](webhook-notifications.ko.md)으로 보낼 수 있습니다.
 
 토큰이 없으면 같은 메시지를 stdout으로 출력합니다. 처음 시험해 볼 때 유용합니다.
 

@@ -20,6 +20,7 @@ Patchline sits between the tools you already run. Each guide covers what to set 
 | Renovate | Opens fix pull requests that Patchline links to findings | [renovate.md](integrations/renovate.md) |
 | Gitea / Forgejo / GitHub | Pull request webhooks | [git-webhooks.md](integrations/git-webhooks.md) |
 | Slack | One message per finding, updates and thread history | [slack.md](integrations/slack.md) |
+| Webhook notifications | Signed JSON for each finding and change, for other systems | [webhook-notifications.md](integrations/webhook-notifications.md) |
 | CISA KEV and EPSS | Risk signals that raise severity and shorten due dates | [kev-epss.md](integrations/kev-epss.md) |
 
 Dependency-Track and Patchline's own SBOM matching are the vulnerability sources today; findings from both merge.

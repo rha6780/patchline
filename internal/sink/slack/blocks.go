@@ -71,8 +71,11 @@ func Blocks(m notify.Message) []map[string]any {
 		ctx = append(ctx, l.T("blk.unregistered"))
 	}
 	ctx = append(ctx, l.T("blk.finding", f.ID, escape(f.FirstSeenAt)))
-	if m.Link != "" {
-		ctx = append(ctx, "<"+m.Link+"|"+l.T("blk.open_dt")+">")
+	if m.URL != "" {
+		ctx = append(ctx, "<"+m.URL+"|"+l.T("blk.open_patchline")+">")
+	}
+	if m.DTLink != "" {
+		ctx = append(ctx, "<"+m.DTLink+"|"+l.T("blk.open_dt")+">")
 	}
 	blocks = append(blocks, map[string]any{
 		"type":     "context",

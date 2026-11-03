@@ -1,9 +1,10 @@
-// Package notify keeps one chat message per finding up to date.
+// Package notify keeps one message per finding up to date in each sink.
 //
 // For each finding with events not yet reflected in a sink, the Notifier
 // posts a message (first time), or updates the message and adds the new
 // events to its thread. Progress is stored per sink, so a crash or a sink
-// outage only delays messages.
+// outage only delays messages, and several sinks (Slack, a webhook, ...)
+// run side by side as a Group, each with its own Route.
 package notify
 
 import (
@@ -11,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,8 +34,10 @@ type Message struct {
 	Finding store.Finding
 	// Service is nil for findings whose project is not in the inventory.
 	Service *inventory.Service
-	// Link points to the finding in Dependency-Track, when known.
-	Link string
+	// URL points to the finding in Patchline, when PATCHLINE_PUBLIC_URL is set.
+	URL string
+	// DTLink points to the finding in Dependency-Track, when known.
+	DTLink string
 	// PullRequests are the pull requests linked to the finding.
 	PullRequests []store.PullRequestLink
 	// Lang is the language of the message text.
@@ -50,6 +55,31 @@ type Sink interface {
 	Reply(ctx context.Context, ref Ref, text string) error
 	// NeedsChannel reports whether Post requires a channel.
 	NeedsChannel() bool
+}
+
+// EventReplier is implemented by sinks that want each new event itself,
+// not only its text (a webhook sends the event kind and the finding).
+// The notifier calls ReplyEvent instead of Reply.
+type EventReplier interface {
+	ReplyEvent(ctx context.Context, ref Ref, m Message, e store.FindingEvent, text string) error
+}
+
+// Route selects the findings a sink is told about.
+type Route struct {
+	// MinSeverity is the lowest effective severity that is posted
+	// (default medium).
+	MinSeverity string
+	// Services and Environments, when set, limit the sink to findings of
+	// those services and environments.
+	Services     []string
+	Environments []string
+}
+
+// Matches reports whether f's service and environment are routed to the
+// sink. Severity is checked by the store.
+func (r Route) Matches(f store.Finding) bool {
+	return (len(r.Services) == 0 || slices.Contains(r.Services, f.Service)) &&
+		(len(r.Environments) == 0 || slices.Contains(r.Environments, f.Environment))
 }
 
 // RateLimitError asks the notifier to pause before the next call.
@@ -77,8 +107,10 @@ type Notifier struct {
 	// DefaultChannel is used for findings whose service has no
 	// slack_channel, including unregistered projects.
 	DefaultChannel string
-	// MinSeverity is the lowest severity that is posted (default medium).
-	MinSeverity string
+	// Route selects the findings this sink is told about.
+	Route Route
+	// PublicURL, when set, adds a link to the finding in Patchline.
+	PublicURL string
 	// DTUIURL, when set, adds a Dependency-Track link to messages.
 	DTUIURL string
 	// Lang is the language of messages (default English).
@@ -102,8 +134,8 @@ func (n *Notifier) init() {
 		if n.Lang == "" {
 			n.Lang = i18n.Default
 		}
-		if n.MinSeverity == "" {
-			n.MinSeverity = finding.SeverityMedium
+		if n.Route.MinSeverity == "" {
+			n.Route.MinSeverity = finding.SeverityMedium
 		}
 		if n.PollInterval == 0 {
 			n.PollInterval = 10 * time.Second
@@ -155,7 +187,7 @@ func (n *Notifier) Run(ctx context.Context) {
 // sink asked to slow down.
 func (n *Notifier) RunOnce(ctx context.Context) (pause time.Duration, err error) {
 	n.init()
-	work, err := n.Store.PendingNotifications(ctx, n.Sink.Name(), n.MinSeverity, n.BatchSize)
+	work, err := n.Store.PendingNotifications(ctx, n.Sink.Name(), n.Route.MinSeverity, n.BatchSize)
 	if err != nil {
 		return 0, err
 	}
@@ -201,6 +233,10 @@ func (n *Notifier) deliver(ctx context.Context, w store.NotificationWork) error 
 		case !finding.State(w.Finding.State).Open():
 			// Closed before anyone was told: nothing to act on.
 			return n.Store.RecordNotification(ctx, result)
+		case !n.Route.Matches(w.Finding):
+			// Another sink's service or environment; recorded so it is
+			// not picked up again.
+			return n.Store.RecordNotification(ctx, result)
 		case channel == "" && n.Sink.NeedsChannel():
 			n.Logger.Warn("no channel for finding; set slack_channel in the inventory or PATCHLINE_SLACK_DEFAULT_CHANNEL",
 				"finding", w.Finding.ID, "service", w.Finding.Service)
@@ -219,12 +255,17 @@ func (n *Notifier) deliver(ctx context.Context, w store.NotificationWork) error 
 	if err := n.Sink.Update(ctx, ref, msg); err != nil {
 		return err
 	}
+	er, _ := n.Sink.(EventReplier)
 	for i, e := range w.NewEvents {
 		text := EventText(n.Lang, e)
 		if text == "" {
 			continue
 		}
-		if err := n.Sink.Reply(ctx, ref, text); err != nil {
+		reply := func() error { return n.Sink.Reply(ctx, ref, text) }
+		if er != nil {
+			reply = func() error { return er.ReplyEvent(ctx, ref, msg, e, text) }
+		}
+		if err := reply(); err != nil {
 			// Keep the replies that went out.
 			if i > 0 {
 				result.LastEventID = w.NewEvents[i-1].ID
@@ -245,8 +286,11 @@ func (n *Notifier) message(f store.Finding) Message {
 			m.Service = s
 		}
 	}
+	if n.PublicURL != "" {
+		m.URL = trimSlash(n.PublicURL) + "/findings/" + strconv.FormatInt(f.ID, 10)
+	}
 	if n.DTUIURL != "" && f.DTProjectUUID != "" {
-		m.Link = trimSlash(n.DTUIURL) + "/projects/" + f.DTProjectUUID + "/findings"
+		m.DTLink = trimSlash(n.DTUIURL) + "/projects/" + f.DTProjectUUID + "/findings"
 	}
 	return m
 }
@@ -263,6 +307,25 @@ func trimSlash(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// Group runs one notifier per sink.
+type Group []*Notifier
+
+// Wake asks every notifier to run now. It never blocks.
+func (g Group) Wake() {
+	for _, n := range g {
+		n.Wake()
+	}
+}
+
+// Run delivers notifications until ctx is cancelled.
+func (g Group) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	for _, n := range g {
+		wg.Go(func() { n.Run(ctx) })
+	}
+	wg.Wait()
 }
 
 // backoff returns 30s, 1m, 2m, ... capped at 1h.

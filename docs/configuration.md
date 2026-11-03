@@ -60,10 +60,14 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | Wait after `BOM_PROCESSED` before comparing findings |
 | `PATCHLINE_POLICY_PATH` | — | Remediation policy YAML ([example](../examples/policy/policy.yaml)). Unset = built-in defaults |
 | `PATCHLINE_KEV_URL` | CISA feed | CISA KEV catalog URL, refreshed daily; `off` disables |
-| `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Unset = print to stdout |
+| `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Without it and a webhook, messages are printed to stdout |
 | `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | Channel for services without `slack_channel` and unregistered projects |
-| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | Lowest severity that is posted |
-| `PATCHLINE_NOTIFY_LANG` | `en` | Language of Slack and console messages: `en` or `ko` |
+| `PATCHLINE_SLACK_MIN_SEVERITY`, `PATCHLINE_SLACK_SERVICES`, `PATCHLINE_SLACK_ENVIRONMENTS` | — | Limit Slack to a severity, services or environments (comma-separated) |
+| `PATCHLINE_NOTIFY_WEBHOOK_URL` | — | POST JSON for each finding and change ([Webhook notifications](integrations/webhook-notifications.md)) |
+| `PATCHLINE_NOTIFY_WEBHOOK_SECRET` | — | HMAC-SHA256 key for `X-Patchline-Signature-256` |
+| `PATCHLINE_NOTIFY_WEBHOOK_MIN_SEVERITY`, `_SERVICES`, `_ENVIRONMENTS` | — | Same filters for the webhook |
+| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | Lowest severity that is posted, for sinks without their own |
+| `PATCHLINE_NOTIFY_LANG` | `en` | Language of messages (Slack, webhook `text`, console): `en` or `ko` |
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` or `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown limit |

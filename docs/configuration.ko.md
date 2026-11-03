@@ -60,10 +60,14 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |
 | `PATCHLINE_POLICY_PATH` | — | 조치 정책 YAML([예시](../examples/policy/policy.yaml)). 비우면 기본값 |
 | `PATCHLINE_KEV_URL` | CISA 피드 | CISA KEV 카탈로그 주소(하루 한 번 갱신). `off`면 사용 안 함 |
-| `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack Bot 토큰(`chat:write`, `chat:write.public`). 비우면 stdout으로 출력 |
+| `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack Bot 토큰(`chat:write`, `chat:write.public`). 이 값과 Webhook이 모두 없으면 stdout으로 출력 |
 | `PATCHLINE_SLACK_DEFAULT_CHANNEL` | — | `slack_channel`이 없는 서비스와 미등록 프로젝트용 채널 |
-| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | 알림을 보낼 최소 심각도 |
-| `PATCHLINE_NOTIFY_LANG` | `en` | Slack·콘솔 메시지 언어: `en` 또는 `ko` |
+| `PATCHLINE_SLACK_MIN_SEVERITY`, `PATCHLINE_SLACK_SERVICES`, `PATCHLINE_SLACK_ENVIRONMENTS` | — | Slack으로 보낼 심각도·서비스·환경 제한(쉼표 구분) |
+| `PATCHLINE_NOTIFY_WEBHOOK_URL` | — | Finding과 변경마다 JSON을 POST ([Webhook 알림](integrations/webhook-notifications.ko.md)) |
+| `PATCHLINE_NOTIFY_WEBHOOK_SECRET` | — | `X-Patchline-Signature-256`용 HMAC-SHA256 키 |
+| `PATCHLINE_NOTIFY_WEBHOOK_MIN_SEVERITY`, `_SERVICES`, `_ENVIRONMENTS` | — | Webhook용 같은 필터 |
+| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | 알림을 보낼 최소 심각도. 자체 값이 없는 sink에 적용 |
+| `PATCHLINE_NOTIFY_LANG` | `en` | 메시지 언어(Slack, Webhook `text`, 콘솔): `en` 또는 `ko` |
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` 또는 `json` |
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | 정상 종료 제한 시간 |

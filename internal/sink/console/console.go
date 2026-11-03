@@ -41,8 +41,10 @@ func (s *Sink) Post(_ context.Context, channel string, m notify.Message) (notify
 	if m.Service != nil && len(m.Service.Owners) > 0 {
 		s.printf("    owners: %v\n", m.Service.Owners)
 	}
-	if m.Link != "" {
-		s.printf("    %s\n", m.Link)
+	for _, link := range []string{m.URL, m.DTLink} {
+		if link != "" {
+			s.printf("    %s\n", link)
+		}
 	}
 	s.printDue(m)
 	s.printPRs(m)

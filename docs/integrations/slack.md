@@ -19,7 +19,10 @@ PATCHLINE_SLACK_DEFAULT_CHANNEL=#security     # services without slack_channel, 
 PATCHLINE_NOTIFY_MIN_SEVERITY=medium          # effective severity; critical | high | medium | low | info
 PATCHLINE_NOTIFY_LANG=en                      # en | ko
 PATCHLINE_DT_UI_URL=https://dtrack.example.com  # adds "Open in Dependency-Track" links
+PATCHLINE_PUBLIC_URL=https://patchline.example.com  # adds "Open in Patchline" links
 ```
+
+To send only part of the findings to Slack, set `PATCHLINE_SLACK_MIN_SEVERITY` (overrides `PATCHLINE_NOTIFY_MIN_SEVERITY`), `PATCHLINE_SLACK_SERVICES` or `PATCHLINE_SLACK_ENVIRONMENTS` (comma-separated). Other systems can get the same changes as [webhook notifications](webhook-notifications.md).
 
 Without a token, the same messages are printed to stdout, which is handy for trying things out.
 

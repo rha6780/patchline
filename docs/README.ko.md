@@ -20,6 +20,7 @@ Patchline은 이미 쓰고 있는 도구들 사이에서 동작합니다. 가이
 | Renovate | 수정 PR을 만들고, Patchline이 이를 Finding과 연결 | [renovate.ko.md](integrations/renovate.ko.md) |
 | Gitea / Forgejo / GitHub | Pull request Webhook | [git-webhooks.ko.md](integrations/git-webhooks.ko.md) |
 | Slack | Finding당 메시지 1개, 갱신과 스레드 이력 | [slack.ko.md](integrations/slack.ko.md) |
+| Webhook 알림 | Finding과 변경마다 서명된 JSON 전송, 다른 시스템 연동용 | [webhook-notifications.ko.md](integrations/webhook-notifications.ko.md) |
 | CISA KEV, EPSS | 심각도를 올리고 기한을 앞당기는 위험 신호 | [kev-epss.ko.md](integrations/kev-epss.ko.md) |
 
 지금은 Dependency-Track과 Patchline 자체 SBOM 대조가 취약점 수집원입니다. 두 곳의 결과는 하나로 합쳐집니다.

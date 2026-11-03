@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -64,7 +65,21 @@ type Config struct {
 	NotifyLang string
 	// NotifyMinSeverity is the lowest severity that is posted
 	// (PATCHLINE_NOTIFY_MIN_SEVERITY): critical, high, medium, low, info.
+	// A sink's own MIN_SEVERITY overrides it.
 	NotifyMinSeverity string
+	// SlackRoute limits what goes to Slack (PATCHLINE_SLACK_MIN_SEVERITY,
+	// PATCHLINE_SLACK_SERVICES, PATCHLINE_SLACK_ENVIRONMENTS).
+	SlackRoute NotifyRoute
+
+	// NotifyWebhookURL enables the webhook sink, which POSTs JSON for each
+	// finding and event (PATCHLINE_NOTIFY_WEBHOOK_URL).
+	NotifyWebhookURL string
+	// NotifyWebhookSecret signs webhook requests with HMAC-SHA256
+	// (PATCHLINE_NOTIFY_WEBHOOK_SECRET).
+	NotifyWebhookSecret string
+	// WebhookRoute limits what goes to the webhook
+	// (PATCHLINE_NOTIFY_WEBHOOK_MIN_SEVERITY, _SERVICES, _ENVIRONMENTS).
+	WebhookRoute NotifyRoute
 
 	// PublicURL is where users reach Patchline (PATCHLINE_PUBLIC_URL), used
 	// for the OIDC redirect URI.
@@ -106,6 +121,14 @@ type Config struct {
 	// TrivyAll also sends language packages to Trivy
 	// (PATCHLINE_TRIVY_SCOPE=all; default os).
 	TrivyAll bool
+}
+
+// NotifyRoute selects the findings a notification sink is told about.
+// Empty fields do not limit.
+type NotifyRoute struct {
+	MinSeverity  string
+	Services     []string
+	Environments []string
 }
 
 // DefaultOSVEcosystems are matched when PATCHLINE_OSV_ECOSYSTEMS is unset.
@@ -218,13 +241,26 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		}
 	}
 	if v, ok := lookup("PATCHLINE_NOTIFY_MIN_SEVERITY"); ok && v != "" {
-		v = strings.ToLower(v)
-		switch v {
-		case "critical", "high", "medium", "low", "info":
-			cfg.NotifyMinSeverity = v
-		default:
-			return Config{}, fmt.Errorf("PATCHLINE_NOTIFY_MIN_SEVERITY: want critical, high, medium, low or info, got %q", v)
+		sev, err := severity("PATCHLINE_NOTIFY_MIN_SEVERITY", v)
+		if err != nil {
+			return Config{}, err
 		}
+		cfg.NotifyMinSeverity = sev
+	}
+	var err error
+	if cfg.SlackRoute, err = route(lookup, "PATCHLINE_SLACK_"); err != nil {
+		return Config{}, err
+	}
+	cfg.NotifyWebhookURL, _ = lookup("PATCHLINE_NOTIFY_WEBHOOK_URL")
+	cfg.NotifyWebhookSecret, _ = lookup("PATCHLINE_NOTIFY_WEBHOOK_SECRET")
+	if cfg.NotifyWebhookURL != "" {
+		u, err := url.Parse(cfg.NotifyWebhookURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return Config{}, fmt.Errorf("PATCHLINE_NOTIFY_WEBHOOK_URL: want an http(s) URL, got %q", cfg.NotifyWebhookURL)
+		}
+	}
+	if cfg.WebhookRoute, err = route(lookup, "PATCHLINE_NOTIFY_WEBHOOK_"); err != nil {
+		return Config{}, err
 	}
 
 	cfg.PublicURL, _ = lookup("PATCHLINE_PUBLIC_URL")
@@ -307,4 +343,40 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+func severity(name, v string) (string, error) {
+	v = strings.ToLower(v)
+	switch v {
+	case "critical", "high", "medium", "low", "info":
+		return v, nil
+	}
+	return "", fmt.Errorf("%s: want critical, high, medium, low or info, got %q", name, v)
+}
+
+// route reads <prefix>MIN_SEVERITY, <prefix>SERVICES and
+// <prefix>ENVIRONMENTS (comma-separated).
+func route(lookup func(string) (string, bool), prefix string) (NotifyRoute, error) {
+	var r NotifyRoute
+	if v, ok := lookup(prefix + "MIN_SEVERITY"); ok && v != "" {
+		sev, err := severity(prefix+"MIN_SEVERITY", v)
+		if err != nil {
+			return NotifyRoute{}, err
+		}
+		r.MinSeverity = sev
+	}
+	r.Services = list(lookup, prefix+"SERVICES")
+	r.Environments = list(lookup, prefix+"ENVIRONMENTS")
+	return r, nil
+}
+
+func list(lookup func(string) (string, bool), name string) []string {
+	v, _ := lookup(name)
+	var out []string
+	for _, e := range strings.Split(v, ",") {
+		if e = strings.TrimSpace(e); e != "" {
+			out = append(out, e)
+		}
+	}
+	return out
 }

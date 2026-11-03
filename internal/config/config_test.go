@@ -165,3 +165,31 @@ func TestTrivySettings(t *testing.T) {
 		t.Error("bad scope accepted")
 	}
 }
+
+func TestNotifyRoutes(t *testing.T) {
+	cfg, err := FromLookup(lookupFrom(map[string]string{
+		"PATCHLINE_SLACK_MIN_SEVERITY":          "High",
+		"PATCHLINE_SLACK_ENVIRONMENTS":          "prod, staging",
+		"PATCHLINE_NOTIFY_WEBHOOK_URL":          "https://hooks.example/patchline",
+		"PATCHLINE_NOTIFY_WEBHOOK_SECRET":       "s",
+		"PATCHLINE_NOTIFY_WEBHOOK_SERVICES":     "storefront,",
+		"PATCHLINE_NOTIFY_WEBHOOK_MIN_SEVERITY": "critical",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (NotifyRoute{MinSeverity: "high", Environments: []string{"prod", "staging"}}); !reflect.DeepEqual(cfg.SlackRoute, want) {
+		t.Errorf("slack route = %+v", cfg.SlackRoute)
+	}
+	if want := (NotifyRoute{MinSeverity: "critical", Services: []string{"storefront"}}); !reflect.DeepEqual(cfg.WebhookRoute, want) {
+		t.Errorf("webhook route = %+v", cfg.WebhookRoute)
+	}
+	for k, v := range map[string]string{
+		"PATCHLINE_NOTIFY_WEBHOOK_URL": "hooks.example/x",
+		"PATCHLINE_SLACK_MIN_SEVERITY": "urgent",
+	} {
+		if _, err := FromLookup(lookupFrom(map[string]string{k: v})); err == nil || !strings.Contains(err.Error(), k) {
+			t.Errorf("%s=%s: err = %v", k, v, err)
+		}
+	}
+}
