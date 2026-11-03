@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -299,6 +300,12 @@ func (u *UI) createToken(w http.ResponseWriter, r *http.Request) {
 	if len(perms) == 0 {
 		back(w, r, "/settings", "error", "token_perms")
 		return
+	}
+	// The API needs findings.read for every call, so write permissions
+	// bring it along.
+	if !slices.Contains(perms, string(auth.FindingsRead)) &&
+		(slices.Contains(perms, string(auth.FindingsAssign)) || slices.Contains(perms, string(auth.ExceptionsRequest))) {
+		perms = append([]string{string(auth.FindingsRead)}, perms...)
 	}
 	t := store.APIToken{Name: name, Permissions: perms}
 	if days, err := strconv.Atoi(r.PostFormValue("days")); err == nil && days > 0 {

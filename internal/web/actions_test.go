@@ -408,4 +408,19 @@ func TestAPITokenSettings(t *testing.T) {
 	if _, body := get(t, as(admin, u), "/settings"); !strings.Contains(body, "revoked") {
 		t.Error("revoked token not marked")
 	}
+
+	// Write permissions bring findings.read (every API call needs it);
+	// approving cannot be granted to a token.
+	_ = post(t, as(admin, u), "/settings/tokens", url.Values{"name": {"triage-bot"}, "perm.findings.assign": {"1"},
+		"perm.exceptions.request": {"1"}, "perm.exceptions.approve": {"1"}})
+	tokens, _ = st.ListTokens(ctx)
+	var bot store.APIToken
+	for _, tk := range tokens {
+		if tk.Name == "triage-bot" {
+			bot = tk
+		}
+	}
+	if got := strings.Join(bot.Permissions, ","); got != "findings.read,findings.assign,exceptions.request" {
+		t.Fatalf("bot permissions = %s", got)
+	}
 }

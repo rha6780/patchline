@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/store"
@@ -28,6 +29,7 @@ var OpenAPI []byte
 // Findings reads findings.
 type Findings interface {
 	ListFindings(ctx context.Context, f store.FindingFilter) ([]store.Finding, error)
+	GetFinding(ctx context.Context, id int64) (store.Finding, error)
 	FindingEvents(ctx context.Context, findingID int64) ([]store.FindingEvent, error)
 	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
 }
@@ -41,6 +43,10 @@ type Options struct {
 	Impact impact.Store
 	// Snapshots serves VEX for the SBOMs uploaded to Patchline.
 	Snapshots Snapshots
+	// App and Requests serve the write endpoints (assignment, requests).
+	// Approving stays in the web pages, with people.
+	App      *app.Service
+	Requests Requests
 	// Version is Patchline's version, named as the tool in VEX documents.
 	Version string
 	Logger  *slog.Logger
@@ -55,6 +61,10 @@ type Options struct {
 //	GET /api/v1/components                    where packages are used (?q=&ecosystem=&version=&limit=)
 //	GET /api/v1/vulnerabilities/{id}          what a CVE / GHSA affects
 //	GET /api/v1/vex                           CycloneDX VEX of a project version (?project=&version=)
+//	PUT  /api/v1/findings/{id}/assignee       set or clear the assignee (findings.assign)
+//	GET  /api/v1/findings/{id}/requests       a finding's exception requests
+//	POST /api/v1/findings/{id}/requests       request an exception (exceptions.request)
+//	POST /api/v1/requests/{id}/cancel         withdraw one's own pending request
 func Register(mux *http.ServeMux, o Options) {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
@@ -71,6 +81,12 @@ func Register(mux *http.ServeMux, o Options) {
 		mux.HandleFunc("GET /api/v1/findings", h.listFindings)
 		mux.HandleFunc("GET /api/v1/findings/{id}/events", h.findingEvents)
 		mux.HandleFunc("GET /api/v1/findings/{id}/pull-requests", h.findingPullRequests)
+	}
+	if o.Findings != nil && o.App != nil && o.Requests != nil {
+		mux.HandleFunc("PUT /api/v1/findings/{id}/assignee", h.assign)
+		mux.HandleFunc("GET /api/v1/findings/{id}/requests", h.listRequests)
+		mux.HandleFunc("POST /api/v1/findings/{id}/requests", h.createRequest)
+		mux.HandleFunc("POST /api/v1/requests/{id}/cancel", h.cancelRequest)
 	}
 	if o.Snapshots != nil {
 		mux.HandleFunc("GET /api/v1/vex", h.vex)

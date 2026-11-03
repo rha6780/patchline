@@ -39,6 +39,9 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `GET` | `/api/v1/components` | 저장된 SBOM에서 패키지 사용처 검색. `q`, `ecosystem`, `version`(예: `<2.17.0`), `limit` |
 | `GET` | `/api/v1/vulnerabilities/{id}` | CVE·GHSA의 영향 범위: 영향받는 스냅샷, 고치는 버전, 모든 출처의 Finding |
 | `GET` | `/api/v1/vex` | 프로젝트 버전의 CycloneDX 1.5 VEX(`project`, `version`, 파일로 받으려면 `download=1`) |
+| `PUT` | `/api/v1/findings/{id}/assignee` | 처리 담당자 지정·해제(`findings.assign`) |
+| `GET`, `POST` | `/api/v1/findings/{id}/requests` | Finding의 예외 요청 목록, 예외 요청(`exceptions.request`) |
+| `POST` | `/api/v1/requests/{id}/cancel` | 대기 중인 자기 요청 철회 |
 | `GET` | `/api/v1/openapi.yaml` | 모든 필드를 담은 API의 OpenAPI 3.1 명세 |
 | `GET` | `/login` | 로그인 화면(로컬 관리자, SSO) |
 | `POST` | `/auth/local`, `/account/password` | 로컬 관리자 로그인과 비밀번호 변경 |

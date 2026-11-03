@@ -45,9 +45,9 @@ const (
 // Permissions lists every permission in display order.
 var Permissions = []Permission{FindingsRead, FindingsAssign, ExceptionsRequest, ExceptionsApprove, SettingsWebhooks, AuditRead, TokensManage, SBOMUpload}
 
-// TokenPermissions are the permissions an API token can hold: tools read
-// and upload; changes stay with people.
-var TokenPermissions = []Permission{FindingsRead, SBOMUpload}
+// TokenPermissions are the permissions an API token can hold: tools read,
+// upload, assign and request exceptions; approving stays with people.
+var TokenPermissions = []Permission{FindingsRead, FindingsAssign, ExceptionsRequest, SBOMUpload}
 
 func known(p Permission) bool { return p == All || slices.Contains(Permissions, p) }
 

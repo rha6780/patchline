@@ -4,11 +4,19 @@ info:
   version: "1"
   description: |
     Read findings, their timelines and fix pull requests, search the stored
-    SBOMs, and upload SBOMs for Patchline's own detection.
+    SBOMs, upload SBOMs for Patchline's own detection, assign findings and
+    request exceptions. Approving requests is done by people in the web UI.
 
     Authenticate with an API token (`Authorization: Bearer plt_...`) or a
     signed-in session. `/api/v1/*` needs `findings.read`; `/ingest/sbom`
-    needs `sbom.upload` (or the shared webhook token).
+    needs `sbom.upload` (or the shared webhook token). The write endpoints
+    also need `findings.assign` or `exceptions.request`, and are meant for
+    API tokens (a session would need the web form's CSRF token).
+
+    A refused change answers `{"error": "...", "code": "..."}`, where `code`
+    is stable: `forbidden`, `not_found`, `assignee`, `reason`, `kind`,
+    `justification`, `due`, `due_earlier`, `closed`, `pending`,
+    `not_pending`, `no_dt`, `dt_write`.
 
     Fields may be added within version 1; clients should ignore fields they
     do not know.
@@ -84,6 +92,125 @@ paths:
                   pull_requests: {type: array, items: {$ref: "#/components/schemas/PullRequest"}}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /api/v1/findings/{id}/assignee:
+    put:
+      summary: Set or clear the assignee
+      operationId: assignFinding
+      description: Needs `findings.assign`. Recorded on the finding's timeline and in the audit log.
+      parameters: [{$ref: "#/components/parameters/FindingID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignee]
+              additionalProperties: false
+              properties:
+                assignee: {type: string, maxLength: 254, description: "Email (or subject); empty clears it"}
+      responses:
+        "200":
+          description: The finding after the change
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [finding]
+                properties:
+                  finding: {$ref: "#/components/schemas/Finding"}
+        "400": {$ref: "#/components/responses/Refused"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Refused"}
+        "404": {$ref: "#/components/responses/Refused"}
+
+  /api/v1/findings/{id}/requests:
+    get:
+      summary: A finding's exception requests
+      operationId: listRequests
+      parameters: [{$ref: "#/components/parameters/FindingID"}]
+      responses:
+        "200":
+          description: Requests, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests]
+                properties:
+                  requests: {type: array, items: {$ref: "#/components/schemas/Request"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      summary: Request an exception
+      operationId: createRequest
+      description: |
+        Needs `exceptions.request`. An approver decides it in the web UI;
+        nobody can approve their own request. One pending request per kind
+        and finding.
+      parameters: [{$ref: "#/components/parameters/FindingID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, reason]
+              additionalProperties: false
+              properties:
+                kind: {type: string, enum: [risk_acceptance, not_affected, false_positive, due_extension]}
+                reason: {type: string, maxLength: 2000}
+                justification:
+                  type: string
+                  description: Required for not_affected
+                  enum: [code_not_present, code_not_reachable, requires_configuration, requires_dependency, requires_environment, protected_by_compiler, protected_at_runtime, protected_at_perimeter, protected_by_mitigating_control]
+                due: {type: string, format: date, description: "Required for due_extension; later than the current due date"}
+      responses:
+        "201":
+          description: The pending request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request]
+                properties:
+                  request: {$ref: "#/components/schemas/Request"}
+        "400": {$ref: "#/components/responses/Refused"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Refused"}
+        "404": {$ref: "#/components/responses/Refused"}
+        "409": {$ref: "#/components/responses/Refused"}
+
+  /api/v1/requests/{id}/cancel:
+    post:
+      summary: Withdraw a pending request
+      operationId: cancelRequest
+      description: Only the one who made the request (the same token or person) can withdraw it.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                note: {type: string, maxLength: 2000}
+      responses:
+        "200":
+          description: The withdrawn request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request]
+                properties:
+                  request: {$ref: "#/components/schemas/Request"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Refused"}
+        "404": {$ref: "#/components/responses/Refused"}
+        "409": {$ref: "#/components/responses/Refused"}
 
   /api/v1/components:
     get:
@@ -221,6 +348,9 @@ components:
     NotFound:
       description: Not found
       content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
+    Refused:
+      description: The change was not made; `code` says why
+      content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}
 
   schemas:
     Error:
@@ -228,6 +358,26 @@ components:
       required: [error]
       properties:
         error: {type: string}
+        code: {type: string, description: Reason a change was refused}
+
+    Request:
+      type: object
+      required: [id, finding_id, kind, reason, requested_by, requested_at, status]
+      properties:
+        id: {type: integer}
+        finding_id: {type: integer}
+        kind: {type: string, enum: [risk_acceptance, not_affected, false_positive, due_extension]}
+        reason: {type: string}
+        justification: {type: string}
+        requested_due: {type: string, format: date-time}
+        requested_by: {type: string, description: "Subject; `token:<id>` for API tokens"}
+        requested_by_name: {type: string}
+        requested_at: {type: string, format: date-time}
+        status: {type: string, enum: [pending, approved, rejected, cancelled]}
+        decided_by: {type: string}
+        decided_by_name: {type: string}
+        decided_at: {type: string, format: date-time}
+        decision_note: {type: string}
 
     Severity:
       type: string

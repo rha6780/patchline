@@ -10,8 +10,8 @@ Every page and API call needs a sign-in. There are two ways in:
 | Permission | Allows |
 |---|---|
 | `findings.read` | Open the web UI and `GET /api/v1/*` |
-| `findings.assign` | Set or clear a finding's assignee |
-| `exceptions.request` | Request a **risk acceptance** or a **due date extension** |
+| `findings.assign` | Set or clear a finding's assignee (UI or `PUT /api/v1/findings/{id}/assignee`) |
+| `exceptions.request` | Request a **risk acceptance**, **not affected**, **false positive** or a **due date extension** (UI or `POST /api/v1/findings/{id}/requests`) |
 | `exceptions.approve` | Approve or reject other people's requests |
 | `settings.webhooks` | View (as hints) and rotate the webhook token and the Git webhook secret |
 | `audit.read` | View the audit log |
@@ -149,11 +149,11 @@ With `settings.webhooks`, **Settings → Webhooks** rotates `PATCHLINE_WEBHOOK_T
 
 ### API tokens
 
-Tools use API tokens instead of a session: CI uploading SBOMs, a scanner fetching VEX, a script reading findings. With `tokens.manage`, **Settings → API tokens** creates one:
+Tools use API tokens instead of a session: CI uploading SBOMs, a scanner fetching VEX, a script reading findings, a triage bot assigning them. With `tokens.manage`, **Settings → API tokens** creates one:
 
 | | |
 |---|---|
-| Permissions | `findings.read` (the read API: findings, components, impact, VEX) and/or `sbom.upload` (`/ingest/sbom`); tokens never get the permissions that change things |
+| Permissions | `findings.read` (the read API: findings, components, impact, VEX), `findings.assign` (set assignees), `exceptions.request` (request exceptions, withdraw its own) and `sbom.upload` (`/ingest/sbom`). The two write permissions bring `findings.read` along. Approving (`exceptions.approve`) and settings stay with people |
 | Expiry | 30, 90 or 365 days, or never |
 | Value | `plt_…`, shown once; Patchline keeps only its SHA-256 |
 | Scope | `/api/*` and `/ingest/sbom`; a token does not open the web UI |
@@ -164,6 +164,19 @@ curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?
 ```
 
 For `/ingest/sbom`, a token with `sbom.upload` replaces the shared webhook token: each pipeline gets its own token, revoked on its own.
+
+Changes made with a token are recorded like a person's, under the token's name (subject `token:<id>`):
+
+```sh
+# assign
+curl -sS -X PUT -H "Authorization: Bearer $PATCHLINE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"assignee":"bob@example.com"}' "$PATCHLINE_URL/api/v1/findings/42/assignee"
+# ask for a risk acceptance; an approver decides it in the UI
+curl -sS -X POST -H "Authorization: Bearer $PATCHLINE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"kind":"risk_acceptance","reason":"internal batch job, no network access"}' "$PATCHLINE_URL/api/v1/findings/42/requests"
+```
+
+A refused change answers `{"error": "...", "code": "pending"}` with `400`, `403`, `404` or `409`; the codes are listed in [`openapi.yaml`](../internal/api/openapi.yaml). Since an approver can never approve their own request, a request made by a token always needs a person to decide it.
 
 ### Audit log
 

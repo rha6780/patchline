@@ -10,8 +10,8 @@
 | 권한 | 할 수 있는 일 |
 |---|---|
 | `findings.read` | 웹 UI와 `GET /api/v1/*` 사용 |
-| `findings.assign` | Finding의 처리 담당자 지정·해제 |
-| `exceptions.request` | **위험 수용**이나 **기한 연장** 요청 |
+| `findings.assign` | Finding의 처리 담당자 지정·해제(UI 또는 `PUT /api/v1/findings/{id}/assignee`) |
+| `exceptions.request` | **위험 수용**, **영향 없음**, **오탐**, **기한 연장** 요청(UI 또는 `POST /api/v1/findings/{id}/requests`) |
 | `exceptions.approve` | 다른 사람의 요청 승인·반려 |
 | `settings.webhooks` | Webhook 토큰과 Git Webhook Secret 확인(일부만 표시)·교체 |
 | `audit.read` | 감사 로그 확인 |
@@ -157,11 +157,11 @@ users:                                 # 이메일 또는 subject
 
 ### API 토큰
 
-도구는 세션 대신 API 토큰을 씁니다. 예를 들어 SBOM을 올리는 CI, VEX를 가져가는 스캐너, Finding을 읽는 스크립트입니다. `tokens.manage` 권한이 있으면 **설정 → API 토큰**에서 만듭니다.
+도구는 세션 대신 API 토큰을 씁니다. 예를 들어 SBOM을 올리는 CI, VEX를 가져가는 스캐너, Finding을 읽는 스크립트, 담당자를 지정하는 분류 봇입니다. `tokens.manage` 권한이 있으면 **설정 → API 토큰**에서 만듭니다.
 
 | | |
 |---|---|
-| 권한 | `findings.read`(조회 API: Finding, 구성요소, 영향 분석, VEX)와 `sbom.upload`(`/ingest/sbom`) 중 선택. 변경 권한은 토큰에 줄 수 없음 |
+| 권한 | `findings.read`(조회 API: Finding, 구성요소, 영향 분석, VEX), `findings.assign`(처리 담당자 지정), `exceptions.request`(예외 요청, 자기 요청 철회), `sbom.upload`(`/ingest/sbom`) 중 선택. 쓰기 권한 두 개를 고르면 `findings.read`가 함께 들어감. 승인(`exceptions.approve`)과 설정 변경은 사람만 할 수 있음 |
 | 만료 | 30일, 90일, 365일 또는 만료 없음 |
 | 값 | `plt_…`. 한 번만 표시하고, Patchline에는 SHA-256만 저장 |
 | 범위 | `/api/*`와 `/ingest/sbom`. 토큰으로 웹 UI는 열 수 없음 |
@@ -172,6 +172,19 @@ curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?
 ```
 
 `/ingest/sbom`에는 공유 Webhook 토큰 대신 `sbom.upload` 권한의 토큰을 쓸 수 있습니다. 파이프라인마다 토큰을 따로 주고 따로 폐기할 수 있습니다.
+
+토큰으로 한 변경도 사람이 한 변경처럼 토큰 이름(subject `token:<id>`)으로 기록됩니다.
+
+```sh
+# 담당자 지정
+curl -sS -X PUT -H "Authorization: Bearer $PATCHLINE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"assignee":"bob@example.com"}' "$PATCHLINE_URL/api/v1/findings/42/assignee"
+# 위험 수용 요청. 승인권자가 UI에서 결정
+curl -sS -X POST -H "Authorization: Bearer $PATCHLINE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"kind":"risk_acceptance","reason":"내부 배치 작업, 외부 네트워크 접근 없음"}' "$PATCHLINE_URL/api/v1/findings/42/requests"
+```
+
+거부된 변경은 `400`, `403`, `404`, `409`와 함께 `{"error": "...", "code": "pending"}`을 반환합니다. 코드 목록은 [`openapi.yaml`](../internal/api/openapi.yaml)에 있습니다. 본인 요청은 승인할 수 없으므로 토큰이 만든 요청은 항상 사람이 결정합니다.
 
 ### 감사 로그
 

@@ -14,10 +14,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/auth"
+	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -310,5 +313,52 @@ func TestIngestWithAPIToken(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("vex with token: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestWriteAPIWithToken goes through the auth middleware: an API token
+// changes things without a session or CSRF token, within its permissions.
+func TestWriteAPIWithToken(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	a, err := auth.New(ctx, auth.Options{LocalAdmin: true}, auth.DefaultPolicy(), st, quiet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := st.UpsertFinding(ctx, finding.Observation{Service: "app", Environment: "main",
+		ComponentRef: "pkg:npm/a@1", VulnID: "CVE-2024-1", Severity: "high"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mint := func(perms ...string) string {
+		raw, prefix, hash := auth.NewToken()
+		if _, err := st.CreateToken(ctx, store.APIToken{Name: "ci", Prefix: prefix, Permissions: perms}, hash, store.Actor{Subject: "u"}); err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	h := New(Options{DB: st, Findings: st, App: &app.Service{Store: st}, Requests: st, Auth: a, Logger: quiet})
+	put := func(token string) int {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/findings/"+strconv.FormatInt(id, 10)+"/assignee",
+			strings.NewReader(`{"assignee":"a@example.com"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := put(mint("findings.read", "findings.assign")); code != http.StatusOK {
+		t.Fatalf("assign token: %d", code)
+	}
+	if code := put(mint("findings.read")); code != http.StatusForbidden {
+		t.Fatalf("read token: %d", code)
+	}
+	if code := put(""); code != http.StatusUnauthorized {
+		t.Fatalf("no token: %d", code)
+	}
+	if f, _ := st.GetFinding(ctx, id); f.Assignee != "a@example.com" {
+		t.Fatalf("assignee = %q", f.Assignee)
 	}
 }

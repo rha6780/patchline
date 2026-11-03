@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/api"
+	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
@@ -59,6 +60,9 @@ type Options struct {
 	Impact impact.Store
 	// Snapshots, when set, serves VEX for the SBOMs uploaded to Patchline.
 	Snapshots api.Snapshots
+	// App and Requests, when set, serve the API's write endpoints.
+	App      *app.Service
+	Requests api.Requests
 	// Version is Patchline's version, named as the tool in VEX documents.
 	Version string
 	// UI, when set, serves every path not handled above (the web pages).
@@ -99,7 +103,7 @@ func New(o Options) http.Handler {
 		mux.HandleFunc("POST /ingest/sbom", h.ingestSBOM)
 	}
 	api.Register(mux, api.Options{Findings: o.Findings, Inventory: o.Inventory, Impact: o.Impact,
-		Snapshots: o.Snapshots, Version: o.Version, Logger: o.Logger})
+		Snapshots: o.Snapshots, App: o.App, Requests: o.Requests, Version: o.Version, Logger: o.Logger})
 	if o.UI != nil {
 		mux.Handle("/", o.UI)
 	}

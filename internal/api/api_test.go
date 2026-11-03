@@ -9,9 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/rha6780/patchline/internal/app"
+	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/store"
@@ -203,7 +206,7 @@ func TestOpenAPIMatchesRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := newStore(t)
-	h := serve(Options{Findings: st, Impact: st, Snapshots: st, Logger: quiet})
+	h := serve(Options{Findings: st, Impact: st, Snapshots: st, App: &app.Service{Store: st}, Requests: st, Logger: quiet})
 	documented := map[string]bool{}
 	for path, ops := range doc.Paths {
 		if !strings.HasPrefix(path, "/api/") {
@@ -259,5 +262,80 @@ func TestUnknownAPIPath(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/openapi.yaml", nil))
 	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Body.String(), "openapi: 3.1") {
 		t.Fatalf("openapi: %d", rec.Code)
+	}
+}
+
+func TestWriteEndpoints(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	id, _, err := st.UpsertFinding(ctx, observation("storefront", true), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes := 0
+	api := serve(Options{Findings: st, App: &app.Service{Store: st, OnChange: func() { changes++ }}, Requests: st, Logger: quiet})
+	ci := &auth.Principal{Authenticated: true, Token: true, Subject: "token:1", Name: "ci",
+		Perms: auth.Set{auth.FindingsRead: true, auth.FindingsAssign: true, auth.ExceptionsRequest: true}}
+	reader := &auth.Principal{Authenticated: true, Token: true, Subject: "token:2", Perms: auth.Set{auth.FindingsRead: true}}
+	other := &auth.Principal{Authenticated: true, Subject: "bob", Perms: auth.Set{auth.FindingsRead: true, auth.ExceptionsRequest: true}}
+	call := func(p *auth.Principal, method, path, body string) (int, map[string]any) {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req = req.WithContext(auth.WithPrincipal(req.Context(), p))
+		rec := httptest.NewRecorder()
+		api.ServeHTTP(rec, req)
+		var m map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &m)
+		return rec.Code, m
+	}
+	fpath := "/api/v1/findings/" + strconv.FormatInt(id, 10)
+
+	if code, m := call(reader, "PUT", fpath+"/assignee", `{"assignee":"a@example.com"}`); code != 403 || m["code"] != "forbidden" {
+		t.Fatalf("reader assigns: %d %v", code, m)
+	}
+	if code, _ := call(ci, "PUT", fpath+"/assignee", `{"assignee":"a@example.com","extra":1}`); code != 400 {
+		t.Fatalf("unknown field: %d", code)
+	}
+	if code, _ := call(ci, "PUT", fpath+"/assignee", `{}`); code != 400 {
+		t.Fatalf("missing assignee: %d", code)
+	}
+	code, m := call(ci, "PUT", fpath+"/assignee", `{"assignee":"a@example.com"}`)
+	if f, _ := m["finding"].(map[string]any); code != 200 || f["assignee"] != "a@example.com" || changes != 1 {
+		t.Fatalf("assign: %d %v changes=%d", code, m, changes)
+	}
+	if code, m := call(ci, "PUT", "/api/v1/findings/999/assignee", `{"assignee":""}`); code != 404 || m["code"] != "not_found" {
+		t.Fatalf("missing finding: %d %v", code, m)
+	}
+
+	if code, m := call(ci, "POST", fpath+"/requests", `{"kind":"maybe","reason":"r"}`); code != 400 || m["code"] != "kind" {
+		t.Fatalf("bad kind: %d %v", code, m)
+	}
+	if code, m := call(ci, "POST", fpath+"/requests", `{"kind":"not_affected","reason":"r"}`); code != 400 || m["code"] != "justification" {
+		t.Fatalf("no justification: %d %v", code, m)
+	}
+	body := `{"kind":"not_affected","reason":"only in tests","justification":"code_not_reachable"}`
+	code, m = call(ci, "POST", fpath+"/requests", body)
+	rq, _ := m["request"].(map[string]any)
+	if code != 201 || rq["status"] != "pending" || rq["requested_by"] != "token:1" || rq["requested_by_name"] != "ci" {
+		t.Fatalf("request: %d %v", code, m)
+	}
+	if code, m := call(ci, "POST", fpath+"/requests", body); code != 409 || m["code"] != "pending" || m["error"] == "pending" {
+		t.Fatalf("duplicate: %d %v", code, m)
+	}
+	code, m = call(reader, "GET", fpath+"/requests", "")
+	if list, _ := m["requests"].([]any); code != 200 || len(list) != 1 {
+		t.Fatalf("list: %d %v", code, m)
+	}
+
+	cancel := "/api/v1/requests/" + strconv.FormatInt(int64(rq["id"].(float64)), 10) + "/cancel"
+	if code, _ := call(other, "POST", cancel, ""); code != 403 {
+		t.Fatalf("cancel by someone else: %d", code)
+	}
+	code, m = call(ci, "POST", cancel, `{"note":"wrong finding"}`)
+	if rq, _ := m["request"].(map[string]any); code != 200 || rq["status"] != "cancelled" {
+		t.Fatalf("cancel: %d %v", code, m)
+	}
+	if code, m := call(ci, "POST", cancel, ""); code != 409 || m["code"] != "not_pending" {
+		t.Fatalf("cancel twice: %d %v", code, m)
 	}
 }

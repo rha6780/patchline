@@ -39,6 +39,9 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/api/v1/components` | Where packages are used in the stored SBOMs. `q`, `ecosystem`, `version` (e.g. `<2.17.0`), `limit` |
 | `GET` | `/api/v1/vulnerabilities/{id}` | What a CVE or GHSA affects: affected snapshots, fixed versions, findings from every source |
 | `GET` | `/api/v1/vex` | CycloneDX 1.5 VEX of a project version (`project`, `version`, `download=1` for a file) |
+| `PUT` | `/api/v1/findings/{id}/assignee` | Set or clear the assignee (`findings.assign`) |
+| `GET`, `POST` | `/api/v1/findings/{id}/requests` | A finding's exception requests; request one (`exceptions.request`) |
+| `POST` | `/api/v1/requests/{id}/cancel` | Withdraw one's own pending request |
 | `GET` | `/api/v1/openapi.yaml` | OpenAPI 3.1 description of the API, with every field |
 | `GET` | `/login` | Sign-in page (local admin, single sign-on) |
 | `POST` | `/auth/local`, `/account/password` | Local admin sign-in and password change |

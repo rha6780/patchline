@@ -185,6 +185,8 @@ func run() error {
 			DB:           st,
 			Inbox:        st,
 			Findings:     st,
+			App:          svc,
+			Requests:     st,
 			Inventory:    inv,
 			WebhookToken: cfg.WebhookToken,
 			GiteaSecret:  cfg.GiteaWebhookSecret,
