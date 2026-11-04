@@ -204,6 +204,16 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 			id, source, project, now, now); err != nil {
 			return 0, false, err
 		}
+		ref := obs.SourceRef()
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO finding_refs (finding_id, source, project, component, vuln, vuln_source, vuln_name)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT (finding_id, source, project) DO UPDATE SET
+				component = excluded.component, vuln = excluded.vuln,
+				vuln_source = excluded.vuln_source, vuln_name = excluded.vuln_name`,
+			id, ref.Source, ref.Project, ref.Component, ref.Vuln, ref.VulnSource, ref.VulnName); err != nil {
+			return 0, false, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return 0, false, err
@@ -218,10 +228,38 @@ type DTKey struct {
 	VulnerabilityUUID string
 }
 
-// ApplyState moves the findings matching key to state to, when the
-// lifecycle allows it, recording a state_changed event with evidence.
-// It returns how many findings changed.
-func (s *Store) ApplyState(ctx context.Context, key DTKey, to finding.State, evidence map[string]any) (changed int, err error) {
+// ApplyState moves the findings Dependency-Track names key to state to;
+// see ApplyStateByRef.
+func (s *Store) ApplyState(ctx context.Context, key DTKey, to finding.State, evidence map[string]any) (int, error) {
+	return s.ApplyStateByRef(ctx, finding.Ref{Source: finding.SourceDependencyTrack, Project: key.ProjectUUID,
+		Component: key.ComponentUUID, Vuln: key.VulnerabilityUUID}, to, evidence)
+}
+
+// FindingRefs returns how each tool names a finding.
+func (s *Store) FindingRefs(ctx context.Context, findingID int64) ([]finding.Ref, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT source, project, component, vuln, vuln_source, vuln_name
+		FROM finding_refs WHERE finding_id = ? ORDER BY source, project`, findingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []finding.Ref
+	for rows.Next() {
+		var r finding.Ref
+		if err := rows.Scan(&r.Source, &r.Project, &r.Component, &r.Vuln, &r.VulnSource, &r.VulnName); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ApplyStateByRef moves the findings the tool names ref (source, project,
+// component and vulnerability) to state to, when the lifecycle allows it,
+// recording a state_changed event with evidence. It returns how many
+// findings changed.
+func (s *Store) ApplyStateByRef(ctx context.Context, ref finding.Ref, to finding.State, evidence map[string]any) (changed int, err error) {
 	ev, err := json.Marshal(evidence)
 	if err != nil {
 		return 0, err
@@ -239,9 +277,9 @@ func (s *Store) ApplyState(ctx context.Context, key DTKey, to finding.State, evi
 	}()
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, state FROM findings
-		WHERE dt_project_uuid = ? AND dt_component_uuid = ? AND dt_vulnerability_uuid = ?`,
-		key.ProjectUUID, key.ComponentUUID, key.VulnerabilityUUID)
+		SELECT f.id, f.state FROM finding_refs r JOIN findings f ON f.id = r.finding_id
+		WHERE r.source = ? AND r.project = ? AND r.component = ? AND r.vuln = ?`,
+		ref.Source, ref.Project, ref.Component, ref.Vuln)
 	if err != nil {
 		return 0, err
 	}

@@ -75,7 +75,12 @@ type Observation struct {
 	Severity string
 	Title    string
 
+	// Ref is how the source names the finding. When empty, it is derived
+	// from the DT* fields or Source / SourceProject (see SourceRef).
+	Ref Ref
+
 	// Dependency-Track identifiers, kept for links and later diffing.
+	// Being replaced by Ref.
 	DTProjectUUID       string
 	DTComponentUUID     string
 	DTVulnerabilityUUID string
@@ -97,12 +102,37 @@ const (
 	SourcePatchline       = "patchline"
 )
 
+// Ref is how a tool names a finding: its project, component and
+// vulnerability ids there.
+type Ref struct {
+	Source    string `json:"source"`
+	Project   string `json:"project"`
+	Component string `json:"component,omitempty"`
+	Vuln      string `json:"vuln,omitempty"`
+	// VulnSource and VulnName are the vulnerability as the tool names it
+	// (NVD / CVE-2021-44228), when it differs from Vuln (a uuid).
+	VulnSource string `json:"vuln_source,omitempty"`
+	VulnName   string `json:"vuln_name,omitempty"`
+}
+
 // Reporter returns the source and source project of the observation.
 func (o Observation) Reporter() (source, project string) {
-	if o.Source == "" {
-		return SourceDependencyTrack, o.DTProjectUUID
+	r := o.SourceRef()
+	return r.Source, r.Project
+}
+
+// SourceRef returns the observation's Ref, deriving it when Ref is empty:
+// Dependency-Track observations from their DT* ids, others from Source,
+// SourceProject, the purl and the vulnerability id.
+func (o Observation) SourceRef() Ref {
+	if o.Ref.Source != "" {
+		return o.Ref
 	}
-	return o.Source, o.SourceProject
+	if o.Source == "" || o.Source == SourceDependencyTrack {
+		return Ref{Source: SourceDependencyTrack, Project: o.DTProjectUUID, Component: o.DTComponentUUID,
+			Vuln: o.DTVulnerabilityUUID, VulnSource: o.DTVulnSource, VulnName: o.DTVulnID}
+	}
+	return Ref{Source: o.Source, Project: o.SourceProject, Component: o.ComponentRef, Vuln: o.VulnID}
 }
 
 // CanonicalID picks a stable identifier from a set of ids that refer to the

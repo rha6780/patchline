@@ -2,7 +2,7 @@
 
 [English](source-ports.md) | 한국어
 
-상태: 제안.
+상태: 1단계 구현.
 
 ## 목표
 
