@@ -30,6 +30,7 @@ import (
 	"github.com/rha6780/patchline/internal/sink/console"
 	"github.com/rha6780/patchline/internal/sink/slack"
 	"github.com/rha6780/patchline/internal/sink/webhook"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/source/osv"
 	"github.com/rha6780/patchline/internal/source/trivy"
@@ -98,11 +99,15 @@ func run() error {
 
 	st := store.New(db)
 
-	proc := &intake.Processor{Store: st, Inventory: inv, Logger: logger, ReconcileDelay: cfg.DependencyTrackReconcileDelay}
+	// Tools plug in as adapters; intake and the server only see the ports.
+	dtAdapter := &dependencytrack.Adapter{ReconcileDelay: cfg.DependencyTrackReconcileDelay, Logger: logger}
+	sources := source.NewRegistry(dtAdapter)
+	proc := &intake.Processor{Store: st, Inventory: inv, Logger: logger, Sources: sources}
 	var dt *dependencytrack.Client
 	if cfg.DependencyTrackEnabled() {
 		dt = dependencytrack.NewClient(cfg.DependencyTrackURL, cfg.DependencyTrackAPIKey, nil)
-		proc.DT = dt
+		dtAdapter.Client = dt
+		proc.Vulnerabilities = dt
 	} else {
 		logger.Warn("PATCHLINE_DT_URL or PATCHLINE_DT_API_KEY not set: BOM_PROCESSED events will not fetch findings")
 	}
@@ -184,6 +189,7 @@ func run() error {
 		Handler: server.New(server.Options{
 			DB:           st,
 			Inbox:        st,
+			Sources:      sources,
 			Findings:     st,
 			App:          svc,
 			Requests:     st,

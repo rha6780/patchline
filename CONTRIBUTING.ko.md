@@ -73,7 +73,7 @@ patchline/
 │   ├── detect/             # 탐지 엔진 인터페이스, 엔진 결합
 │   ├── impact/             # 구성요소 검색, 취약점 영향 범위
 │   ├── sbom/, purl/, vex/  # SBOM 파싱, 패키지 URL, CycloneDX VEX
-│   ├── source/             # 입력: dependencytrack, gitea, kev, osv, trivy
+│   ├── source/             # 도구 연동 포트와 레지스트리. 어댑터: dependencytrack, gitea, kev, osv, trivy
 │   ├── notify/             # sink별 Notifier: Finding당 메시지 1개, 갱신, 스레드, 라우팅
 │   ├── sink/               # 출력: slack, webhook, console
 │   ├── policy/             # 등급 + SLA 규칙

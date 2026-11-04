@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -39,7 +40,9 @@ func (f *fakeDT) ProjectSightings(_ context.Context, p dependencytrack.Project) 
 	return out, f.err
 }
 
-func setup(t *testing.T, dt FindingsFetcher) (*Processor, *store.Store) {
+// setup returns a processor with the Dependency-Track adapter, reading
+// findings from dt (nil: no API configured).
+func setup(t *testing.T, dt dependencytrack.FindingsFetcher) (*Processor, *store.Store) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "p.db"))
@@ -60,9 +63,14 @@ func setup(t *testing.T, dt FindingsFetcher) (*Processor, *store.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &Processor{Store: st, Inventory: inv, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	adapter := &dependencytrack.Adapter{Logger: quiet}
+	p := &Processor{Store: st, Inventory: inv, Logger: quiet, Sources: source.NewRegistry(adapter)}
 	if dt != nil {
-		p.DT = dt
+		adapter.Client = dt
+	}
+	if vf, ok := dt.(VulnerabilityFetcher); ok {
+		p.Vulnerabilities = vf
 	}
 	return p, st
 }
@@ -73,7 +81,7 @@ func enqueue(t *testing.T, st *store.Store, fixture string) int64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, _, err := st.InsertInbox(context.Background(), SourceDependencyTrack, "x", fixture, body)
+	id, _, err := st.InsertInbox(context.Background(), dependencytrack.Name, "x", fixture, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +128,7 @@ func TestNewVulnerabilityCreatesFindings(t *testing.T) {
 
 	// Reprocessing the same event (a different inbox row) does not duplicate.
 	body, _ := os.ReadFile(filepath.Join("..", "source", "dependencytrack", "testdata", "new_vulnerability.json"))
-	_, _, _ = st.InsertInbox(ctx, SourceDependencyTrack, "x", "other-key", body)
+	_, _, _ = st.InsertInbox(ctx, dependencytrack.Name, "x", "other-key", body)
 	if _, err := p.ProcessPending(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -149,9 +157,15 @@ func enqueueBOM(t *testing.T, st *store.Store, key string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.InsertInbox(context.Background(), SourceDependencyTrack, "BOM_PROCESSED", key, body); err != nil {
+	if _, _, err := st.InsertInbox(context.Background(), dependencytrack.Name, "BOM_PROCESSED", key, body); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// reconcileNow makes Dependency-Track reconciliations due right away.
+func reconcileNow(p *Processor) {
+	r, _ := p.Sources.Reporter(dependencytrack.Name)
+	r.(*dependencytrack.Adapter).ReconcileDelay = time.Nanosecond
 }
 
 // drain processes until nothing is due (reconciliations are separate items).
@@ -176,7 +190,7 @@ func TestBOMProcessedReconciles(t *testing.T) {
 	}
 	dt := &fakeDT{sightings: []dependencytrack.Sighting{express}}
 	p, st := setup(t, dt)
-	p.ReconcileDelay = time.Nanosecond
+	reconcileNow(p)
 
 	enqueueBOM(t, st, "bom-1")
 	if _, err := p.ProcessPending(ctx); err != nil {
@@ -230,7 +244,7 @@ func TestReconcileFailureIsRetriedLater(t *testing.T) {
 	ctx := context.Background()
 	dt := &fakeDT{err: errors.New("dependency-track down")}
 	p, st := setup(t, dt)
-	p.ReconcileDelay = time.Nanosecond
+	reconcileNow(p)
 	enqueueBOM(t, st, "bom-1")
 	drain(t, p)
 	if dt.calls != 1 {

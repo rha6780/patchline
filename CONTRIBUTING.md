@@ -73,7 +73,7 @@ patchline/
 │   ├── detect/             # detection engine interface; combines engines
 │   ├── impact/             # component search, what a vulnerability affects
 │   ├── sbom/, purl/, vex/  # SBOM parsing, package URLs, CycloneDX VEX
-│   ├── source/             # inputs: dependencytrack, gitea, kev, osv, trivy
+│   ├── source/             # ports and registry for tools; adapters: dependencytrack, gitea, kev, osv, trivy
 │   ├── notify/             # notifier per sink: one message per finding, updates, thread; routes
 │   ├── sink/               # outputs: slack, webhook, console
 │   ├── policy/             # severity + SLA rules

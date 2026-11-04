@@ -157,8 +157,8 @@ func purlBase(purl string) string {
 // judge decides whether version to leaves the finding's vulnerable range,
 // using the affected components Dependency-Track knows for it.
 func (p *Processor) judge(ctx context.Context, f store.Finding, to string) (verdict, detail string) {
-	vf, ok := p.DT.(VulnerabilityFetcher)
-	if !ok || p.DT == nil || f.DTVulnSource == "" || f.DTVulnID == "" {
+	vf := p.Vulnerabilities
+	if vf == nil || f.DTVulnSource == "" || f.DTVulnID == "" {
 		return store.VerdictUnknown, "vulnerability ranges not available"
 	}
 	v, err := vf.Vulnerability(ctx, f.DTVulnSource, f.DTVulnID)

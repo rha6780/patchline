@@ -21,6 +21,8 @@ import (
 	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
+	"github.com/rha6780/patchline/internal/source"
+	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -29,6 +31,8 @@ type pingFunc func(context.Context) error
 func (f pingFunc) PingContext(ctx context.Context) error { return f(ctx) }
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+var dtSources = source.NewRegistry(&dependencytrack.Adapter{})
 
 func TestHealthEndpoints(t *testing.T) {
 	ok := pingFunc(func(context.Context) error { return nil })
@@ -83,7 +87,7 @@ func fixture(t *testing.T) string {
 func TestDependencyTrackWebhook(t *testing.T) {
 	st := newStore(t)
 	woken := 0
-	h := New(Options{DB: st, Inbox: st, Findings: st, WebhookToken: "s3cret", OnInbox: func() { woken++ }, Logger: quiet})
+	h := New(Options{DB: st, Inbox: st, Sources: dtSources, Findings: st, WebhookToken: "s3cret", OnInbox: func() { woken++ }, Logger: quiet})
 	body := fixture(t)
 
 	post := func(target, auth, payload string) *httptest.ResponseRecorder {
@@ -128,7 +132,7 @@ func TestDependencyTrackWebhook(t *testing.T) {
 
 func TestGiteaWebhook(t *testing.T) {
 	st := newStore(t)
-	h := New(Options{DB: st, Inbox: st, Findings: st, GiteaSecret: "hook-secret", Logger: quiet})
+	h := New(Options{DB: st, Inbox: st, Sources: dtSources, Findings: st, GiteaSecret: "hook-secret", Logger: quiet})
 	body, err := os.ReadFile(filepath.Join("..", "source", "gitea", "testdata", "renovate_opened.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -171,7 +175,7 @@ func TestGiteaWebhook(t *testing.T) {
 func TestRotatedWebhookToken(t *testing.T) {
 	st := newStore(t)
 	secrets := store.WebhookSecrets{Store: st, EnvToken: "from-env"}
-	h := New(Options{DB: st, Inbox: st, Findings: st, WebhookToken: "from-env", Secrets: secrets.Current, Logger: quiet})
+	h := New(Options{DB: st, Inbox: st, Sources: dtSources, Findings: st, WebhookToken: "from-env", Secrets: secrets.Current, Logger: quiet})
 	send := func(token string) int {
 		req := httptest.NewRequest(http.MethodPost, "/webhooks/dependency-track?token="+token,
 			strings.NewReader(`{"notification":{"group":"BOM_CONSUMED","subject":{}}}`))
@@ -205,7 +209,7 @@ func TestSecurityHeaders(t *testing.T) {
 func TestIngestSBOM(t *testing.T) {
 	st := newStore(t)
 	woken := 0
-	h := New(Options{DB: st, Inbox: st, Findings: st, WebhookToken: "s3cret", OnInbox: func() { woken++ }, Logger: quiet})
+	h := New(Options{DB: st, Inbox: st, Sources: dtSources, Findings: st, WebhookToken: "s3cret", OnInbox: func() { woken++ }, Logger: quiet})
 	bom, err := os.ReadFile(filepath.Join("..", "..", "examples", "sbom", "storefront-api.cdx.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -287,7 +291,7 @@ func TestIngestWithAPIToken(t *testing.T) {
 		}
 		return raw
 	}
-	h := New(Options{DB: st, Inbox: st, Findings: st, Snapshots: st, WebhookToken: "shared", Auth: a, Logger: quiet})
+	h := New(Options{DB: st, Inbox: st, Sources: dtSources, Findings: st, Snapshots: st, WebhookToken: "shared", Auth: a, Logger: quiet})
 	bom, _ := os.ReadFile(filepath.Join("..", "..", "examples", "sbom", "storefront-api.cdx.json"))
 	send := func(path, token string) int {
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(bom)))
@@ -360,5 +364,15 @@ func TestWriteAPIWithToken(t *testing.T) {
 	}
 	if f, _ := st.GetFinding(ctx, id); f.Assignee != "a@example.com" {
 		t.Fatalf("assignee = %q", f.Assignee)
+	}
+}
+
+func TestUnknownWebhook(t *testing.T) {
+	st := newStore(t)
+	h := New(Options{DB: st, Inbox: st, Sources: dtSources, Logger: quiet})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/webhooks/nope", strings.NewReader("{}")))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown webhook: %d", rec.Code)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/sbom"
@@ -140,7 +139,7 @@ func TestDTAndPatchlineShareOneFinding(t *testing.T) {
 	}
 	dt := &fakeDT{sightings: []dependencytrack.Sighting{dtLog4j}}
 	p, st := setup(t, dt)
-	p.ReconcileDelay = time.Nanosecond
+	reconcileNow(p)
 	p.Matcher = &fakeMatcher{ready: true, vulns: map[string][]osv.Match{
 		log4j: {{ID: "GHSA-jfh8-c2jp-5v3q", Aliases: []string{"CVE-2021-44228"}, Severity: "high", Summary: "from OSV"}},
 	}}

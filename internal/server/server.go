@@ -18,7 +18,7 @@ import (
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
-	"github.com/rha6780/patchline/internal/source/dependencytrack"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/source/gitea"
 )
 
@@ -53,6 +53,8 @@ type Options struct {
 	// effect for each request (settings changed in the UI replace
 	// WebhookToken and GiteaSecret).
 	Secrets func(ctx context.Context) (token, giteaSecret string, err error)
+	// Sources receive the tools' webhooks at /webhooks/{name}.
+	Sources *source.Registry
 	// Auth signs people in and guards the UI and the API. Nil leaves them
 	// open and read-only. Webhooks authenticate with their own secrets.
 	Auth *auth.Authenticator
@@ -76,7 +78,7 @@ type Options struct {
 //
 //	GET  /healthz                      liveness: the process is up
 //	GET  /readyz                       readiness: the database answers
-//	POST /webhooks/dependency-track    Dependency-Track outbound webhook
+//	POST /webhooks/{name}              a tool's webhook (dependency-track, ...)
 //	POST /webhooks/gitea               Gitea / Forgejo / GitHub pull_request webhook
 //	POST /ingest/sbom                  SBOM upload for Patchline's own detection
 //	     /api/v1/...                   the JSON API (package api)
@@ -98,7 +100,7 @@ func New(o Options) http.Handler {
 	})
 	mux.HandleFunc("GET /readyz", h.readyz)
 	if o.Inbox != nil {
-		mux.HandleFunc("POST /webhooks/dependency-track", h.dependencyTrackWebhook)
+		mux.HandleFunc("POST /webhooks/{name}", h.sourceWebhook)
 		mux.HandleFunc("POST /webhooks/gitea", h.giteaWebhook)
 		mux.HandleFunc("POST /ingest/sbom", h.ingestSBOM)
 	}
@@ -159,29 +161,34 @@ func (h *handler) authorized(r *http.Request, want string) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
-func (h *handler) dependencyTrackWebhook(w http.ResponseWriter, r *http.Request) {
+// sourceWebhook stores a tool's webhook in the inbox, once its receiver
+// has checked the secret and the body.
+func (h *handler) sourceWebhook(w http.ResponseWriter, r *http.Request) {
+	recv, ok := h.o.Sources.Receiver(r.PathValue("name"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "no such webhook")
+		return
+	}
 	token, _, err := h.secrets(r)
 	if err != nil {
 		h.o.Logger.Error("load webhook secrets", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not load webhook settings")
 		return
 	}
-	if !h.authorized(r, token) {
-		writeError(w, http.StatusUnauthorized, "invalid or missing webhook token")
-		return
-	}
 	body, ok := readBody(w, r)
 	if !ok {
 		return
 	}
-	n, err := dependencytrack.ParseNotification(body)
-	if err != nil {
+	event, key, err := recv.Accept(r, body, source.Secrets{WebhookToken: token})
+	switch {
+	case errors.Is(err, source.ErrUnauthorized):
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	case err != nil:
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	sum := sha256.Sum256(body)
-	id, inserted, err := h.o.Inbox.InsertInbox(r.Context(), "dependencytrack", n.Group, hex.EncodeToString(sum[:]), body)
+	id, inserted, err := h.o.Inbox.InsertInbox(r.Context(), recv.Name(), event, key, body)
 	if err != nil {
 		h.o.Logger.Error("store webhook", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not store delivery")
@@ -190,7 +197,7 @@ func (h *handler) dependencyTrackWebhook(w http.ResponseWriter, r *http.Request)
 	if inserted {
 		h.o.OnInbox()
 	}
-	h.o.Logger.Debug("dependency-track webhook stored", "inbox_id", id, "group", n.Group, "duplicate", !inserted)
+	h.o.Logger.Debug("webhook stored", "source", recv.Name(), "inbox_id", id, "event", event, "duplicate", !inserted)
 	writeJSON(w, http.StatusAccepted, map[string]any{"inbox_id": id, "duplicate": !inserted})
 }
 

@@ -2,7 +2,7 @@
 
 English | [한국어](source-ports.ko.md)
 
-Status: phase 1 implemented.
+Status: phases 1–2 implemented.
 
 ## Goal
 
@@ -79,7 +79,8 @@ package source
 
 // Receiver accepts a tool's webhook and turns it into an inbox item.
 type Receiver interface {
-    Name() string                         // path segment: /webhooks/{name}
+    Name() string                         // inbox source: dependencytrack
+    Webhook() string                      // path segment: /webhooks/dependency-track
     Accept(r *http.Request, body []byte, secrets Secrets) (eventType, dedupKey string, err error)
 }
 
@@ -89,7 +90,8 @@ type Reporter interface {
     Handle(ctx context.Context, item store.InboxItem) (Outcome, error)
 }
 
-// Outcome is what intake applies, in one transaction per item.
+// Outcome is what intake applies, in this order. Each step is idempotent,
+// so a failed item is retried as a whole.
 type Outcome struct {
     Projects     []Project            // touched source projects (with commit, ref, BOM serial)
     Observations []finding.Observation
@@ -118,7 +120,7 @@ type Linker interface {
 
 What moves where:
 
-- **intake** keeps the inbox loop, retries and applying an `Outcome`. The Dependency-Track groups, the delayed reconciliation and the type mapping move into `source/dependencytrack`. The Patchline SBOM path becomes the `patchline` reporter, using the `Detector`s.
+- **intake** keeps the inbox loop, retries and applying an `Outcome`. The Dependency-Track groups, the delayed reconciliation and the type mapping move into `source/dependencytrack`. Patchline's own SBOM path stays in intake: it is the core, not an integration, and already goes through the `Detector`s.
 - **server** serves `POST /webhooks/{name}` for every registered `Receiver`, so `/webhooks/dependency-track` keeps its URL. Gitea stays a separate route.
 - **Fix PR verdicts** ask every `Advisories` in order: the OSV mirror first (local, no network), then Dependency-Track. This is the one visible change: PRs on OSV and Trivy findings get *fixes* / *insufficient* instead of *unknown*.
 - **app**: approving a decision asks the registry for a `DecisionWriter` matching one of the finding's refs. With one, it writes there first, as today. Without one, the decision stays in Patchline. "Can this be decided here" becomes "every ref of a source that has a writer is writable", which replaces `InDT` and the `no_dt` case.
@@ -132,7 +134,7 @@ Each phase is one commit or more, keeps every existing test passing, and can shi
 | Phase | Change | Done when |
 |---|---|---|
 | 1. Refs in the store | Migration `00014_finding_refs` with backfill; `Observation.Ref`; `UpsertFinding` writes refs (and still the `dt_*` columns); `ApplyStateByRef`. Callers unchanged otherwise | Store tests for backfill, merge of two sources, refs kept after resolution |
-| 2. Ports and the Dependency-Track adapter | `internal/source` ports and registry; Dependency-Track `Receiver` + `Reporter`; `patchline` reporter; intake applies `Outcome`; generic webhook route | `intake` and `server` no longer import `source/dependencytrack`; webhook and reconciliation tests pass unchanged |
+| 2. Ports and the Dependency-Track adapter (done) | `internal/source` ports and registry; Dependency-Track `Receiver` + `Reporter`; intake applies `Outcome`; generic webhook route | Inbox processing (`intake.go`) and `server` no longer import `source/dependencytrack` (PR verdicts follow in phase 3); webhook and reconciliation tests pass with only their wiring changed |
 | 3. Advisories, decisions, links | `Advisories` (OSV, Dependency-Track) for PR verdicts; `DecisionWriter`; `Linker`; `app`, `web`, `notify`, `api` use refs | Outside `source/` and `main`, nothing imports `source/dependencytrack`; an OSV finding's fix PR gets a verdict |
 | 4. Cleanup | Stop writing, then drop, the `findings.dt_*` columns (after one release); remove `DTUIURL` plumbing in favor of the linker | `grep -r DTProjectUUID internal` only finds the adapter |
 

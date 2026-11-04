@@ -96,6 +96,9 @@ type Observation struct {
 	SourceProject string
 }
 
+// DefaultEnvironment is the environment of a project without a version.
+const DefaultEnvironment = "default"
+
 // Sources of observations.
 const (
 	SourceDependencyTrack = "dependencytrack"
