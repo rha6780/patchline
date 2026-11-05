@@ -136,9 +136,7 @@ users:                                 # 이메일 또는 subject
 | **오탐**(사유) | Finding을 *해당 없음*으로 바꿈(VEX: `false_positive`) |
 | **기한 연장**(새 날짜, 사유) | 기한을 그 날짜의 끝으로 옮김 |
 
-판정을 어디에 기록하는지는 누가 그 Finding을 보고했느냐에 따라 다릅니다.
-- **Dependency-Track이 보고한 Finding:** 판정을 Dependency-Track에도 기록합니다. `EXPLOITABLE` + `WILL_NOT_FIX` + Suppress, 근거를 붙인 `NOT_AFFECTED`, `FALSE_POSITIVE` 중 하나이고, 코멘트에 사유와 요청자·승인자가 들어갑니다. Patchline이 Dependency-Track에 기록할 수 없으면 요청 단계에서 거부합니다.
-- **Patchline만 보고한 Finding**([자체 탐지](integrations/native-detection.ko.md)): 판정을 Patchline에 보관하고 VEX로 내보냅니다.
+판정은 Finding과 함께 Patchline에 보관되고(누가 요청·승인했는지, 언제, 왜) [VEX](integrations/native-detection.ko.md)로 내보냅니다. [Dependency-Track](integrations/dependency-track.ko.md)도 그 Finding을 보고하면 그곳에도 기록합니다. `EXPLOITABLE` + `WILL_NOT_FIX` + Suppress, 근거를 붙인 `NOT_AFFECTED`, `FALSE_POSITIVE` 중 하나이고, 코멘트에 사유와 요청자·승인자가 들어갑니다. Patchline이 Dependency-Track에 기록할 수 없으면 요청 단계에서 거부합니다.
 
 - `exceptions.request` 권한이 있으면 Finding 상세에서 요청합니다. 승인권자는 **승인** 메뉴에서 대기 중인 요청을 모두 봅니다.
 - **본인의 요청은 승인할 수 없습니다.** 두 권한을 모두 가져도 마찬가지입니다. 요청자는 대기 중인 요청을 철회할 수 있습니다.

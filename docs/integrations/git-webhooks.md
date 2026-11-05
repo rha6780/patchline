@@ -48,7 +48,7 @@ Redelivered events are de-duplicated by delivery id.
 
 ## Inventory
 
-The repository's full name (`owner/name`) must be listed as `repo` in the inventory, and its findings must come from a Dependency-Track project mapped to that repository.
+The repository's full name (`owner/name`) must be listed as `repo` in the inventory, and its findings must come from a project mapped to that repository (`projects`, see [Registering projects and branches](../projects.md)).
 
 ## Check
 

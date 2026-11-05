@@ -16,11 +16,11 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | Finding 목록: 빠른 필터(열림, 기한 초과, 7일 내 기한, 열린 critical, 검증대기)와 서비스·환경·상태·심각도 필터 | `/findings` |
 | Finding 상세: 정보, 수정 PR, 근거 타임라인 | `/findings/{id}` |
 | 서비스: 담당자, 저장소, 프로젝트별 브랜치·커밋, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조). 검색, 심각도, 환경, 브랜치, 저장소로 필터 | `/services/{name}` |
-| Integrations: DT 프로젝트별 마지막 BOM·커밋, BOM이 없는 인벤토리 프로젝트, 실패한 Webhook·알림 | `/integrations` |
+| 연동 상태: 프로젝트(SBOM 업로드, 연결했다면 Dependency-Track)별 마지막 SBOM·커밋, SBOM이 없는 인벤토리 프로젝트, 처리·알림 실패 | `/integrations` |
 | 구성요소: 패키지 사용처 검색, 취약점 영향 분석 | `/components`, `/vulnerabilities/{id}` |
 | 승인: 대기 중인 위험 수용·기한 연장 요청, 최근 결정(`exceptions.request` 또는 `exceptions.approve`) | `/approvals` |
 | 설정: Webhook 토큰·Secret 교체(`settings.webhooks`), 감사 로그(`audit.read`) | `/settings` |
-| 연동 가이드: 알림을 받을 수 있는 취약점 소스(Dependency-Track 지원, OpenCVE 예정), 연결 방법, `docs/integrations` 가이드 링크 | `/docs/integrations` |
+| 연동 가이드: Finding의 출처(자체 탐지, 선택 사항인 Dependency-Track, 예정인 OpenCVE), 도구 연결 방법, `docs/integrations` 가이드 링크 | `/docs/integrations` |
 
 모든 화면 하단의 푸터에 연동 가이드, 이 문서, 연동 도구, 프로젝트 링크가 있습니다.
 
@@ -57,12 +57,8 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_ADDR` | `:8080` | 수신 주소 |
 | `PATCHLINE_DB_PATH` | `data/patchline.db` | SQLite 파일 |
 | `PATCHLINE_INVENTORY_PATH` | — | 인벤토리 YAML 파일 또는 디렉터리([예시](../examples/inventory/services.yaml)) |
-| `PATCHLINE_WEBHOOK_TOKEN` | — | Webhook 공유 비밀값. 비우면 인증 없음(개발용) |
-| `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
-| `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키 |
+| `PATCHLINE_WEBHOOK_TOKEN` | — | SBOM 업로드와 Webhook의 공유 비밀값. 비우면 인증 없음(개발용) |
 | `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | PR Webhook의 Secret. 비우면 `PATCHLINE_WEBHOOK_TOKEN` 사용 |
-| `PATCHLINE_DT_UI_URL` | — | 메시지·Finding 페이지·`/api/v1/findings/{id}/refs`에 넣을 Dependency-Track UI 주소 |
-| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |
 | `PATCHLINE_POLICY_PATH` | — | 조치 정책 YAML([예시](../examples/policy/policy.yaml)). 비우면 기본값 |
 | `PATCHLINE_KEV_URL` | CISA 피드 | CISA KEV 카탈로그 주소(하루 한 번 갱신). `off`면 사용 안 함 |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack Bot 토큰(`chat:write`, `chat:write.public`). 이 값과 Webhook이 모두 없으면 stdout으로 출력 |
@@ -92,3 +88,14 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_OIDC_GROUPS_CLAIM` | `groups` | 그룹으로 읽을 ID 토큰 클레임. 쉼표로 여러 개, 점(.)으로 중첩 클레임(`realm_access.roles`) |
 | `PATCHLINE_SESSION_TTL` | `12h` | 로그인 유지 시간 |
 | `PATCHLINE_ACCESS_POLICY_PATH` | — | 그룹 → 권한 매핑([예시](../examples/access/access-policy.yaml)). 비우면 로그인한 사람은 조회만 가능 |
+
+### Dependency-Track(선택)
+
+[Dependency-Track](integrations/dependency-track.ko.md)을 두 번째 출처로 연결할 때만 필요합니다.
+
+| 환경변수 | 기본값 | 설명 |
+|---|---|---|
+| `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
+| `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키(판정을 기록하려면 `VULNERABILITY_ANALYSIS`도) |
+| `PATCHLINE_DT_UI_URL` | — | 메시지·Finding 페이지·`/api/v1/findings/{id}/refs`에 넣을 Dependency-Track UI 주소 |
+| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |

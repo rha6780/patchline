@@ -39,7 +39,7 @@ Open http://localhost:18080. The demo lets you read without signing in. Sign in 
 
 | Where | What |
 |---|---|
-| **Overview**, **Findings** | Findings with severity, due date and source (*Reported by: Patchline (OSV)*) |
+| **Overview**, **Findings** | Findings with severity, due date and source (*Reported by: Patchline (built-in)*) |
 | **Components** | Search `log4j`, or enter `CVE-2021-44228` to see what it affects, where it is fixed, and the findings |
 | **Services → storefront** | `main` and `prod` side by side |
 | **Integrations** | Each project with its commit, and a **VEX** download |

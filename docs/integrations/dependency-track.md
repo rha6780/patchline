@@ -2,7 +2,9 @@
 
 English | [한국어](dependency-track.ko.md)
 
-Dependency-Track decides *what is vulnerable*. Patchline receives its notifications, reads findings through its REST API, and treats its analysis decisions as the single place where people triage.
+Optional. Patchline finds vulnerabilities on its own ([Detection](native-detection.md)); if you already run Dependency-Track, connect it as a second source. Patchline receives its notifications and reads findings through its REST API. Decisions stay in Patchline's approvals, and an approved decision on a finding Dependency-Track reports is written back as its analysis, so both tools agree. Analyses made directly in Dependency-Track move the finding in Patchline too.
+
+Findings both report are one finding. Upload the same SBOM to both ([SBOM in CI](sbom-ci.md#uploading-to-dependency-track-as-well)), or only to Dependency-Track for projects Patchline should not match itself.
 
 Tested with Dependency-Track 4.14.
 
@@ -14,9 +16,9 @@ Tested with Dependency-Track 4.14.
 |---|---|
 | `VIEW_VULNERABILITY` | Reading a project's current findings after `BOM_PROCESSED` (`GET /api/v1/finding/project/{uuid}`) |
 | `VIEW_PORTFOLIO` | Reading vulnerability details, used for the affected version ranges when judging fix PRs (`GET /api/v1/vulnerability/source/{source}/vuln/{id}`) |
-| `VULNERABILITY_ANALYSIS` | Only with [sign-in](../access-control.md): writing approved risk acceptances (`PUT /api/v1/analysis`) |
+| `VULNERABILITY_ANALYSIS` | Writing approved decisions back: risk acceptance, not affected, false positive (`PUT /api/v1/analysis`) |
 
-Keep CI uploads on a separate team (`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`). Without `VULNERABILITY_ANALYSIS`, the key Patchline holds cannot change anything.
+Keep CI uploads on a separate team (`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`). Without `VULNERABILITY_ANALYSIS`, the key Patchline holds cannot change anything, and approving a decision on a finding Dependency-Track reports fails (nothing is approved).
 
 ## 2. Notification rule
 
@@ -53,10 +55,10 @@ Without `PATCHLINE_DT_URL` and the key, notifications still create findings, but
 
 | Dependency-Track | Patchline |
 |---|---|
-| Project **name** | Looked up in the inventory → service, owners, Slack channel |
+| Project **name** | Looked up in the inventory (`projects`) → service, owners, Slack channel |
 | Project **version** | Environment (`main`, `prod`, ...); empty becomes `default` |
 
-Use one project version per environment, for example `storefront-api@main` from the default branch and `storefront-api@prod` from the deployed image. Each version resolves on its own, which is how the UI shows "fixed on main, still open in prod".
+Use the same names as for uploads to Patchline ([Registering projects and branches](../projects.md)): one project version per environment, for example `storefront-api@main` from the default branch and `storefront-api@prod` from the deployed image. Each version resolves on its own, which is how the UI shows "fixed on main, still open in prod".
 
 Projects missing from the inventory are kept as *unregistered* and listed on **Integrations** in the UI.
 
@@ -83,4 +85,4 @@ Triage in Dependency-Track (finding → **Analysis**). Patchline maps the decisi
 | Webhook returns `401` | Token in the destination URL differs from `PATCHLINE_WEBHOOK_TOKEN` |
 | Findings arrive, but never resolve | `PATCHLINE_DT_URL` / `PATCHLINE_DT_API_KEY` missing, or the key lacks `VIEW_VULNERABILITY` |
 | Service shows as unregistered | Project name does not match the inventory |
-| Failures listed under **Webhook processing failures** | The last error explains it; items are retried with backoff |
+| Failures listed under **Integrations → Processing failures** | The last error explains it; items are retried with backoff |

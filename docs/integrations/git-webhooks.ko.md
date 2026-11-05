@@ -48,7 +48,7 @@ Secret을 설정하면 모든 요청에 올바른 HMAC-SHA256 서명(`X-Gitea-Si
 
 ## 인벤토리
 
-저장소 전체 이름(`owner/name`)이 인벤토리의 `repo`에 있어야 하고, Finding은 그 저장소에 연결된 Dependency-Track 프로젝트에서 와야 합니다.
+저장소 전체 이름(`owner/name`)이 인벤토리의 `repo`에 있어야 하고, Finding은 그 저장소에 연결된 프로젝트(`projects`, [프로젝트와 브랜치 등록](../projects.ko.md) 참고)에서 와야 합니다.
 
 ## 확인
 

@@ -2,7 +2,9 @@
 
 [English](dependency-track.md) | 한국어
 
-Dependency-Track은 *무엇이 취약한지*를 판정합니다. Patchline은 Dependency-Track의 알림을 받고 REST API로 Finding을 조회하며, 사람이 판정하는 곳은 Dependency-Track 분석 하나로 둡니다.
+선택 사항입니다. Patchline은 스스로 취약점을 찾습니다([탐지](native-detection.ko.md)). 이미 Dependency-Track을 쓰고 있다면 두 번째 출처로 연결하세요. Patchline은 Dependency-Track의 알림을 받고 REST API로 Finding을 조회합니다. 판정은 Patchline의 승인 흐름에서 하며, Dependency-Track이 보고한 Finding의 승인된 판정은 그곳에도 분석으로 기록해 두 도구가 같은 판정을 갖게 합니다. Dependency-Track에서 직접 한 분석도 Patchline의 Finding 상태에 반영됩니다.
+
+둘이 보고한 Finding은 하나로 합쳐집니다. 같은 SBOM을 둘 다에 올리거나([CI의 SBOM 생성](sbom-ci.ko.md)), Patchline이 직접 대조하지 않을 프로젝트는 Dependency-Track에만 올리세요.
 
 Dependency-Track 4.14로 확인했습니다.
 
@@ -14,9 +16,9 @@ Dependency-Track 4.14로 확인했습니다.
 |---|---|
 | `VIEW_VULNERABILITY` | `BOM_PROCESSED` 이후 프로젝트의 현재 Finding 조회(`GET /api/v1/finding/project/{uuid}`) |
 | `VIEW_PORTFOLIO` | 수정 PR 판정에 쓰는 취약점 상세(취약 버전 범위) 조회(`GET /api/v1/vulnerability/source/{source}/vuln/{id}`) |
-| `VULNERABILITY_ANALYSIS` | [로그인](../access-control.ko.md)을 쓸 때만: 승인된 위험 수용 기록(`PUT /api/v1/analysis`) |
+| `VULNERABILITY_ANALYSIS` | 승인된 판정 기록: 위험 수용, 해당 없음, 오탐(`PUT /api/v1/analysis`) |
 
-CI 업로드용 키는 별도 팀(`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`)으로 분리하세요. `VULNERABILITY_ANALYSIS`를 주지 않으면 Patchline이 가진 키로는 아무것도 바꿀 수 없습니다.
+CI 업로드용 키는 별도 팀(`BOM_UPLOAD`, `PROJECT_CREATION_UPLOAD`)으로 분리하세요. `VULNERABILITY_ANALYSIS`를 주지 않으면 Patchline이 가진 키로는 아무것도 바꿀 수 없고, Dependency-Track이 보고한 Finding의 판정을 승인할 때 실패합니다(아무것도 승인되지 않음).
 
 ## 2. 알림 규칙
 
@@ -53,10 +55,10 @@ PATCHLINE_DT_RECONCILE_DELAY=2m                     # 큰 BOM 분석이 오래 �
 
 | Dependency-Track | Patchline |
 |---|---|
-| 프로젝트 **이름** | 인벤토리에서 찾아 서비스, 담당자, Slack 채널에 연결 |
+| 프로젝트 **이름** | 인벤토리(`projects`)에서 찾아 서비스, 담당자, Slack 채널에 연결 |
 | 프로젝트 **버전** | 환경(`main`, `prod` 등). 비어 있으면 `default` |
 
-환경마다 프로젝트 버전을 하나씩 쓰세요. 예를 들어 기본 브랜치는 `storefront-api@main`, 배포된 이미지는 `storefront-api@prod`입니다. 버전마다 따로 해결되므로, UI에서 "main에서는 해결됐지만 prod에는 남은 건"을 보여줄 수 있습니다.
+Patchline에 올릴 때와 같은 이름을 쓰세요([프로젝트와 브랜치 등록](../projects.ko.md)). 환경마다 프로젝트 버전을 하나씩 씁니다. 예를 들어 기본 브랜치는 `storefront-api@main`, 배포된 이미지는 `storefront-api@prod`입니다. 버전마다 따로 해결되므로, UI에서 "main에서는 해결됐지만 prod에는 남은 건"을 보여줄 수 있습니다.
 
 인벤토리에 없는 프로젝트는 *미등록*으로 저장되고 UI의 **연동 상태**에 표시됩니다.
 
@@ -83,4 +85,4 @@ PATCHLINE_DT_RECONCILE_DELAY=2m                     # 큰 BOM 분석이 오래 �
 | Webhook이 `401` 응답 | Destination URL의 token이 `PATCHLINE_WEBHOOK_TOKEN`과 다름 |
 | Finding은 생기는데 해결되지 않음 | `PATCHLINE_DT_URL` / `PATCHLINE_DT_API_KEY`가 없거나 키에 `VIEW_VULNERABILITY` 권한이 없음 |
 | 서비스가 미등록으로 표시됨 | 프로젝트 이름이 인벤토리와 다름 |
-| **Webhook 처리 실패**에 항목이 쌓임 | 마지막 오류에 원인이 표시됨. 간격을 늘려 가며 재시도함 |
+| **연동 상태 → 처리 실패(업로드·Webhook)**에 항목이 쌓임 | 마지막 오류에 원인이 표시됨. 간격을 늘려 가며 재시도함 |

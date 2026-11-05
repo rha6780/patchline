@@ -16,11 +16,11 @@ The header switches between English and Korean and between system, light and dar
 | Findings with quick filters (open, overdue, due within 7 days, open critical, awaiting verification) and filters by service, environment, state and severity | `/findings` |
 | Finding: facts, fix pull requests, evidence timeline | `/findings/{id}` |
 | Service: owners, repositories, projects with their branch and commit, findings per environment (highlights fixed-on-`main`-but-open-in-`prod`), filtered by search, severity, environment, branch and repository | `/services/{name}` |
-| Integrations: Dependency-Track projects with last BOM and commit, inventory projects without a BOM, failed webhooks and notifications | `/integrations` |
+| Integrations: projects (SBOM uploads, and Dependency-Track when connected) with last SBOM and commit, inventory projects without one, processing and notification failures | `/integrations` |
 | Components: where packages are used, and what a vulnerability affects | `/components`, `/vulnerabilities/{id}` |
 | Approvals: pending risk acceptances and due date extensions, recent decisions (`exceptions.request` or `exceptions.approve`) | `/approvals` |
 | Settings: webhook token and secret rotation (`settings.webhooks`), audit log (`audit.read`) | `/settings` |
-| Integrations guide: vulnerability sources Patchline can take alerts from (Dependency-Track supported, OpenCVE planned), how to connect them, and links to the guides in `docs/integrations` | `/docs/integrations` |
+| Integrations guide: where findings come from (built-in detection; Dependency-Track optional; OpenCVE planned), how to connect the tools, and links to the guides in `docs/integrations` | `/docs/integrations` |
 
 Every page has a footer with links to the integrations guide, this documentation, the upstream tools and the project.
 
@@ -57,12 +57,8 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_ADDR` | `:8080` | Listen address |
 | `PATCHLINE_DB_PATH` | `data/patchline.db` | SQLite file |
 | `PATCHLINE_INVENTORY_PATH` | — | Inventory YAML file or directory ([example](../examples/inventory/services.yaml)) |
-| `PATCHLINE_WEBHOOK_TOKEN` | — | Shared secret for webhooks. Unset = no authentication (development only) |
-| `PATCHLINE_DT_URL` | — | Dependency-Track API server URL |
-| `PATCHLINE_DT_API_KEY` | — | API key with `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` |
+| `PATCHLINE_WEBHOOK_TOKEN` | — | Shared secret for SBOM uploads and webhooks. Unset = no authentication (development only) |
 | `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | Secret of the pull request webhook. Unset = use `PATCHLINE_WEBHOOK_TOKEN` |
-| `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages, finding pages and `/api/v1/findings/{id}/refs` |
-| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | Wait after `BOM_PROCESSED` before comparing findings |
 | `PATCHLINE_POLICY_PATH` | — | Remediation policy YAML ([example](../examples/policy/policy.yaml)). Unset = built-in defaults |
 | `PATCHLINE_KEV_URL` | CISA feed | CISA KEV catalog URL, refreshed daily; `off` disables |
 | `PATCHLINE_SLACK_BOT_TOKEN` | — | Slack bot token (`chat:write`, `chat:write.public`). Without it and a webhook, messages are printed to stdout |
@@ -92,3 +88,14 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_OIDC_GROUPS_CLAIM` | `groups` | ID token claim(s) read as groups, comma-separated; dotted names for nested claims (`realm_access.roles`) |
 | `PATCHLINE_SESSION_TTL` | `12h` | How long a sign-in lasts |
 | `PATCHLINE_ACCESS_POLICY_PATH` | — | Groups → permissions ([example](../examples/access/access-policy.yaml)). Unset = everyone who signs in can read |
+
+### Dependency-Track (optional)
+
+Only needed when [Dependency-Track](integrations/dependency-track.md) is connected as a second source.
+
+| Variable | Default | |
+|---|---|---|
+| `PATCHLINE_DT_URL` | — | Dependency-Track API server URL |
+| `PATCHLINE_DT_API_KEY` | — | API key with `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` (and `VULNERABILITY_ANALYSIS` to write decisions back) |
+| `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages, finding pages and `/api/v1/findings/{id}/refs` |
+| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | Wait after `BOM_PROCESSED` before comparing findings |

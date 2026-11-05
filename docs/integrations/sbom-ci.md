@@ -2,16 +2,16 @@
 
 English | [한국어](sbom-ci.ko.md)
 
-Dependency-Track only knows what you upload. CI produces a CycloneDX BOM per build and uploads it; Patchline reads the commit from the BOM, so each resolution points at the commit that fixed it.
+Patchline only knows what you upload. CI produces an SBOM per build and uploads it to Patchline, which matches it ([Detection](native-detection.md)) and reads the commit from it, so each resolution points at the commit that fixed it.
 
-## Which BOM, which project version
+## Which SBOM, which project version
 
-| Source | Tool | Dependency-Track project version |
+| Source | Tool | Version |
 |---|---|---|
 | Default branch (application dependencies) | Trivy `fs`, or the CycloneDX Gradle / Maven plugin | `main` |
 | Image that is deployed | Trivy `image` (includes OS packages) | `prod` |
 
-Use the project names listed in the inventory. Gradle projects get exact versions only from a build-time plugin (Spring Boot BOMs resolve versions at build time); Trivy `fs` reads lockfiles.
+Use the project names listed in the inventory ([Registering projects and branches](../projects.md)). Gradle projects get exact versions only from a build-time plugin (Spring Boot BOMs resolve versions at build time); Trivy `fs` reads lockfiles.
 
 ## Attach the commit
 
@@ -35,15 +35,13 @@ Without them everything still works; resolutions just carry no commit.
 ## Upload
 
 ```sh
-curl -sSf -X POST "$DT_URL/api/v1/bom" \
-  -H "X-Api-Key: $DT_UPLOAD_KEY" \
-  -F autoCreate=true \
-  -F projectName=storefront-api \
-  -F projectVersion=main \
-  -F bom=@bom.patchline.json
+curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom?project=storefront-api&version=main" \
+  -H "Authorization: Bearer $PATCHLINE_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @bom.patchline.json
 ```
 
-`DT_UPLOAD_KEY` belongs to a team with `BOM_UPLOAD` and `PROJECT_CREATION_UPLOAD`, not the key Patchline uses.
+`PATCHLINE_TOKEN` is an [API token](../access-control.md#api-tokens) with `sbom.upload`, one per pipeline (or the shared `PATCHLINE_WEBHOOK_TOKEN`). The project version is created by its first upload.
 
 ## Gitea Actions (also GitHub Actions)
 
@@ -72,17 +70,17 @@ jobs:
                {"name":"patchline:git:commit","value":$c},
                {"name":"patchline:git:ref","value":$r}])' \
             bom.json > bom.patchline.json
-      - name: Upload to Dependency-Track
+      - name: Upload to Patchline
         env:
-          DT_URL: ${{ vars.DT_URL }}
-          DT_UPLOAD_KEY: ${{ secrets.DT_UPLOAD_KEY }}
+          PATCHLINE_URL: ${{ vars.PATCHLINE_URL }}
+          PATCHLINE_TOKEN: ${{ secrets.PATCHLINE_TOKEN }}
         run: |
-          curl -sSf -X POST "$DT_URL/api/v1/bom" -H "X-Api-Key: $DT_UPLOAD_KEY" \
-            -F autoCreate=true -F projectName=storefront-api -F projectVersion=main \
-            -F bom=@bom.patchline.json
+          curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom?project=storefront-api&version=main" \
+            -H "Authorization: Bearer $PATCHLINE_TOKEN" -H "Content-Type: application/json" \
+            --data-binary @bom.patchline.json
 ```
 
-Pin `aquasec/trivy` to a version you have reviewed. To also use Trivy's vulnerability database for the analysis itself, see [Trivy analyzer](trivy.md).
+Pin `aquasec/trivy` to a version you have reviewed. The daily run matters less than it seems: Patchline re-analyzes stored SBOMs whenever its OSV data changes. It still refreshes the image's OS packages, which Trivy checks at upload time.
 
 ## Gradle (Kotlin / Spring Boot)
 
@@ -108,17 +106,29 @@ stage('SBOM: prod') {
         '.metadata.properties = ((.metadata.properties // []) + [
            {"name":"patchline:git:commit","value":$c},
            {"name":"patchline:git:ref","value":$r}])' bom.json > bom.patchline.json
-      curl -sSf -X POST "$DT_URL/api/v1/bom" -H "X-Api-Key: $DT_UPLOAD_KEY" \
-        -F autoCreate=true -F projectName=storefront-api-image -F projectVersion=prod \
-        -F bom=@bom.patchline.json
+      curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom?project=storefront-api-image&version=prod" \
+        -H "Authorization: Bearer $PATCHLINE_TOKEN" -H "Content-Type: application/json" \
+        --data-binary @bom.patchline.json
     '''
   }
 }
 ```
 
-If the image is a separate Dependency-Track project (`storefront-api-image`), list it under the repository's `dependency_track_projects` in the inventory.
+The image is its own project (`storefront-api-image`); list it under the repository's `projects` in the inventory. Its OS packages are matched by [Trivy](trivy.md).
 
 ## Check
 
-- **Integrations** in the UI shows the project, the last BOM time and the commit.
-- A fix that removes a vulnerable component resolves its findings about `PATCHLINE_DT_RECONCILE_DELAY` after the upload, and the Slack thread names the commit.
+- **Integrations** in the UI shows the project, the last SBOM time and the commit.
+- A fix that removes a vulnerable component resolves its findings right after the upload, and the Slack thread names the commit.
+
+## Uploading to Dependency-Track as well
+
+If you also run [Dependency-Track](dependency-track.md), upload the same file there with the same names:
+
+```sh
+curl -sSf -X POST "$DT_URL/api/v1/bom" -H "X-Api-Key: $DT_UPLOAD_KEY" \
+  -F autoCreate=true -F projectName=storefront-api -F projectVersion=main \
+  -F bom=@bom.patchline.json
+```
+
+`DT_UPLOAD_KEY` belongs to a team with `BOM_UPLOAD` and `PROJECT_CREATION_UPLOAD`, not the key Patchline uses. The findings of both merge; Dependency-Track's resolve about `PATCHLINE_DT_RECONCILE_DELAY` after the upload.

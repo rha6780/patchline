@@ -1,15 +1,15 @@
-# 자체 탐지(SBOM 업로드)
+# 탐지(SBOM 업로드)
 
 [English](native-detection.md) | 한국어
 
-Patchline이 직접 취약점을 찾을 수 있습니다. CI가 SBOM을 Patchline에 올리면, 구성요소를 [OSV](https://osv.dev) 데이터의 로컬 미러와 대조합니다. 데이터가 바뀌면 저장된 SBOM을 다시 분석합니다. Dependency-Track이 있어도 없어도 동작하며, 둘 다 같은 취약점을 찾으면 출처 두 개가 붙은 **Finding 하나**가 됩니다([설계 문서](../design/native-detection.ko.md) 참고).
+Patchline은 이렇게 취약점을 찾습니다. CI가 SBOM을 Patchline에 올리면 구성요소를 대조합니다.
 
-| | Dependency-Track | 자체 탐지 |
-|---|---|---|
-| SBOM을 보내는 곳 | Dependency-Track | Patchline(`/ingest/sbom`) |
-| 대조 | Dependency-Track 분석기(NVD, OSS Index, OSV, GitHub, Trivy) | OSV: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist |
-| OS 패키지(deb, rpm, apk) | Trivy 분석기를 쓰면 가능 | Trivy 서버를 연결하면 가능(`PATCHLINE_TRIVY_URL`) |
-| 분석 판정 | Dependency-Track에서 | Patchline 승인 흐름으로, VEX로 내보냄 |
+| 패키지 | 엔진 |
+|---|---|
+| 언어 패키지: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist | Patchline이 최신으로 유지하는 [OSV](https://osv.dev) 데이터의 로컬 미러 |
+| 이미지의 OS 패키지: deb, rpm, apk | [Trivy](trivy.ko.md) 서버(`PATCHLINE_TRIVY_URL`). Compose 구성에서는 Patchline과 함께 뜹니다 |
+
+OSV 데이터가 바뀔 때마다 저장된 SBOM을 다시 분석합니다. 판정은 Patchline의 요청·승인 흐름으로 하고 VEX로 내보냅니다. 다른 스캐너는 필요 없습니다. Dependency-Track도 쓰고 있다면 [Dependency-Track과 함께 쓸 때](#dependency-track과-함께-쓸-때)를 보세요. 설계는 [설계: 자체 탐지](../design/native-detection.ko.md)에 있습니다.
 
 ## 1. 켜기
 
@@ -27,7 +27,7 @@ PATCHLINE_OSV_REFRESH=6h                       # 변경분을 받는 주기
 
 ### Trivy로 OS 패키지 대조
 
-OSV는 언어 패키지를 다룹니다. 컨테이너 이미지의 OS 패키지(deb, rpm, apk)는 Trivy 서버를 두 번째 엔진으로 붙여 대조합니다. 직접 설치용 compose의 `--profile trivy`와 데모에 Trivy 서버가 있습니다.
+OSV는 언어 패키지를 다룹니다. 컨테이너 이미지의 OS 패키지(deb, rpm, apk)는 두 번째 엔진인 Trivy 서버가 대조합니다. [직접 설치용 구성](../../deploy/self-hosted/README.ko.md)과 데모는 Patchline 옆에 Trivy 서버를 띄웁니다. 그 밖의 환경은 [Trivy](trivy.ko.md)를 보세요.
 
 ```sh
 PATCHLINE_TRIVY_URL=http://trivy:8080
@@ -49,7 +49,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom?project=storefront-api&version=mai
   --data-binary @bom.patchline.json
 ```
 
-Dependency-Track과 같은 multipart 방식도 됩니다.
+multipart 폼으로도 올릴 수 있습니다.
 
 ```sh
 curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHLINE_WEBHOOK_TOKEN" \
@@ -60,7 +60,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 |---|---|
 | 형식 | CycloneDX JSON 또는 XML(1.x 스키마 모두. CycloneDX Gradle·Maven 플러그인의 기본 출력), SPDX JSON. UTF-8 BOM이 붙어 있어도 됨 |
 | 구성요소 | `purl`로 식별. purl이 없는 구성요소는 개수만 세고(`without_purl`) 건너뜀 |
-| `project` | Dependency-Track 프로젝트 이름과 똑같이 인벤토리에서 찾음(`dependency_track_projects`, 기본값: `repo`의 마지막 부분) |
+| `project` | 인벤토리에서 찾음(`projects`, 기본값: `repo`의 마지막 부분). [프로젝트와 브랜치 등록](../projects.ko.md) 참고 |
 | `version` | 환경(예: `main`, `prod`) |
 | 커밋 | BOM metadata의 `patchline:git:commit` / `patchline:git:ref`([CI의 SBOM 생성](sbom-ci.ko.md)과 같음). SPDX는 `patchline:git:commit=<sha>` annotation |
 | 토큰 | `sbom.upload` 권한의 [API 토큰](../access-control.ko.md#api-토큰)(파이프라인마다 하나) 또는 공유 `PATCHLINE_WEBHOOK_TOKEN` |
@@ -80,18 +80,16 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
             --data-binary @bom.patchline.json
 ```
 
-같은 SBOM을 Dependency-Track과 Patchline에 모두 올려도 됩니다. Finding은 하나로 합쳐집니다.
-
 ## Finding이 어떻게 바뀌나
 
-- 업로드할 때마다 그 프로젝트 버전의 스냅샷이 바뀝니다. 스냅샷에서 사라진 취약점은 커밋을 근거로 해결됩니다. 단, 다른 출처(Dependency-Track)가 아직 보고 중이면 열린 채로 둡니다. 다시 나타나면 재발로 처리합니다.
+- 업로드할 때마다 그 프로젝트 버전의 스냅샷이 바뀝니다. 스냅샷에서 사라진 취약점은 커밋을 근거로 해결됩니다. 단, 다른 프로젝트나 출처가 아직 보고 중이면 열린 채로 둡니다. 다시 나타나면 재발로 처리합니다.
 - OSV가 갱신될 때마다 저장된 스냅샷을 모두 다시 분석합니다. 새 권고가 나오면 빌드 없이도 Finding과 알림이 생기고, 철회된 권고의 Finding은 해결됩니다.
-- 심각도는 권고의 값(GitHub 등급, 없으면 CVSS v3 기본 점수)을 씁니다. Dependency-Track도 보고하면 그쪽 심각도를 씁니다.
-- 기한, KEV·EPSS 상향, Renovate PR 연결, Slack 메시지, 승인은 Dependency-Track Finding과 똑같이 동작합니다. EPSS는 Dependency-Track에서만 받습니다.
+- 심각도는 권고의 값을 씁니다. OSV는 GitHub 등급(없으면 CVSS v3 기본 점수), Trivy는 Trivy의 등급입니다.
+- 기한, KEV 상향, Renovate PR 판정(OSV 범위 사용), Slack 메시지, 승인이 모두 동작합니다.
 
 ## 판정과 VEX
 
-Patchline만 보고한 Finding은 Patchline에서 판정합니다. 위험 수용과 같은 요청·승인 흐름을 씁니다([로그인과 권한](../access-control.ko.md)).
+Finding은 Patchline에서 판정합니다. 한 사람이 요청하고 다른 사람이 승인합니다([로그인과 권한](../access-control.ko.md)).
 
 | 요청 | VEX 분석 |
 |---|---|
@@ -134,15 +132,15 @@ serial이나 bom-ref가 없으면(또는 SPDX면) VEX 안에 취약한 구성요
 - 영향 분석 화면에는 다음이 나옵니다.
   - 영향받는 버전을 쓰는 스냅샷: 해당한 범위, 고치는 버전, 커밋, Finding 상태(종료된 것 포함)
   - 이미 수정 버전을 쓰는 스냅샷 수
-  - 그 취약점의 모든 출처 Finding. Patchline에 SBOM이 없는 서비스의 Dependency-Track Finding도 여기에 나옵니다
+  - 그 취약점의 모든 출처 Finding(Dependency-Track을 쓰면 Patchline에 SBOM이 없는 서비스의 Finding도 포함)
 - GHSA ID로 찾아도 CVE가 나오고, 그 반대도 됩니다. Finding 상세에서 그 취약점의 영향 분석으로 이동할 수 있습니다.
-- 검색 대상은 Patchline에 올린 SBOM뿐입니다. Dependency-Track의 구성요소는 Dependency-Track에서 보세요.
+- 검색 대상은 Patchline에 올린 SBOM뿐입니다.
 
 ## 확인
 
 1. 로그에 생태계별 `osv synced`가 남습니다.
 2. SBOM을 올리면 로그에 `sbom analyzed … result="N findings (N new), 0 resolved"`가 남습니다.
-3. **연동** 화면에 출처가 *Patchline (OSV)*인 프로젝트와 커밋이 보이고, Finding 상세에 *탐지한 곳: Patchline (OSV)*가 표시됩니다.
+3. **연동 상태** 화면에 출처가 *Patchline (자체 탐지)*인 프로젝트와 커밋이 보이고, Finding 상세에 *탐지한 곳: Patchline (자체 탐지)*, 타임라인에 *Patchline에서 탐지 (OSV, …)* 또는 *(Trivy, …)*가 표시됩니다.
 
 | 증상 | 원인 |
 |---|---|
@@ -151,3 +149,17 @@ serial이나 bom-ref가 없으면(또는 SPDX면) VEX 안에 취약한 구성요
 | `components: 0` 또는 `without_purl`이 많음 | 생성기가 purl을 쓰지 않음. Trivy나 CycloneDX 플러그인 사용 |
 | `… still syncing, nothing resolved` | 첫 다운로드가 끝나지 않음. `osv synced`를 기다림 |
 | `osv sync failed` | 인터넷 불가. export를 사내에 미러링하고 `PATCHLINE_OSV_URL` 지정 |
+
+## Dependency-Track과 함께 쓸 때
+
+Patchline은 [Dependency-Track](dependency-track.ko.md)의 Finding도 받을 수 있습니다. 같은 SBOM을 둘 다에 올려도 됩니다.
+
+| | Dependency-Track | Patchline |
+|---|---|---|
+| SBOM을 보내는 곳 | Dependency-Track | Patchline(`/ingest/sbom`) |
+| 대조 | 자체 분석기(NVD, OSS Index, OSV, GitHub, Trivy) | OSV 미러와 Trivy 서버 |
+| 판정 | Dependency-Track에서 | Patchline에서. Dependency-Track이 보고한 Finding이면 그곳에도 기록 |
+
+- 둘이 보고한 같은 취약점은 출처 두 개가 붙은 **Finding 하나**입니다. 둘 다 보고를 멈춰야 해결됩니다.
+- Dependency-Track이 보고한 Finding은 그쪽 심각도를 쓰고, 그 EPSS 점수가 정책의 EPSS 상향에 쓰입니다(Patchline은 자체 EPSS 출처가 없습니다).
+- 수정 PR 판정은 OSV 미러에 먼저 묻고, 다음에 Dependency-Track에 묻습니다.

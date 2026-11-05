@@ -7,7 +7,7 @@ Two risk signals adjust the **effective severity**, which sets the due date and 
 | Signal | Source | Default effect |
 |---|---|---|
 | CISA Known Exploited Vulnerabilities | CISA JSON feed, refreshed daily | At least `critical` (7-day SLA) |
-| EPSS score | Dependency-Track finding API (`epssScore`) | One level up at ≥ 0.5 |
+| EPSS score | Dependency-Track finding API (`epssScore`), only when Dependency-Track is connected | One level up at ≥ 0.5 |
 
 Both are configured in the [policy](../../examples/policy/policy.yaml):
 
@@ -32,7 +32,7 @@ PATCHLINE_KEV_URL=https://www.cisa.gov/sites/default/files/feeds/known_exploited
 
 ## EPSS
 
-Patchline stores the EPSS score Dependency-Track returns with each finding and uses it at the next evaluation. When Dependency-Track has no EPSS data for a vulnerability, the score is simply absent and nothing changes.
+Patchline has no EPSS source of its own: with [Dependency-Track](dependency-track.md) connected, it stores the EPSS score Dependency-Track returns with each finding and uses it at the next evaluation. Without Dependency-Track, the EPSS escalation does nothing; KEV and exposure still apply. When Dependency-Track has no EPSS data for a vulnerability, the score is simply absent and nothing changes.
 
 ## Check
 

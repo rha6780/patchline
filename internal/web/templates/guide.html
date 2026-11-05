@@ -8,8 +8,37 @@
 <p class="muted">{{t $L "ui.guide.sources_lead"}}</p>
 
 <div class="cards">
+<article class="card" id="built-in">
+  <header><h3>{{t $L "ui.guide.pl.title"}}</h3><span class="tag ok">{{t $L "ui.guide.default"}}</span></header>
+  <p>{{t $L "ui.guide.pl.what"}}</p>
+  <dl class="kv">
+    <div><dt>{{t $L "ui.guide.label.finds"}}</dt><dd>{{t $L "ui.guide.pl.finds"}}</dd></div>
+    <div><dt>{{t $L "ui.guide.label.receives"}}</dt><dd>{{rich (t $L "ui.guide.pl.receives")}}</dd></div>
+    <div><dt>{{t $L "ui.guide.label.best"}}</dt><dd>{{t $L "ui.guide.pl.best"}}</dd></div>
+  </dl>
+  <h4>{{t $L "ui.guide.connect"}}</h4>
+  <ol class="steps">
+    <li>{{rich (t $L "ui.guide.pl.step1")}}</li>
+    <li>{{rich (t $L "ui.guide.pl.step2")}}</li>
+    <li>{{rich (t $L "ui.guide.pl.step3")}}</li>
+  </ol>
+  <h4>{{t $L "ui.guide.settings"}}</h4>
+  <div class="scroll">
+  <table class="compact">
+    <thead><tr><th>{{t $L "ui.guide.col.setting"}}</th><th>{{t $L "ui.guide.col.purpose"}}</th></tr></thead>
+    <tbody>
+      <tr><td><code>PATCHLINE_OSV_ECOSYSTEMS</code></td><td>{{rich (t $L "ui.guide.pl.env.osv")}}</td></tr>
+      <tr><td><code>PATCHLINE_TRIVY_URL</code></td><td>{{t $L "ui.guide.pl.env.trivy"}}</td></tr>
+      <tr><td><code>PATCHLINE_TRIVY_TOKEN</code></td><td>{{t $L "ui.guide.pl.env.trivy_tok"}}</td></tr>
+      <tr><td><code>PATCHLINE_WEBHOOK_TOKEN</code></td><td>{{rich (t $L "ui.guide.pl.env.token")}}</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="links"><a href="{{.Docs}}integrations/native-detection{{.DocExt}}" rel="noopener">{{t $L "ui.guide.setup_guide"}}</a> · <a href="{{.Docs}}integrations/trivy{{.DocExt}}" rel="noopener">Trivy ↗</a></p>
+</article>
+
 <article class="card" id="dependency-track">
-  <header><h3>Dependency-Track</h3><span class="tag ok">{{t $L "ui.guide.supported"}}</span></header>
+  <header><h3>Dependency-Track</h3><span class="tag">{{t $L "ui.guide.optional"}}</span></header>
   <p>{{t $L "ui.guide.dt.what"}}</p>
   <dl class="kv">
     <div><dt>{{t $L "ui.guide.label.finds"}}</dt><dd>{{t $L "ui.guide.dt.finds"}}</dd></div>
@@ -62,13 +91,13 @@
 <h2 id="compare">{{t $L "ui.guide.compare"}}</h2>
 <div class="scroll">
 <table>
-  <thead><tr><th></th><th>Dependency-Track</th><th>OpenCVE</th></tr></thead>
+  <thead><tr><th></th><th>{{t $L "ui.guide.pl.title"}}</th><th>Dependency-Track</th><th>OpenCVE</th></tr></thead>
   <tbody>
-    <tr><th scope="row">{{t $L "ui.guide.cmp.input"}}</th><td>{{t $L "ui.guide.cmp.dt.input"}}</td><td>{{t $L "ui.guide.cmp.oc.input"}}</td></tr>
-    <tr><th scope="row">{{t $L "ui.guide.cmp.versions"}}</th><td>{{t $L "ui.guide.cmp.dt.versions"}}</td><td>{{t $L "ui.guide.cmp.oc.versions"}}</td></tr>
-    <tr><th scope="row">{{t $L "ui.guide.cmp.alerts"}}</th><td>{{t $L "ui.guide.cmp.dt.alerts"}}</td><td>{{t $L "ui.guide.cmp.oc.alerts"}}</td></tr>
-    <tr><th scope="row">{{t $L "ui.guide.cmp.evidence"}}</th><td>{{t $L "ui.guide.cmp.dt.evidence"}}</td><td>{{t $L "ui.guide.cmp.oc.evidence"}}</td></tr>
-    <tr><th scope="row">{{t $L "ui.guide.cmp.status"}}</th><td><span class="tag ok">{{t $L "ui.guide.supported"}}</span></td><td><span class="tag plan">{{t $L "ui.guide.planned"}}</span></td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.input"}}</th><td>{{t $L "ui.guide.cmp.pl.input"}}</td><td>{{t $L "ui.guide.cmp.dt.input"}}</td><td>{{t $L "ui.guide.cmp.oc.input"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.versions"}}</th><td>{{t $L "ui.guide.cmp.pl.versions"}}</td><td>{{t $L "ui.guide.cmp.dt.versions"}}</td><td>{{t $L "ui.guide.cmp.oc.versions"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.alerts"}}</th><td>{{t $L "ui.guide.cmp.pl.alerts"}}</td><td>{{t $L "ui.guide.cmp.dt.alerts"}}</td><td>{{t $L "ui.guide.cmp.oc.alerts"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.evidence"}}</th><td>{{t $L "ui.guide.cmp.pl.evidence"}}</td><td>{{t $L "ui.guide.cmp.dt.evidence"}}</td><td>{{t $L "ui.guide.cmp.oc.evidence"}}</td></tr>
+    <tr><th scope="row">{{t $L "ui.guide.cmp.status"}}</th><td><span class="tag ok">{{t $L "ui.guide.default"}}</span></td><td><span class="tag">{{t $L "ui.guide.optional"}}</span></td><td><span class="tag plan">{{t $L "ui.guide.planned"}}</span></td></tr>
   </tbody>
 </table>
 </div>
@@ -96,12 +125,12 @@
 <p class="muted">{{t $L "ui.guide.docs_lead"}}</p>
 <ul class="list">
   <li><a href="{{.Docs}}projects{{.DocExt}}" rel="noopener">{{t $L "ui.guide.doc.proj"}} ↗</a><div class="meta">{{t $L "ui.guide.doc.proj_text"}}</div></li>
-  <li><a href="{{.Docs}}integrations/dependency-track{{.DocExt}}" rel="noopener">Dependency-Track ↗</a><div class="meta">{{t $L "ui.guide.doc.dt"}}</div></li>
   <li><a href="{{.Docs}}integrations/sbom-ci{{.DocExt}}" rel="noopener">SBOM in CI ↗</a><div class="meta">{{t $L "ui.guide.doc.sbom"}}</div></li>
   <li><a href="{{.Docs}}integrations/renovate{{.DocExt}}" rel="noopener">Renovate ↗</a><div class="meta">{{t $L "ui.guide.doc.renovate"}}</div></li>
   <li><a href="{{.Docs}}integrations/git-webhooks{{.DocExt}}" rel="noopener">Gitea / Forgejo / GitHub ↗</a><div class="meta">{{t $L "ui.guide.doc.git"}}</div></li>
   <li><a href="{{.Docs}}integrations/slack{{.DocExt}}" rel="noopener">Slack ↗</a><div class="meta">{{t $L "ui.guide.doc.slack"}}</div></li>
   <li><a href="{{.Docs}}integrations/kev-epss{{.DocExt}}" rel="noopener">CISA KEV · EPSS ↗</a><div class="meta">{{t $L "ui.guide.doc.kev"}}</div></li>
+  <li><a href="{{.Docs}}integrations/dependency-track{{.DocExt}}" rel="noopener">Dependency-Track ↗</a><div class="meta">{{t $L "ui.guide.doc.dt"}}</div></li>
 </ul>
 
 <h2 id="more">{{t $L "ui.guide.more"}}</h2>

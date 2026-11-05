@@ -3,73 +3,74 @@
 English | [한국어](how-it-works.ko.md)
 
 ```
-Service repos (Gitea) ── CI: SBOM (main) ──┐
-Deploy pipeline       ── image SBOM (prod) ┼──▶ Dependency-Track ── webhook ──┐
-                                           │                                  ▼
-Renovate ── fix PRs ── Gitea / Forgejo / GitHub webhook ─────────────▶  Patchline  ◀── inventory (Git, YAML)
-                                                                              │        ◀── CISA KEV
-                                                                    ┌─────────┴─────────┐
-                                                               Slack (bot)            Web UI
+Service repos   ── CI: SBOM (main) ──────┐
+Deploy pipeline ── image SBOM (prod) ────┼──▶  Patchline  ◀── inventory (Git, YAML)
+Renovate ── fix PRs ── Git webhook ──────┤      │     │    ◀── CISA KEV
+Dependency-Track (optional) ── webhook ──┘      │     └──▶ OSV mirror, Trivy server
+                                      ┌─────────┴─────────┐
+                                 Slack, webhook         Web UI
 ```
 
 | Tool | Role |
 |---|---|
-| **Dependency-Track** | Matches SBOM components (purl / CPE) against NVD, GHSA and OSV; stores analysis decisions |
+| **Patchline** | Matches uploaded SBOMs against a local OSV mirror and a Trivy server, joins findings with the inventory, computes due dates, notifies, keeps decisions, tracks state with evidence |
+| **Trivy server** | Advisories for OS packages (deb, rpm, apk) in container images |
 | **Renovate** | Opens fix PRs (dependency bumps, base-image digest updates) |
-| **Patchline** | Joins findings with the inventory, computes SLA, notifies, tracks state with evidence |
+| **Dependency-Track** (optional) | A second source: its own analyzers, findings and analysis decisions |
 
 ## Finding states
 
 | State | Trigger |
 |---|---|
-| `new` | New finding from Dependency-Track |
-| `in_progress` | Analysis in triage / exploitable, or a fix PR is linked |
-| `awaiting_verification` | Fix PR merged, or analysis marked resolved |
-| `resolved` | No longer reported for the project's latest BOM |
-| `not_affected` | Analysis `NOT_AFFECTED` / `FALSE_POSITIVE` |
-| `risk_accepted` | Finding suppressed in Dependency-Track, or a risk acceptance approved in Patchline (which suppresses it there) |
+| `new` | First reported: by an SBOM uploaded to Patchline, or by Dependency-Track |
+| `in_progress` | A fix PR is linked (or, in Dependency-Track, the analysis is in triage / exploitable) |
+| `awaiting_verification` | The fix PR is merged (or the Dependency-Track analysis is resolved) |
+| `resolved` | No longer reported by the latest SBOM of any project that reported it |
+| `not_affected` | A *not affected* or *false positive* request is approved (or Dependency-Track's analysis says so) |
+| `risk_accepted` | A risk acceptance is approved (or the finding is suppressed in Dependency-Track) |
 | `reopened` | A resolved finding is reported again |
 
-Human decisions end up in **one place**, the Dependency-Track analysis. Either people triage there, or an approved risk acceptance in Patchline writes the analysis there ([Sign-in and permissions](access-control.md)).
+Decisions are made **in Patchline**: someone requests an exception, someone else approves it ([Sign-in and permissions](access-control.md)). The decision stays with the finding (who, when, why), closes it, and is exported as [VEX](integrations/native-detection.md#decisions-and-vex). When Dependency-Track also reports the finding, the approved decision is written there first, so both tools agree.
 
 ## Intake
 
-1. The webhook handler validates the payload, stores it in an inbox table and returns `202`. Deliveries are de-duplicated by the platform's delivery id when there is one, otherwise by content hash.
+1. SBOM uploads (`/ingest/sbom`) and webhooks are validated, stored in an inbox table, and answered with `202`. Webhook deliveries are de-duplicated by the platform's delivery id when there is one, otherwise by content hash.
 2. A background processor handles inbox entries, retrying failures with backoff (30s → 30m, 5 attempts).
-3. `NEW_VULNERABILITY` and `NEW_VULNERABLE_DEPENDENCY` carry the findings directly; `BOM_PROCESSED` schedules a reconciliation of the project (see below).
-4. Each Dependency-Track project **name** is resolved to a service through the inventory, and its **version** becomes the environment (`main`, `prod`; empty becomes `default`). Projects not in the inventory are kept as *unregistered*.
-5. A finding is one service × environment × component × vulnerability. CVE ids are preferred over GHSA/OSV ids as the canonical id; the others are kept as aliases.
-6. `PROJECT_AUDIT_CHANGE` (an analysis decision in Dependency-Track) moves the finding's state: `IN_TRIAGE`/`EXPLOITABLE` → in progress, `NOT_AFFECTED`/`FALSE_POSITIVE` → not affected, suppressed → risk accepted, `RESOLVED` → awaiting verification (a rescan confirms it later).
+3. An SBOM becomes the **snapshot** of its project version. Its components are matched: language packages against the OSV mirror, OS packages by the Trivy server. Every match is recorded as a finding with the advisory, the affected range and the fixed version as evidence. When the OSV data changes, every stored snapshot is matched again, so a new advisory creates findings without a new build.
+4. The project **name** is resolved to a service through the inventory, and the **version** becomes the environment (`main`, `prod`; empty becomes `default`). Projects not in the inventory are kept as *unregistered*. A project moved to another service keeps its findings, with their history and decisions ([Registering projects and branches](projects.md)).
+5. A finding is one service × environment × component × vulnerability. CVE ids are preferred over GHSA/OSV ids as the canonical id; the others are kept as aliases. The same vulnerability reported by OSV and Trivy, or by Patchline and Dependency-Track, is one finding.
+6. With Dependency-Track: `NEW_VULNERABILITY` and `NEW_VULNERABLE_DEPENDENCY` carry findings; `BOM_PROCESSED` schedules a reconciliation (see below); `PROJECT_AUDIT_CHANGE` (an analysis decision there) moves the state: `IN_TRIAGE`/`EXPLOITABLE` → in progress, `NOT_AFFECTED`/`FALSE_POSITIVE` → not affected, suppressed → risk accepted, `RESOLVED` → awaiting verification.
 
 ## Resolution
 
 A finding is resolved by evidence, not by someone closing it.
 
-1. On `BOM_PROCESSED`, Patchline records the BOM's commit and ref and schedules a reconciliation after `PATCHLINE_DT_RECONCILE_DELAY`. (Dependency-Track 4.x sends `BOM_PROCESSED` before it has finished analyzing new components, so reading findings right away would be incomplete.)
-2. The reconciliation reads the project's current findings from the Dependency-Track API. Findings of that project that are no longer reported become **resolved**, with the commit, ref and BOM serial as evidence.
-3. A resolved finding that is reported again (by a later BOM or a `NEW_VULNERABILITY` notification) becomes **reopened**.
-4. Each Dependency-Track project version is reconciled separately, so `main` and `prod` resolve independently.
+1. Each upload replaces its project version's snapshot. Findings of that project version that the new snapshot no longer contains become **resolved**, with the commit and ref as evidence.
+2. Until every OSV ecosystem has synced once, uploads are matched but nothing resolves, so a half-loaded database never looks like a fix. If the Trivy server cannot be reached, the upload is retried and nothing resolves in the meantime.
+3. A resolved finding that is reported again becomes **reopened**.
+4. Each project version resolves on its own, so `main` and `prod` resolve independently.
 5. Findings closed by a decision (not affected, risk accepted) are left as they are.
-6. With [built-in detection](integrations/native-detection.md), SBOMs uploaded to Patchline resolve findings the same way. When Dependency-Track and Patchline both report a finding, it resolves only once neither reports it.
+6. A finding reported by several projects or sources resolves only once none of them reports it.
+7. With Dependency-Track: on `BOM_PROCESSED`, Patchline records the BOM's commit and waits `PATCHLINE_DT_RECONCILE_DELAY` (Dependency-Track 4.x sends it before it has finished analyzing), then reads the project's current findings and resolves the ones it no longer reports.
 
-The commit comes from the `patchline:git:commit` and `patchline:git:ref` properties in the BOM's metadata; see [SBOM in CI](integrations/sbom-ci.md#attach-the-commit).
+The commit comes from the `patchline:git:commit` and `patchline:git:ref` properties in the SBOM's metadata; see [SBOM in CI](integrations/sbom-ci.md#attach-the-commit).
 
 ## Pull request linking
 
 1. Gitea, Forgejo or GitHub sends **Pull Request** events to `/webhooks/gitea` (see [Git webhooks](integrations/git-webhooks.md)).
 2. When a pull request opens or changes, Patchline reads the updates from Renovate's change table (or the title, `Update dependency X to vY`).
 3. Each update is matched to open findings of that repository by package name (Maven `group:artifact` = `group/artifact`), in the environment named after the base branch and in `default`.
-4. The target version is compared with the vulnerability's affected ranges from Dependency-Track: **leaves the affected range**, **still affected**, or **not verified** when no range is known.
-5. A linked pull request moves the finding to *in progress*; merging it moves it to *awaiting verification*. Closing without merging is recorded but keeps the state. Only the next rescan resolves the finding.
+4. The target version is compared with the vulnerability's affected ranges, from the local OSV mirror (and from Dependency-Track, when it reports the finding): **leaves the affected range**, **still affected**, or **not verified** when no range is known.
+5. A linked pull request moves the finding to *in progress*; merging it moves it to *awaiting verification*. Closing without merging is recorded but keeps the state. Only the next SBOM resolves the finding.
 
-Base-image updates are not matched to OS-package findings; those resolve through the rescan.
+Base-image updates are not matched to OS-package findings; those resolve through the next image SBOM.
 
 ## Due dates
 
 The policy ([example](../examples/policy/policy.yaml)) turns risk signals into an **effective severity** and a due date:
 
 1. Start from the scanner's severity.
-2. Raise one level when the EPSS score (from Dependency-Track) is at or above `epss_threshold`.
+2. Raise one level when the EPSS score is at or above `epss_threshold` (EPSS comes with Dependency-Track findings; without Dependency-Track this step is skipped).
 3. Add the service's exposure adjustment (default: `internet` +1).
 4. A CVE in the CISA KEV catalog is raised to at least `kev` (default critical).
 5. The due date is the SLA for that severity (default critical 7d, high 30d, medium 90d, low 180d), counted from first detection or from reopening.
@@ -83,8 +84,8 @@ The SLA job re-evaluates open findings every 5 minutes and right after intake, s
 - When the finding changes (state, severity), the message is edited in place (`chat.update`) and the change is added to its thread.
 - Progress is stored per finding, so restarts and Slack outages only delay messages; rate limits (`429`) pause delivery for `Retry-After`.
 - Findings closed before they were ever posted (for example marked not affected right away) are not posted.
-- Without a Slack token the same messages are printed to stdout.
+- The [webhook sink](integrations/webhook-notifications.md) gets the same events as signed JSON. Without Slack or a webhook, messages are printed to stdout.
 
 ## Out of scope
 
-Running scanners, version-range matching (delegated to Dependency-Track), SAST for first-party code, configuration audits, multi-tenancy.
+Generating SBOMs (CI does that, see [SBOM in CI](integrations/sbom-ci.md)), SAST for first-party code, configuration audits, multi-tenancy.

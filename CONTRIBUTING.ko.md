@@ -6,7 +6,7 @@ Patchline에 관심 가져 주셔서 고맙습니다. 버그 제보, 문서 수�
 
 ## 시작하기 전에
 
-- **버그**: 무엇을 했는지, 무엇을 기대했는지, 실제로 어떻게 됐는지를 이슈로 남겨 주세요. Patchline 버전(`git describe`), Dependency-Track 버전, 관련 로그(`PATCHLINE_LOG_LEVEL=debug`)를 함께 적어 주세요. 토큰, 호스트 이름 같은 내부 정보는 지워 주세요.
+- **버그**: 무엇을 했는지, 무엇을 기대했는지, 실제로 어떻게 됐는지를 이슈로 남겨 주세요. Patchline 버전(`git describe`), 관련 도구 버전(Trivy, Dependency-Track), 관련 로그(`PATCHLINE_LOG_LEVEL=debug`)를 함께 적어 주세요. 토큰, 호스트 이름 같은 내부 정보는 지워 주세요.
 - **기능 추가나 큰 변경**: 코드를 작성하기 전에 먼저 이슈를 열어 방향을 맞춰 주세요. [범위 밖](docs/how-it-works.ko.md#범위-밖) 항목도 확인해 주세요.
 - **보안 문제**: 공개 이슈로 올리지 말고, GitHub의 **Security → Report a vulnerability**로 비공개 제보해 주세요.
 
@@ -62,7 +62,7 @@ make test
 patchline/
 ├── cmd/patchline/          # 진입점
 ├── internal/
-│   ├── app/                # 사람이 하는 변경: 지정, 요청, 승인 (+ Dependency-Track 반영)
+│   ├── app/                # 사람이 하는 변경: 지정, 요청, 승인 (+ 판정을 보관하는 도구에 반영)
 │   ├── api/                # JSON API /api/v1, 전용 응답 타입과 openapi.yaml
 │   ├── server/             # HTTP 루트: 헬스 체크, Webhook, SBOM 수신. api·web·auth 연결
 │   ├── web/                # 서버 렌더링 화면 + 내장 CSS. 변경은 app 호출
@@ -100,7 +100,7 @@ patchline/
 | DB | SQLite(`ncruces/go-sqlite3`, 순수 Go, cgo 없음), 마이그레이션은 `goose` |
 | 설정 | 환경변수, 인벤토리는 YAML(`go.yaml.in/yaml/v3`) |
 | 백그라운드 작업 | 프로세스 내 워커: Inbox 처리기와 Notifier(큐·Redis 없음) |
-| 연동 | 표준 라이브러리 기반의 작은 HTTP 클라이언트(Dependency-Track, Slack Web API) |
+| 연동 | 표준 라이브러리 기반의 작은 HTTP 클라이언트(OSV export, Trivy 서버, Slack Web API, Dependency-Track) |
 | 버전 비교 | Maven, npm, PyPI, Go 형식을 다루는 자체 best-effort 비교 |
 | 로깅 | `log/slog` |
 | 컨테이너 | distroless, non-root |

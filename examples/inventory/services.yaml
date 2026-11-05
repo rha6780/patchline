@@ -1,13 +1,14 @@
 # Example service inventory. In a real setup this lives in its own Git
 # repository and changes through pull requests.
 #
-# Each Dependency-Track project is mapped to exactly one service. A
-# repository's projects default to the last segment of its path
+# A project is the name SBOMs are uploaded under (/ingest/sbom?project=...,
+# or the Dependency-Track project name), and belongs to exactly one service.
+# A repository's projects default to the last segment of its path
 # (acme/storefront-api -> "storefront-api"); list them explicitly when the
 # app SBOM and the image SBOM are uploaded as separate projects.
 #
-# The Dependency-Track project *version* is used as the environment
-# (for example "main" for the default branch and "prod" for deployed images).
+# The upload's *version* is the environment (for example "main" for the
+# default branch and "prod" for deployed images). See docs/projects.md.
 
 services:
   - name: storefront
@@ -16,7 +17,7 @@ services:
     exposure: internet          # internet | internal | private
     repositories:
       - repo: acme/storefront-api
-        dependency_track_projects: [storefront-api, storefront-api-image]
+        projects: [storefront-api, storefront-api-image]
       - repo: acme/storefront-web
 
   - name: billing

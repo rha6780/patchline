@@ -1,15 +1,15 @@
-# Built-in detection (SBOM upload)
+# Detection (SBOM upload)
 
 English | [한국어](native-detection.ko.md)
 
-Patchline can find vulnerabilities itself: CI uploads an SBOM to Patchline, which matches its components against a local mirror of [OSV](https://osv.dev) data. Patchline also re-analyzes the stored SBOMs when that data changes. This works with or without Dependency-Track. When both report the same vulnerability, it is **one finding** listing both sources (see [How it works](../design/native-detection.md)).
+This is how Patchline finds vulnerabilities. CI uploads an SBOM to Patchline, which matches its components:
 
-| | Dependency-Track | Built-in detection |
-|---|---|---|
-| SBOM goes to | Dependency-Track | Patchline (`/ingest/sbom`) |
-| Matching | Dependency-Track's analyzers (NVD, OSS Index, OSV, GitHub, Trivy) | OSV: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist |
-| OS packages (deb, rpm, apk) | With the Trivy analyzer | With a Trivy server (`PATCHLINE_TRIVY_URL`) |
-| Analysis decisions | In Dependency-Track | In Patchline, through approvals, exported as VEX |
+| Packages | Engine |
+|---|---|
+| Language packages: Maven, npm, PyPI, Go, crates.io, NuGet, RubyGems, Packagist | A local mirror of [OSV](https://osv.dev) data, kept up to date by Patchline |
+| OS packages in images: deb, rpm, apk | A [Trivy](trivy.md) server (`PATCHLINE_TRIVY_URL`), started with Patchline by the compose setups |
+
+Patchline re-analyzes the stored SBOMs whenever the OSV data changes. Decisions are made in Patchline, through requests and approvals, and exported as VEX. No other scanner is needed. If you also run Dependency-Track, see [With Dependency-Track as well](#with-dependency-track-as-well); the design is in [Design: built-in detection](../design/native-detection.md).
 
 ## 1. Turn it on
 
@@ -27,7 +27,7 @@ Until every configured ecosystem has synced once, uploads are analyzed but nothi
 
 ### OS packages with Trivy
 
-OSV covers language packages. For the OS packages in container images (deb, rpm, apk), add a Trivy server as a second engine. The self-hosted setup has one under `--profile trivy`, and the demo runs one.
+OSV covers language packages. The OS packages in container images (deb, rpm, apk) are matched by a Trivy server, the second engine. The [self-hosted setup](../../deploy/self-hosted/README.md) and the demo start one next to Patchline; elsewhere, see [Trivy](trivy.md).
 
 ```sh
 PATCHLINE_TRIVY_URL=http://trivy:8080
@@ -49,7 +49,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom?project=storefront-api&version=mai
   --data-binary @bom.patchline.json
 ```
 
-The Dependency-Track style also works:
+A multipart form also works:
 
 ```sh
 curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHLINE_WEBHOOK_TOKEN" \
@@ -60,7 +60,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 |---|---|
 | Formats | CycloneDX JSON or XML (any 1.x schema, as the CycloneDX Gradle and Maven plugins write by default), SPDX JSON. A UTF-8 byte order mark is fine |
 | Components | Identified by `purl`; components without one are counted (`without_purl`) and skipped |
-| `project` | Looked up in the inventory like a Dependency-Track project name (`dependency_track_projects`, default: last segment of `repo`) |
+| `project` | Looked up in the inventory (`projects`, default: last segment of `repo`); see [Registering projects and branches](../projects.md) |
 | `version` | The environment, e.g. `main`, `prod` |
 | Commit | `patchline:git:commit` / `patchline:git:ref` in the BOM metadata, as in [SBOM in CI](sbom-ci.md). SPDX: an annotation `patchline:git:commit=<sha>` |
 | Token | An [API token](../access-control.md#api-tokens) with `sbom.upload` (one per pipeline), or the shared `PATCHLINE_WEBHOOK_TOKEN` |
@@ -80,18 +80,16 @@ The answer is `202` with `{"format": "CycloneDX", "components": 3, "without_purl
             --data-binary @bom.patchline.json
 ```
 
-You can upload the same SBOM to Dependency-Track and to Patchline; the findings merge.
-
 ## How findings behave
 
-- Each upload replaces the project version's snapshot. Vulnerabilities no longer in it resolve, with the commit as evidence, unless another source (Dependency-Track) still reports them. Vulnerabilities that come back reopen.
+- Each upload replaces the project version's snapshot. Vulnerabilities no longer in it resolve, with the commit as evidence, unless another project or source still reports them. Vulnerabilities that come back reopen.
 - After each OSV update, every stored snapshot is analyzed again. A new advisory creates findings and notifications without a new build; a withdrawn advisory resolves its findings.
-- Severity is the advisory's (GitHub's rating, otherwise the CVSS v3 base score). When Dependency-Track also reports the finding, its severity is used.
-- Due dates, KEV and EPSS escalation, Renovate PR links, Slack messages and approvals work as for Dependency-Track findings. EPSS comes from Dependency-Track only.
+- Severity is the advisory's: OSV's (GitHub's rating, otherwise the CVSS v3 base score) or Trivy's.
+- Due dates, KEV escalation, Renovate PR verdicts (from the OSV ranges), Slack messages and approvals all work on these findings.
 
 ## Decisions and VEX
 
-A finding only Patchline reports is decided in Patchline, through the same request and approval as risk acceptance ([Sign-in and permissions](../access-control.md)):
+Findings are decided in Patchline: someone requests, someone else approves ([Sign-in and permissions](../access-control.md)):
 
 | Request | VEX analysis |
 |---|---|
@@ -134,15 +132,15 @@ The stored snapshots answer two questions, under **Components** in the UI and th
 - The impact page lists:
   - the snapshots with an affected version, with the matching range, the version that fixes it, the commit, and the finding's state, including closed findings
   - how many snapshots already run a fixed version
-  - every finding of that vulnerability from any source; Dependency-Track findings for services without an SBOM in Patchline appear here
+  - every finding of that vulnerability from any source (with Dependency-Track, also its findings for services without an SBOM in Patchline)
 - A GHSA id finds its CVE and the other way round. A finding page links to its vulnerability's impact.
-- Only SBOMs uploaded to Patchline are searchable; Dependency-Track's components stay in Dependency-Track.
+- Only SBOMs uploaded to Patchline are searchable.
 
 ## Check
 
 1. `osv synced` lines in the log for each ecosystem.
 2. Upload an SBOM: the log shows `sbom analyzed … result="N findings (N new), 0 resolved"`.
-3. **Integrations** lists the project with source *Patchline (OSV)* and its commit. A finding shows *Reported by: Patchline (OSV)*.
+3. **Integrations** lists the project with source *Patchline (built-in)* and its commit. A finding shows *Reported by: Patchline (built-in)*, and its timeline *Detected by Patchline (OSV, …)* or *(Trivy, …)*.
 
 | Symptom | Cause |
 |---|---|
@@ -151,3 +149,17 @@ The stored snapshots answer two questions, under **Components** in the UI and th
 | `components: 0` or many `without_purl` | The generator does not write purls; use Trivy or the CycloneDX plugins |
 | `… still syncing, nothing resolved` | The first download has not finished; wait for `osv synced` |
 | `osv sync failed` | No internet: mirror the exports internally and set `PATCHLINE_OSV_URL` |
+
+## With Dependency-Track as well
+
+Patchline can also take findings from [Dependency-Track](dependency-track.md). You can upload the same SBOM to both.
+
+| | Dependency-Track | Patchline |
+|---|---|---|
+| SBOM goes to | Dependency-Track | Patchline (`/ingest/sbom`) |
+| Matching | Its analyzers (NVD, OSS Index, OSV, GitHub, Trivy) | OSV mirror and Trivy server |
+| Decisions | In Dependency-Track | In Patchline; written to Dependency-Track too when it reports the finding |
+
+- The same vulnerability from both is **one finding** listing both sources. It resolves only when neither reports it.
+- Dependency-Track's severity is used when it reports the finding, and its EPSS score feeds the policy's EPSS escalation (Patchline has no EPSS source of its own).
+- Fix PR verdicts ask the OSV mirror first, then Dependency-Track.

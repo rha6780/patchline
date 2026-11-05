@@ -100,7 +100,8 @@ func TestPages(t *testing.T) {
 		{"/integrations", []string{`href="/docs/integrations"`}},
 		{"/docs/integrations", []string{"Integrations guide", "Dependency-Track", "OpenCVE", "Planned",
 			"<code>NEW_VULNERABLE_DEPENDENCY</code>", "<code>PATCHLINE_DT_URL</code>", "https://docs.opencve.io/", "CISA KEV",
-			"blob/main/docs/integrations/sbom-ci.md", "blob/main/docs/projects.md", "Registering projects and branches"}},
+			"blob/main/docs/integrations/sbom-ci.md", "blob/main/docs/projects.md", "Registering projects and branches",
+			"Built-in detection (OSV · Trivy)", "<code>PATCHLINE_TRIVY_URL</code>", "Optional"}},
 		{"/static/style.css", []string{"--crit"}},
 	}
 	for _, tc := range tests {
@@ -158,7 +159,7 @@ func TestEmptyOverview(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, body := get(t, u, "/")
-	if code != http.StatusOK || !strings.Contains(body, "Connect Dependency-Track") {
+	if code != http.StatusOK || !strings.Contains(body, "Upload an SBOM from CI") {
 		t.Fatalf("empty overview: %d", code)
 	}
 	if code, body := get(t, u, "/integrations"); code != http.StatusOK || !strings.Contains(body, "No project has reported yet") {

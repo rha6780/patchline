@@ -18,8 +18,8 @@ PATCHLINE_SLACK_BOT_TOKEN=xoxb-...
 PATCHLINE_SLACK_DEFAULT_CHANNEL=#security     # slack_channel이 없는 서비스와 미등록 프로젝트용
 PATCHLINE_NOTIFY_MIN_SEVERITY=medium          # 실효 심각도 기준: critical | high | medium | low | info
 PATCHLINE_NOTIFY_LANG=ko                      # en | ko
-PATCHLINE_DT_UI_URL=https://dtrack.example.com  # "Dependency-Track에서 열기" 링크 추가
 PATCHLINE_PUBLIC_URL=https://patchline.example.com  # "Patchline에서 열기" 링크 추가
+# PATCHLINE_DT_UI_URL=https://dtrack.example.com  # Dependency-Track을 쓰면: "Dependency-Track에서 열기" 링크 추가
 ```
 
 Slack에 일부 Finding만 보내려면 `PATCHLINE_SLACK_MIN_SEVERITY`(`PATCHLINE_NOTIFY_MIN_SEVERITY`보다 우선), `PATCHLINE_SLACK_SERVICES`, `PATCHLINE_SLACK_ENVIRONMENTS`(쉼표 구분)를 설정합니다. 다른 시스템에는 같은 변경을 [Webhook 알림](webhook-notifications.ko.md)으로 보낼 수 있습니다.
@@ -42,7 +42,7 @@ Finding은 서비스의 채널로, 없으면 `PATCHLINE_SLACK_DEFAULT_CHANNEL`�
 | 변경 | 메시지 | 스레드 |
 |---|---|---|
 | 새 Finding(첫 정책 평가 후) | 심각도, 구성요소, 담당자, 기한과 함께 전송 | — |
-| Dependency-Track 분석 판정 | 상태 | "상태: 신규 → 조치중 (…)" |
+| Dependency-Track 분석 판정(연결했을 때) | 상태 | "상태: 신규 → 조치중 (…)" |
 | 수정 PR 열림 / 병합 / 닫힘 | 수정 PR 항목 | PR, 버전, 판정, 병합 커밋 |
 | 상향(KEV, EPSS) 또는 기한 변경 | 심각도, 기한 | 사유와 새 기한 |
 | 기한 임박 / 초과 | 기한 | 재알림 |

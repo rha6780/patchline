@@ -6,7 +6,7 @@ Thanks for your interest in Patchline. Bug reports, documentation fixes and pull
 
 ## Before you start
 
-- **Bugs**: open an issue with what you did, what you expected and what happened. Include the Patchline version (`git describe`), the Dependency-Track version and the relevant log lines (`PATCHLINE_LOG_LEVEL=debug`). Remove tokens, hostnames and other internal details.
+- **Bugs**: open an issue with what you did, what you expected and what happened. Include the Patchline version (`git describe`), the versions of the tools involved (Trivy, Dependency-Track) and the relevant log lines (`PATCHLINE_LOG_LEVEL=debug`). Remove tokens, hostnames and other internal details.
 - **Features and larger changes**: open an issue first, so the approach can be agreed on before you spend time on code. Check the [scope](docs/how-it-works.md#out-of-scope) too.
 - **Security issues**: do not open a public issue. Report them privately through **Security → Report a vulnerability** on GitHub.
 
@@ -62,7 +62,7 @@ Documentation and UI text are kept in English and Korean.
 patchline/
 ├── cmd/patchline/          # main entrypoint
 ├── internal/
-│   ├── app/                # changes people make: assign, request, decide (+ Dependency-Track write-back)
+│   ├── app/                # changes people make: assign, request, decide (+ write-back to tools that keep decisions)
 │   ├── api/                # JSON API /api/v1 with its own response types and openapi.yaml
 │   ├── server/             # HTTP root: health, webhooks, SBOM ingest; mounts api, web and auth
 │   ├── web/                # server-rendered pages + embedded CSS; calls app for changes
@@ -100,7 +100,7 @@ Dependencies point inwards: `server`, `web` and `api` handle HTTP and call `app`
 | Database | SQLite (`ncruces/go-sqlite3`, pure Go, no cgo), migrations with `goose` |
 | Configuration | environment variables, inventory in YAML (`go.yaml.in/yaml/v3`) |
 | Background work | in-process workers: inbox processor and notifier (no queue or Redis) |
-| Integrations | small standard-library HTTP clients for Dependency-Track and the Slack Web API |
+| Integrations | small standard-library HTTP clients for the OSV exports, the Trivy server, the Slack Web API and Dependency-Track |
 | Versions | built-in best-effort comparison across Maven, npm, PyPI and Go styles |
 | Logging | `log/slog` |
 | Container | distroless, non-root |

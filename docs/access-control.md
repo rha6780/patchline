@@ -132,9 +132,7 @@ On a finding, `findings.assign` sets the **assignee**: the person working on it,
 | **False positive** (reason) | Marks the finding *not affected* (VEX: `false_positive`) |
 | **Due date extension** (new date, reason) | Moves the due date to the end of that day |
 
-Where the decision is recorded depends on who reports the finding:
-- **Dependency-Track reports it:** the decision is also written to Dependency-Track: `EXPLOITABLE` + `WILL_NOT_FIX` + suppressed, `NOT_AFFECTED` with the justification, or `FALSE_POSITIVE`. The comment carries the reason and both names. If Patchline cannot write to Dependency-Track, the request is refused.
-- **Only Patchline reports it** ([built-in detection](integrations/native-detection.md)): the decision is kept in Patchline and exported as VEX.
+The decision is kept in Patchline with the finding (who requested and approved it, when, why) and exported as [VEX](integrations/native-detection.md#decisions-and-vex). When [Dependency-Track](integrations/dependency-track.md) also reports the finding, it is written there as well: `EXPLOITABLE` + `WILL_NOT_FIX` + suppressed, `NOT_AFFECTED` with the justification, or `FALSE_POSITIVE`, with the reason and both names as the comment. If Patchline cannot write to Dependency-Track, the request is refused.
 
 - People with `exceptions.request` ask from the finding page; approvers see every pending request under **Approvals**.
 - **Nobody approves their own request**, even with both permissions. The requester can withdraw a pending request.

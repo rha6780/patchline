@@ -18,8 +18,8 @@ PATCHLINE_SLACK_BOT_TOKEN=xoxb-...
 PATCHLINE_SLACK_DEFAULT_CHANNEL=#security     # services without slack_channel, unregistered projects
 PATCHLINE_NOTIFY_MIN_SEVERITY=medium          # effective severity; critical | high | medium | low | info
 PATCHLINE_NOTIFY_LANG=en                      # en | ko
-PATCHLINE_DT_UI_URL=https://dtrack.example.com  # adds "Open in Dependency-Track" links
 PATCHLINE_PUBLIC_URL=https://patchline.example.com  # adds "Open in Patchline" links
+# PATCHLINE_DT_UI_URL=https://dtrack.example.com  # with Dependency-Track: adds "Open in Dependency-Track" links
 ```
 
 To send only part of the findings to Slack, set `PATCHLINE_SLACK_MIN_SEVERITY` (overrides `PATCHLINE_NOTIFY_MIN_SEVERITY`), `PATCHLINE_SLACK_SERVICES` or `PATCHLINE_SLACK_ENVIRONMENTS` (comma-separated). Other systems can get the same changes as [webhook notifications](webhook-notifications.md).
@@ -42,7 +42,7 @@ A finding goes to its service's channel, otherwise to `PATCHLINE_SLACK_DEFAULT_C
 | Change | In the message | In the thread |
 |---|---|---|
 | New finding (after its first policy evaluation) | Posted with severity, component, owners, due date | — |
-| Analysis decision in Dependency-Track | State | "State: New → In progress (…)" |
+| Analysis decision in Dependency-Track (when connected) | State | "State: New → In progress (…)" |
 | Fix PR opened / merged / closed | Fix PR field | PR, versions, verdict, merge commit |
 | Escalation (KEV, EPSS) or due date change | Severity, due date | Reason and new due date |
 | Due soon / overdue | Due date | Reminder |

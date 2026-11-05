@@ -10,7 +10,7 @@ Patchline은 Finding을 **서비스**별로, 서비스 안에서는 **환경**�
 |---|---|---|
 | 서비스 | 인벤토리 `services[].name` | 담당자, Slack 채널, 노출도, Finding 집계 단위 |
 | 저장소 | 인벤토리 `repositories[].repo`(`owner/name`) | PR Webhook을 Finding에 연결 |
-| 프로젝트 | 인벤토리 `dependency_track_projects`(기본값: `repo`의 마지막 부분). 업로드할 때 `project`, 또는 Dependency-Track 프로젝트 이름 | SBOM이 어느 서비스 것인지 찾음 |
+| 프로젝트 | 인벤토리 `projects`(기본값: `repo`의 마지막 부분). 업로드할 때 `project`(Dependency-Track을 쓰면 그 프로젝트 이름) | SBOM이 어느 서비스 것인지 찾음 |
 | 버전 | 업로드할 때 `version`, 또는 Dependency-Track 프로젝트 버전 | **환경**이 됨(`main`, `prod`, 비우면 `default`). 환경마다 스냅샷이 따로 있고 따로 해결됨 |
 | 브랜치·태그 | SBOM의 `patchline:git:ref` 속성(`refs/heads/main`, `refs/tags/v1.4.0`) | Finding의 근거, Finding 화면과 API의 `branch` 필터 |
 | 커밋 | `patchline:git:commit` 속성 | 근거: 어느 빌드가 보고했고 어느 빌드가 고쳤는지 |
@@ -37,17 +37,18 @@ services:
     exposure: internet          # internet | internal(기본값) | private
     repositories:
       - repo: acme/storefront-api
-        dependency_track_projects: [storefront-api, storefront-api-image]
+        projects: [storefront-api, storefront-api-image]
       - repo: acme/storefront-web   # 프로젝트 "storefront-web"
 ```
 
 - `PATCHLINE_INVENTORY_PATH`는 파일이나 디렉터리입니다. 디렉터리면 안의 `*.yaml`·`*.yml` 파일을 모두 읽어 합치므로 팀마다 파일 하나씩 맡을 수 있습니다.
 - 모르는 필드, 중복된 서비스, 두 저장소가 같은 프로젝트를 가진 경우에는 Patchline이 시작하지 않습니다. 오타 때문에 Finding이 엉뚱한 팀으로 가는 일을 막기 위해서입니다.
+- `projects`의 예전 이름은 `dependency_track_projects`이며, 지금도 읽습니다.
 - 인벤토리는 시작할 때 읽습니다. **바꾼 뒤에는 Patchline을 재시작하세요.** Git으로 관리하고 다른 설정처럼 배포하는 것을 권장합니다.
 
 ## 2. 프로젝트 이름 정하기
 
-저장소가 저장소 이름과 같은 SBOM 프로젝트 하나만 올리면 `dependency_track_projects`를 생략합니다(`acme/storefront-web` → `storefront-web`). 애플리케이션과 이미지처럼 여러 개면 모두 적습니다. 프로젝트 이름 하나는 서비스 하나에만 속합니다.
+저장소가 저장소 이름과 같은 SBOM 프로젝트 하나만 올리면 `projects`를 생략합니다(`acme/storefront-web` → `storefront-web`). 애플리케이션과 이미지처럼 여러 개면 모두 적습니다. 프로젝트 이름 하나는 서비스 하나에만 속합니다.
 
 ## 3. 버전(환경) 정하기
 
@@ -88,12 +89,12 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom?project=storefront-api&version=mai
 
 `PATCHLINE_TOKEN`은 Webhook 토큰이나 `sbom.upload` 권한이 있는 API 토큰입니다.
 
-Dependency-Track으로 올릴 때는 같은 이름을 `projectName`, `projectVersion`으로 씁니다([CI에서 SBOM 만들기](integrations/sbom-ci.ko.md)). 한 프로젝트를 두 곳에 모두 올려도 되고, 두 출처의 Finding은 하나로 합쳐집니다.
+Dependency-Track도 쓴다면 그곳에서도 같은 이름을 `projectName`, `projectVersion`으로 씁니다([CI의 SBOM 생성](integrations/sbom-ci.ko.md)). 두 출처의 Finding은 하나로 합쳐집니다.
 
 ## 6. 확인
 
 1. **연동 상태**에 프로젝트 버전이 마지막 SBOM 시각과 커밋과 함께 나옵니다. 인벤토리에는 있는데 SBOM을 한 번도 보내지 않은 프로젝트는 *BOM이 없는 인벤토리 프로젝트*에 나옵니다. 대개 CI에서 쓴 이름과 인벤토리 이름이 다른 경우입니다.
-2. Finding에 서비스와 담당자가 나옵니다. *인벤토리 미등록*이면 프로젝트 이름이 어떤 `dependency_track_projects`와도 맞지 않은 것입니다.
+2. Finding에 서비스와 담당자가 나옵니다. *인벤토리 미등록*이면 프로젝트 이름이 어떤 `projects`와도 맞지 않은 것입니다.
 3. 기본 브랜치로 Renovate PR을 열면 Finding에 연결됩니다([Renovate](integrations/renovate.ko.md) 참고).
 
 ## 나중에 바꿀 때
@@ -101,8 +102,8 @@ Dependency-Track으로 올릴 때는 같은 이름을 `projectName`, `projectVer
 | 변경 | 결과 |
 |---|---|
 | 서비스에 저장소나 프로젝트 추가 | 재시작하면 다음 SBOM부터 그 서비스로 들어갑니다 |
-| 프로젝트를 다른 서비스로 옮김 | 재시작한 뒤 다음 SBOM이 오면 새 서비스 아래에 Finding이 새로 생기고, 기존 서비스의 Finding은 해결됩니다. 기록·담당자·판정은 기존 Finding에 남습니다. 그래서 작업을 시작하기 전에 옮기거나, 예외를 다시 요청하세요 |
-| 인벤토리에서 프로젝트 삭제 | Finding은 프로젝트 이름 아래에서 *인벤토리 미등록*으로 계속 추적되고, 알림은 `PATCHLINE_SLACK_DEFAULT_CHANNEL`로 갑니다 |
+| 프로젝트를 다른 서비스로 옮김 | 재시작한 뒤 다음 SBOM이 오면 Finding이 기록·담당자·판정과 함께 새 서비스로 옮겨지고, 타임라인에 *서비스: 이전 → 새 서비스*가 남습니다. 기한은 새 서비스의 노출도로 다시 계산합니다. 이름이 다른 프로젝트가 아직 기존 서비스에서 보고 중인 Finding은 그대로 두고, 옮긴 프로젝트에는 Finding을 새로 만듭니다 |
+| 인벤토리에서 프로젝트 삭제 | Finding은 프로젝트 이름 아래로 옮겨져 *인벤토리 미등록*으로 표시되고, 알림은 `PATCHLINE_SLACK_DEFAULT_CHANNEL`로 갑니다. 다시 추가하면 또 옮겨집니다 |
 | 환경 정리(더 빌드하지 않는 브랜치, 내린 배포) | 삭제 기능은 없습니다. 그 버전으로 빈 SBOM을 한 번 올리면 보고된 Finding이 모두 해결됩니다. Dependency-Track도 해당 프로젝트 버전에 빈 BOM을 올리면 같습니다 |
 
 빈 CycloneDX SBOM:

@@ -7,7 +7,7 @@
 | 신호 | 출처 | 기본 효과 |
 |---|---|---|
 | CISA Known Exploited Vulnerabilities | CISA JSON 피드, 하루 한 번 갱신 | 최소 `critical`(SLA 7일) |
-| EPSS 점수 | Dependency-Track Finding API(`epssScore`) | 0.5 이상이면 한 단계 상향 |
+| EPSS 점수 | Dependency-Track Finding API(`epssScore`). Dependency-Track을 연결했을 때만 | 0.5 이상이면 한 단계 상향 |
 
 둘 다 [정책 파일](../../examples/policy/policy.yaml)에서 설정합니다.
 
@@ -32,7 +32,7 @@ PATCHLINE_KEV_URL=https://www.cisa.gov/sites/default/files/feeds/known_exploited
 
 ## EPSS
 
-Patchline은 Dependency-Track이 Finding과 함께 돌려주는 EPSS 점수를 저장하고 다음 평가에 사용합니다. Dependency-Track에 해당 취약점의 EPSS 데이터가 없으면 점수가 비어 있을 뿐 아무것도 바뀌지 않습니다.
+Patchline에는 자체 EPSS 출처가 없습니다. [Dependency-Track](dependency-track.ko.md)을 연결하면 Dependency-Track이 Finding과 함께 돌려주는 EPSS 점수를 저장하고 다음 평가에 사용합니다. Dependency-Track이 없으면 EPSS 상향은 동작하지 않고, KEV와 노출도 조정만 적용됩니다. Dependency-Track에 해당 취약점의 EPSS 데이터가 없으면 점수가 비어 있을 뿐 아무것도 바뀌지 않습니다.
 
 ## 확인
 

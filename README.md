@@ -6,9 +6,9 @@ English | [한국어](README.ko.md)
 
 > ⚠️ **Status: early development.** Detection, Slack, Renovate PRs, rescan resolution, due dates and the web UI work end to end. APIs, configuration and data models may still change.
 
-Patchline sits on top of [Dependency-Track](https://dependencytrack.org/) and closes the remediation loop: it links findings to services and owners, follows Renovate PRs and rescans as evidence, and keeps a single Slack message up to date until the fix ships.
+Patchline closes the remediation loop. CI uploads an SBOM per build. Patchline matches it against a local [OSV](https://osv.dev) mirror (language packages) and a [Trivy](https://trivy.dev) server (OS packages in images), links each finding to its service and owners, follows Renovate PRs and rescans as evidence, and keeps a single Slack message up to date until the fix ships. Exceptions (not affected, false positive, risk acceptance, a later due date) are requested and approved in Patchline, and exported as VEX.
 
-Patchline does **not** detect vulnerabilities or compare versions itself. Dependency-Track decides *what is vulnerable*; Renovate proposes *how to fix it*; Patchline tracks *whether it actually got fixed, by whom, and by when*.
+Renovate proposes *how to fix it*; Patchline tracks *whether it actually got fixed, by whom, and by when*. [Dependency-Track](https://dependencytrack.org/) is optional: connected, it is a second source of findings, and approved decisions are written back to it.
 
 ## Why
 
@@ -22,12 +22,14 @@ Scanners are good at finding vulnerabilities. What usually goes missing is every
 Patchline answers these with **evidence** (commit SHA → PR → rescan), not with someone flipping a status by hand.
 
 ```
-CI ── SBOM + commit ──▶ Dependency-Track ── webhook ──▶ Patchline ──▶ Slack, web UI
-                                                            ▲   ▲
-Renovate ── fix PR ──▶ Gitea / Forgejo / GitHub ── webhook ─┘   └── inventory (YAML), CISA KEV
+CI ── SBOM + commit ──▶ Patchline ──▶ Slack, webhook, web UI
+                          │   ▲
+   OSV mirror, Trivy ◀────┘   ├── fix PRs: Renovate → Gitea / Forgejo / GitHub webhook
+   (matching)                 ├── inventory (YAML), CISA KEV
+                              └── Dependency-Track webhook (optional)
 ```
 
-Vulnerabilities come from Dependency-Track, from Patchline's own matching of uploaded SBOMs against [OSV](https://osv.dev), or both; the same vulnerability from both is one finding.
+When Dependency-Track is connected as well, the same vulnerability from both is one finding.
 
 ## Getting started
 
@@ -40,11 +42,11 @@ make demo-seed    # uploads sample SBOMs; Patchline matches them against OSV and
 
 Open http://localhost:18080. [deploy/compose/README.md](deploy/compose/README.md) walks through the findings, component search, a fix that resolves, and adding Dependency-Track (`make demo-up PROFILE=dependency-track && make demo-seed-dt`).
 
-To run it on a server or your own machine, use [deploy/self-hosted](deploy/self-hosted/README.md): Patchline with your existing Dependency-Track, or both together, with your inventory and settings in `.env`.
+To run it on a server or your own machine, use [deploy/self-hosted](deploy/self-hosted/README.md): Patchline with a Trivy server, your inventory and your settings in `.env`, and optionally Dependency-Track.
 
 ```sh
 cd deploy/self-hosted
-cp .env.example .env               # set PATCHLINE_WEBHOOK_TOKEN and the Dependency-Track URL and key
+cp .env.example .env               # set PATCHLINE_WEBHOOK_TOKEN and TRIVY_TOKEN
 docker compose up -d --build
 ```
 
@@ -61,15 +63,18 @@ Sign in as `admin` / `admin` and choose a new password; then connect single sign
 
 Next, set up the inventory and connect your tools:
 
-1. Describe services, owners, Slack channels and repositories in an inventory ([example](examples/inventory/services.yaml)) and set `PATCHLINE_INVENTORY_PATH`.
-2. Connect [Dependency-Track](docs/integrations/dependency-track.md), [SBOMs in CI](docs/integrations/sbom-ci.md), [Renovate](docs/integrations/renovate.md) with [Git webhooks](docs/integrations/git-webhooks.md), and [Slack](docs/integrations/slack.md).
+1. Describe services, owners, Slack channels and repositories in an inventory ([example](examples/inventory/services.yaml)) and set `PATCHLINE_INVENTORY_PATH` ([Registering projects and branches](docs/projects.md)).
+2. Upload [SBOMs from CI](docs/integrations/sbom-ci.md) to Patchline.
+3. Connect [Renovate](docs/integrations/renovate.md) with [Git webhooks](docs/integrations/git-webhooks.md), and [Slack](docs/integrations/slack.md).
+4. Optionally, add [Dependency-Track](docs/integrations/dependency-track.md) as a second source.
 
 ## Documentation
 
 - [How it works](docs/how-it-works.md) — finding states, resolution, PR linking, due dates, notifications
+- [Registering projects and branches](docs/projects.md) — services, project names, versions as environments, branch and commit
 - [Configuration](docs/configuration.md) — environment variables, endpoints, web UI
 - [Sign-in and permissions](docs/access-control.md) — OIDC sign-in, groups mapped to permissions for assigning, requesting and approving exceptions, and webhook settings
-- [Integration guides](docs/README.md) — Dependency-Track, SBOM in CI, Renovate, Gitea / Forgejo / GitHub, Slack, CISA KEV and EPSS
+- [Integration guides](docs/README.md) — SBOM in CI, detection with OSV and Trivy, Renovate, Gitea / Forgejo / GitHub, Slack, CISA KEV and EPSS, Dependency-Track
 
 ## Contributing
 
