@@ -6,6 +6,7 @@ package detect
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -54,7 +55,6 @@ func (c Combined) Ready(ctx context.Context) (bool, error) {
 // snapshot is never half analyzed (and nothing is resolved by mistake).
 func (c Combined) MatchAll(ctx context.Context, components []store.Component) (map[string][]Match, error) {
 	out := map[string][]Match{}
-	seen := map[string]map[string]bool{}
 	var errs []error
 	for _, e := range c {
 		m, err := e.MatchAll(ctx, components)
@@ -63,22 +63,10 @@ func (c Combined) MatchAll(ctx context.Context, components []store.Component) (m
 			continue
 		}
 		for purl, ms := range m {
-			if seen[purl] == nil {
-				seen[purl] = map[string]bool{}
-			}
 			for _, x := range ms {
-				ids := append([]string{x.ID}, x.Aliases...)
-				dup := false
-				for _, id := range ids {
-					dup = dup || seen[purl][id]
+				if !slices.ContainsFunc(out[purl], func(y Match) bool { return same(x, y) }) {
+					out[purl] = append(out[purl], x)
 				}
-				if dup {
-					continue
-				}
-				for _, id := range ids {
-					seen[purl][id] = true
-				}
-				out[purl] = append(out[purl], x)
 			}
 		}
 	}
@@ -86,4 +74,13 @@ func (c Combined) MatchAll(ctx context.Context, components []store.Component) (m
 		return nil, err
 	}
 	return out, nil
+}
+
+// same reports whether two matches are one vulnerability: the same id, or
+// one's id among the other's aliases (GHSA-… from OSV and CVE-… from Trivy
+// naming it). Aliases shared by both do not count: a distribution
+// advisory such as DLA-3942-1 fixes several CVEs at once, and each of them
+// is a finding.
+func same(a, b Match) bool {
+	return a.ID == b.ID || slices.Contains(a.Aliases, b.ID) || slices.Contains(b.Aliases, a.ID)
 }
