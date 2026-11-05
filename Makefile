@@ -43,7 +43,7 @@ demo-down:
 demo-logs:
 	$(COMPOSE) logs -f patchline
 
-# Self-hosted (deploy/self-hosted/.env); PROFILE="dependency-track trivy" adds those services.
+# Self-hosted (deploy/self-hosted/.env): Patchline + Trivy; PROFILE=dependency-track adds Dependency-Track.
 up:
 	$(SELF) $(foreach p,$(PROFILE),--profile $(p)) up -d --build
 
