@@ -97,6 +97,9 @@ func TestTwoDependencyTrackProjects(t *testing.T) {
 	if len(refs) != 2 || refs[0].Project != "app" || refs[1].Project != "image" {
 		t.Fatalf("refs = %+v", refs)
 	}
+	if cur, _ := st.CurrentRefs(ctx, id); len(cur) != 2 {
+		t.Fatalf("current refs = %+v", cur)
+	}
 	n, err := st.ApplyState(ctx, DTKey{ProjectUUID: "app", ComponentUUID: "c-app", VulnerabilityUUID: "v"},
 		finding.StateInProgress, map[string]any{"analysis_state": "IN_TRIAGE"})
 	if err != nil || n != 1 {
@@ -131,6 +134,9 @@ func TestRefsOutliveResolution(t *testing.T) {
 	want := []finding.Ref{{Source: "patchline", Project: "storefront-api@main", Component: "pkg:npm/lodash@4.17.15", Vuln: "CVE-2020-8203"}}
 	if !reflect.DeepEqual(refs, want) {
 		t.Fatalf("refs = %+v", refs)
+	}
+	if cur, _ := st.CurrentRefs(ctx, id); len(cur) != 0 {
+		t.Fatalf("current refs of a resolved finding = %+v", cur)
 	}
 
 	// An explicit Ref wins over the derived one.

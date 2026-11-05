@@ -255,6 +255,29 @@ func (s *Store) FindingRefs(ctx context.Context, findingID int64) ([]finding.Ref
 	return out, rows.Err()
 }
 
+// CurrentRefs returns the refs of the source projects that report the
+// finding now (those with a sighting).
+func (s *Store) CurrentRefs(ctx context.Context, findingID int64) ([]finding.Ref, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT r.source, r.project, r.component, r.vuln, r.vuln_source, r.vuln_name
+		FROM finding_refs r JOIN finding_sightings g
+		  ON g.finding_id = r.finding_id AND g.source = r.source AND g.project_id = r.project
+		WHERE r.finding_id = ? ORDER BY r.source, r.project`, findingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []finding.Ref
+	for rows.Next() {
+		var r finding.Ref
+		if err := rows.Scan(&r.Source, &r.Project, &r.Component, &r.Vuln, &r.VulnSource, &r.VulnName); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // ApplyStateByRef moves the findings the tool names ref (source, project,
 // component and vulnerability) to state to, when the lifecycle allows it,
 // recording a state_changed event with evidence. It returns how many

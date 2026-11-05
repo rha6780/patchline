@@ -69,8 +69,8 @@ func setup(t *testing.T, dt dependencytrack.FindingsFetcher) (*Processor, *store
 	if dt != nil {
 		adapter.Client = dt
 	}
-	if vf, ok := dt.(VulnerabilityFetcher); ok {
-		p.Vulnerabilities = vf
+	if vf, ok := dt.(dependencytrack.VulnerabilityFetcher); ok {
+		adapter.Vulnerabilities = vf
 	}
 	return p, st
 }

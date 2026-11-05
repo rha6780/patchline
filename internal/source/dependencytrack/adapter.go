@@ -30,11 +30,20 @@ type FindingsFetcher interface {
 }
 
 // Adapter connects Dependency-Track: it receives its webhooks and turns
-// its notifications into sightings, reconciliations and state changes.
+// its notifications into sightings, reconciliations and state changes,
+// judges fix pull requests with its affected ranges, records approved
+// decisions as analyses and links findings to its frontend.
 type Adapter struct {
 	// Client reads a project's findings after BOM_PROCESSED. Without it,
 	// findings only arrive through NEW_VULNERABILITY notifications.
 	Client FindingsFetcher
+	// Vulnerabilities reads affected ranges for fix PR verdicts.
+	Vulnerabilities VulnerabilityFetcher
+	// Analyses receives approved decisions. Without it, decisions on
+	// findings Dependency-Track reports cannot be made.
+	Analyses AnalysisWriter
+	// UIURL is the frontend, for links.
+	UIURL string
 	// ReconcileDelay is how long to wait after BOM_PROCESSED before reading
 	// the project's findings, so Dependency-Track can finish analyzing the
 	// new components (default 2m).

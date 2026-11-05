@@ -74,7 +74,7 @@ var en = map[string]string{
 	"blk.repository":     "Repository",
 	"blk.unregistered":   "⚠️ Project not in inventory",
 	"blk.finding":        "Finding #%d · first seen %s",
-	"blk.open_dt":        "Open in Dependency-Track",
+	"blk.open_in":        "Open in %s",
 	"blk.open_patchline": "Open in Patchline",
 
 	// Web UI
@@ -150,8 +150,7 @@ var en = map[string]string{
 	"ui.fact.aliases":            "Aliases",
 	"ui.fact.first_seen":         "First seen",
 	"ui.fact.resolved":           "Resolved",
-	"ui.open_dt":                 "Open in Dependency-Track ↗",
-	"ui.open_dt_hint":            "to record an analysis decision",
+	"ui.open_in":                 "Open in %s ↗",
 	"ui.fix_prs":                 "Fix pull requests",
 	"ui.col.pr":                  "Pull request",
 	"ui.col.change":              "Change",
@@ -559,7 +558,7 @@ var ko = map[string]string{
 	"blk.repository":     "저장소",
 	"blk.unregistered":   "⚠️ 인벤토리에 없는 프로젝트",
 	"blk.finding":        "Finding #%d · 최초 탐지 %s",
-	"blk.open_dt":        "Dependency-Track에서 열기",
+	"blk.open_in":        "%s에서 열기",
 	"blk.open_patchline": "Patchline에서 열기",
 
 	"ui.nav.overview":     "개요",
@@ -634,8 +633,7 @@ var ko = map[string]string{
 	"ui.fact.aliases":            "별칭",
 	"ui.fact.first_seen":         "최초 탐지",
 	"ui.fact.resolved":           "해결",
-	"ui.open_dt":                 "Dependency-Track에서 열기 ↗",
-	"ui.open_dt_hint":            "분석 판정은 여기서 기록합니다",
+	"ui.open_in":                 "%s에서 열기 ↗",
 	"ui.fix_prs":                 "수정 PR",
 	"ui.col.pr":                  "Pull request",
 	"ui.col.change":              "변경",

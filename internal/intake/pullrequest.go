@@ -2,24 +2,15 @@ package intake
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strings"
 
-	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/source/gitea"
 	"github.com/rha6780/patchline/internal/store"
-	"github.com/rha6780/patchline/internal/version"
 )
 
 // SourceGitea is the inbox source name for Gitea / Forgejo / GitHub webhooks.
 const SourceGitea = "gitea"
-
-// VulnerabilityFetcher reads a vulnerability's affected version ranges.
-// The Dependency-Track client implements it.
-type VulnerabilityFetcher interface {
-	Vulnerability(ctx context.Context, source, vulnID string) (dependencytrack.VulnerabilityDetail, error)
-}
 
 func (p *Processor) handleGitea(ctx context.Context, it store.InboxItem) (string, error) {
 	if it.EventType != gitea.EventPullRequest {
@@ -139,73 +130,23 @@ func purlName(purl string) string {
 	return strings.ToLower(s)
 }
 
-// purlBase strips version, qualifiers and subpath, for comparing purls.
-func purlBase(purl string) string {
-	s := strings.ToLower(purl)
-	if i := strings.IndexAny(s, "?#"); i >= 0 {
-		s = s[:i]
-	}
-	if i := strings.LastIndexByte(s, '@'); i > strings.IndexByte(s, '/') {
-		s = s[:i]
-	}
-	if u, err := url.PathUnescape(s); err == nil {
-		s = u
-	}
-	return s
-}
-
-// judge decides whether version to leaves the finding's vulnerable range,
-// using the affected components Dependency-Track knows for it.
+// judge decides whether version to leaves the finding's vulnerable range.
+// The sources' advisories are asked in order (the local OSV mirror first);
+// the first that knows the ranges decides.
 func (p *Processor) judge(ctx context.Context, f store.Finding, to string) (verdict, detail string) {
-	vf := p.Vulnerabilities
-	if vf == nil || f.DTVulnSource == "" || f.DTVulnID == "" {
-		return store.VerdictUnknown, "vulnerability ranges not available"
-	}
-	v, err := vf.Vulnerability(ctx, f.DTVulnSource, f.DTVulnID)
+	refs, err := p.Store.FindingRefs(ctx, f.ID)
 	if err != nil {
-		p.Logger.Warn("could not read vulnerability ranges", "finding", f.ID, "vuln", f.DTVulnID, "err", err)
-		return store.VerdictUnknown, "vulnerability ranges not available"
+		p.Logger.Warn("could not read finding refs", "finding", f.ID, "err", err)
 	}
-	return Judge(f.ComponentRef, to, v)
-}
-
-// Judge compares a target version with a vulnerability's affected ranges
-// for the component identified by purl.
-func Judge(purl, to string, v dependencytrack.VulnerabilityDetail) (verdict, detail string) {
-	base := purlBase(purl)
-	var ranges []version.Range
-	for _, ac := range v.AffectedComponents {
-		if !strings.EqualFold(ac.IdentityType, "PURL") || purlBase(ac.Identity) != base {
+	for _, a := range p.Sources.Advisories() {
+		v, d, err := a.Verdict(ctx, f, refs, to)
+		if err != nil {
+			p.Logger.Warn("could not read vulnerability ranges", "finding", f.ID, "vuln", f.VulnID, "source", a.Name(), "err", err)
 			continue
 		}
-		r := version.Range{
-			StartIncluding: ac.VersionStartIncluding, StartExcluding: ac.VersionStartExcluding,
-			EndIncluding: ac.VersionEndIncluding, EndExcluding: ac.VersionEndExcluding,
+		if v != store.VerdictUnknown {
+			return v, d
 		}
-		if strings.EqualFold(ac.VersionType, "EXACT") {
-			r = version.Range{Exact: ac.Version}
-		}
-		ranges = append(ranges, r)
 	}
-
-	if len(ranges) == 0 {
-		// Fall back to a single patched version, when that is all we have.
-		pv := strings.TrimSpace(v.PatchedVersions)
-		if pv != "" && !strings.ContainsAny(pv, "<>=, ") {
-			if version.Compare(to, pv) >= 0 {
-				return store.VerdictFixes, fmt.Sprintf("%s ≥ patched version %s", to, pv)
-			}
-			return store.VerdictInsufficient, fmt.Sprintf("%s < patched version %s", to, pv)
-		}
-		return store.VerdictUnknown, "no affected version range for this package"
-	}
-
-	var descs []string
-	for _, r := range ranges {
-		if r.Contains(to) {
-			return store.VerdictInsufficient, fmt.Sprintf("%s is still in the affected range %s", to, r)
-		}
-		descs = append(descs, r.String())
-	}
-	return store.VerdictFixes, fmt.Sprintf("%s is outside the affected range %s", to, strings.Join(descs, "; "))
+	return store.VerdictUnknown, "vulnerability ranges not available"
 }

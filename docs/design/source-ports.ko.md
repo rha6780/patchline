@@ -2,7 +2,7 @@
 
 [English](source-ports.md) | 한국어
 
-상태: 1~2단계 구현.
+상태: 1~3단계 구현.
 
 ## 목표
 
@@ -78,8 +78,8 @@ type Ref struct {
 
 - **Receiver**: 도구의 Webhook을 검증해 Inbox 항목으로 만듭니다. `/webhooks/{name}`의 `name`이 됩니다.
 - **Reporter**: 자기 출처의 Inbox 항목을 `Outcome`으로 바꿉니다. `Outcome`에는 건드린 프로젝트, Observation 목록, 프로젝트 전체 스냅샷(나머지는 해결), ref 기준 상태 변경, 나중에 처리할 항목(예: 2분 뒤 대조)이 들어갑니다. Intake는 이 순서대로 적용합니다. 단계마다 여러 번 실행해도 결과가 같아서, 실패한 항목은 통째로 재시도합니다. `Receiver`는 Inbox 출처 이름(`Name`, 예: `dependencytrack`)과 Webhook 경로(`Webhook`, 예: `dependency-track`)를 따로 가집니다.
-- **Advisories**: Finding의 패키지에 대한 영향 범위와 수정 버전을 돌려줍니다.
-- **DecisionWriter**: 승인된 판정을 그 Finding을 보고한 도구에 기록합니다.
+- **Advisories**: 수정 버전이 Finding을 해결하는지 판정합니다(*해결*·*불충분*, 모르면 *판단 불가*를 돌려줘 다음 출처에 묻게 함). 출처마다 범위를 맞추는 방식이 달라서(OSV는 패키지와 별칭, Dependency-Track은 자기 영향 구성요소) 범위가 아니라 판정을 돌려줍니다.
+- **DecisionWriter**: 승인된 판정을 그 Finding을 보고한 도구에 기록합니다. `Keeps(ref)`는 그 도구가 이 ref의 판정을 보관하는지, `Ready()`는 지금 기록할 수 있는지(API 설정 여부)를 알려 줍니다.
 - **Linker**: ref를 도구 UI 링크로 바꿉니다.
 
 옮겨 가는 것:
@@ -87,8 +87,8 @@ type Ref struct {
 - **intake**에는 Inbox 루프, 재시도, `Outcome` 적용만 남습니다. Dependency-Track 알림 그룹, 지연 대조, 타입 변환은 `source/dependencytrack`으로 옮깁니다. Patchline 자체 SBOM 경로는 연동이 아니라 코어이고 이미 `Detector`를 거치므로 Intake에 남깁니다.
 - **server**는 등록된 모든 `Receiver`에 대해 `POST /webhooks/{name}`을 제공하므로 `/webhooks/dependency-track` URL은 그대로입니다. Gitea는 별도 라우트를 유지합니다.
 - **수정 PR 판정**은 `Advisories`를 순서대로 묻습니다. 먼저 OSV 미러(로컬, 네트워크 없음), 다음 Dependency-Track입니다. 눈에 보이는 변화는 이것 하나입니다. OSV·Trivy Finding의 PR도 *판단 불가* 대신 *해결*/*불충분* 판정을 받습니다.
-- **app**: 판정을 승인할 때 레지스트리에서 Finding의 ref 중 하나와 맞는 `DecisionWriter`를 찾습니다. 있으면 지금처럼 그곳에 먼저 기록하고, 없으면 Patchline에만 저장합니다. "여기서 결정할 수 있나"는 "Writer가 있는 출처의 ref가 모두 기록 가능한가"가 되어 `InDT`와 `no_dt`를 대신합니다.
-- **web / notify / api**는 `Linker`가 만든 ref별 링크를 보여 줍니다. API는 Dependency-Track ref에서 채운 `dt_project_uuid`, `dt_vuln_source`, `dt_vuln_id`를 유지하고 `refs` 배열을 추가합니다.
+- **app**: 판정을 승인할 때 레지스트리에서 Finding의 ref를 보관하는 `DecisionWriter`를 모두 찾아, 지금처럼 각각에 먼저 기록합니다. Writer에는 지금 그 Finding을 보고하는 프로젝트의 ref만 넘기고, 그런 ref가 없을 때만 보관 중인 ref 전부를 넘깁니다(구성요소가 빠진 프로젝트에는 분석이 이미 없을 수 있어서, 그 때문에 승인이 막히면 안 됨). Writer가 없으면 Patchline에만 저장합니다. "여기서 결정할 수 있나"는 "ref를 보관하는 Writer가 모두 `Ready`인가"(`Service.Recorders`)가 되어 `InDT`를 대신합니다. 지금은 Dependency-Track만 Writer라서 API 오류 코드 `no_dt`, `dt_write`는 이름을 유지합니다. `recorded_in` 근거 값은 출처 이름이 됩니다(`dependencytrack`, 이전에는 `dependency-track`).
+- **web / notify / api**는 `Linker`가 만든 ref별 링크를 보여 줍니다. Webhook 알림은 `dependency_track_url`을 유지하고 `links`를 추가합니다. API는 `dt_project_uuid`, `dt_vuln_source`, `dt_vuln_id`를 유지하고, ref는 Finding마다 `refs` 배열을 붙이는 대신 `GET /api/v1/findings/{id}/refs`로 제공합니다(목록 조회에서 N+1 읽기를 피하고, 붙일 단건 조회 엔드포인트도 없음).
 - **store**에서 `DTKey`, `ApplyState(DTKey)`, `ResolveMissing(dtProjectUUID)`가 빠지고, 대신 `ApplyStateByRef(Ref, …)`와 기존 `ResolveMissingIn(source, project, …)`을 씁니다.
 
 ## 단계
@@ -99,8 +99,8 @@ type Ref struct {
 |---|---|---|
 | 1. 스토어에 ref | 백필을 포함한 마이그레이션 `00014_finding_refs`, `Observation.Ref`, `UpsertFinding`이 ref 기록(`dt_*`도 계속 기록), `ApplyStateByRef`. 호출하는 쪽은 그대로 | 백필, 두 출처 병합, 해결 뒤에도 ref 유지에 대한 스토어 테스트 |
 | 2. 포트와 Dependency-Track 어댑터(완료) | `internal/source` 포트와 레지스트리, Dependency-Track `Receiver` + `Reporter`, `Outcome`을 적용하는 Intake, 공통 Webhook 라우트 | Inbox 처리(`intake.go`)와 `server`가 `source/dependencytrack`을 import하지 않음(PR 판정은 3단계). Webhook·대조 테스트는 연결 코드만 바꿔 통과 |
-| 3. Advisories, 판정, 링크 | PR 판정용 `Advisories`(OSV, Dependency-Track), `DecisionWriter`, `Linker`. `app`, `web`, `notify`, `api`가 ref 사용 | `source/`와 `main` 밖에서 `source/dependencytrack`을 import하지 않음. OSV Finding의 수정 PR이 판정을 받음 |
-| 4. 정리 | `findings.dt_*` 컬럼 기록 중단 후 (한 릴리스 뒤) 삭제, `DTUIURL` 전달을 Linker로 대체 | `grep -r DTProjectUUID internal` 결과가 어댑터뿐 |
+| 3. Advisories, 판정, 링크(완료) | PR 판정용 `Advisories`(OSV, Dependency-Track), `DecisionWriter`, `Linker`. `app`, `web`, `notify`, `api`가 ref 사용 | `source/`와 `main` 밖에서 `source/dependencytrack`을 import하지 않음. OSV Finding의 수정 PR이 판정을 받음 |
+| 4. 정리 | `findings.dt_*` 컬럼 기록 중단 후 (한 릴리스 뒤) 삭제, `DTKey`·`ApplyState(DTKey)` 제거, 남은 `DTUIURL` 전달(상단 메뉴, 연동 페이지의 프로젝트 링크)을 Linker로 대체 | `grep -r DTProjectUUID internal` 결과가 어댑터뿐 |
 
 ## 위험
 

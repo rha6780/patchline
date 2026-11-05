@@ -105,7 +105,7 @@ func New(o Options) http.Handler {
 		mux.HandleFunc("POST /ingest/sbom", h.ingestSBOM)
 	}
 	api.Register(mux, api.Options{Findings: o.Findings, Inventory: o.Inventory, Impact: o.Impact,
-		Snapshots: o.Snapshots, App: o.App, Requests: o.Requests, Version: o.Version, Logger: o.Logger})
+		Snapshots: o.Snapshots, App: o.App, Requests: o.Requests, Sources: o.Sources, Version: o.Version, Logger: o.Logger})
 	if o.UI != nil {
 		mux.Handle("/", o.UI)
 	}

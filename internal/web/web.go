@@ -33,6 +33,7 @@ import (
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/notify"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -49,6 +50,8 @@ type Store interface {
 	FindingEvents(ctx context.Context, findingID int64) ([]store.FindingEvent, error)
 	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
 	FindingSightings(ctx context.Context, findingID int64) ([]store.Sighting, error)
+	FindingRefs(ctx context.Context, findingID int64) ([]finding.Ref, error)
+	CurrentRefs(ctx context.Context, findingID int64) ([]finding.Ref, error)
 	FindingFacets(ctx context.Context) (services, environments []string, err error)
 	Branches(ctx context.Context) ([]string, error)
 	ServiceProjects(ctx context.Context, service string) ([]store.ProjectRef, error)
@@ -61,7 +64,8 @@ type Store interface {
 type Options struct {
 	Store     Store
 	Inventory *inventory.Inventory
-	// DTUIURL is the Dependency-Track frontend, for links.
+	// DTUIURL is the Dependency-Track frontend, for the navigation and
+	// project links.
 	DTUIURL string
 	Version string
 	Logger  *slog.Logger
@@ -72,10 +76,11 @@ type Options struct {
 	// the UI read-only.
 	Actions Actions
 	// App makes the changes. When nil, one is built from Store, Actions,
-	// DT, OnChange and Now.
+	// Sources, OnChange and Now.
 	App *app.Service
-	// DT writes approved decisions to Dependency-Track.
-	DT AnalysisWriter
+	// Sources link findings to the tools that report them and receive
+	// approved decisions.
+	Sources *source.Registry
 	// OnChange is called after a change (to wake the notifier).
 	OnChange func()
 	// AuthEnabled shows the signed-in user and the sign-out button.
@@ -118,7 +123,7 @@ func New(o Options) (*UI, error) {
 	}
 	u := &UI{o: o, app: o.App, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
 	if u.app == nil && o.Actions != nil {
-		u.app = &app.Service{Store: appStore{o.Store, o.Actions}, DT: o.DT, OnChange: o.OnChange, Now: o.Now}
+		u.app = &app.Service{Store: appStore{o.Store, o.Actions}, Sources: o.Sources, OnChange: o.OnChange, Now: o.Now}
 	}
 	for _, page := range []string{"overview", "findings", "finding", "service", "integrations", "guide", "approvals", "settings", "signedout", "login", "password", "components", "vulnerability"} {
 		t, err := template.New("layout.html").Funcs(u.funcs()).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html")
@@ -514,6 +519,11 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 		u.fail(w, err)
 		return
 	}
+	refs, err := u.o.Store.FindingRefs(r.Context(), id)
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
 	var timeline []timelineItem
 	for _, e := range events {
 		timeline = append(timeline, timelineItem{Kind: e.Kind, At: e.OccurredAt, Text: notify.Describe(langOf(r), e), Icon: eventIcon(e.Kind)})
@@ -523,7 +533,7 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 		svc, _ = u.o.Inventory.Service(f.Service)
 	}
 	data := map[string]any{
-		"F": f, "Service": svc, "Timeline": timeline, "PRs": prs, "DTLink": u.dtLink(f), "Sightings": sightings,
+		"F": f, "Service": svc, "Timeline": timeline, "PRs": prs, "Links": u.o.Sources.Links(refs), "Sightings": sightings,
 		"Now": store.FormatTime(u.o.Now()),
 	}
 	if u.o.Actions != nil {
@@ -551,10 +561,15 @@ func (u *UI) finding(w http.ResponseWriter, r *http.Request) {
 		}
 		data["Pending"], data["Decided"], data["PendingKinds"] = pending, decided, pendingKinds
 		data["MinDue"] = minDue.Add(24 * time.Hour).UTC().Format("2006-01-02")
-		// Decisions on Dependency-Track findings need the write-back;
-		// Patchline-only findings are decided here.
-		data["CanDecide"] = !app.InDT(f) || u.app.DT != nil
-		data["InDT"] = app.InDT(f)
+		// Decisions on findings a tool with its own analysis reports need
+		// the write-back; Patchline-only findings are decided here.
+		rec, err := u.app.Recorders(r.Context(), f)
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		data["CanDecide"] = rec.Ready
+		data["RecordedInTool"] = len(rec.Tools) > 0
 		data["Justifications"] = store.Justifications
 	}
 	u.render(w, r, "finding", f.VulnID, data)
@@ -818,13 +833,6 @@ func (u *UI) dtProjectLink(uuid string) string {
 		return ""
 	}
 	return strings.TrimRight(u.o.DTUIURL, "/") + "/projects/" + uuid
-}
-
-func (u *UI) dtLink(f store.Finding) string {
-	if l := u.dtProjectLink(f.DTProjectUUID); l != "" {
-		return l + "/findings"
-	}
-	return ""
 }
 
 var (

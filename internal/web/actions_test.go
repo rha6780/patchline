@@ -16,6 +16,7 @@ import (
 
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -55,7 +56,7 @@ func post(t *testing.T, h http.Handler, path string, form url.Values) *httptest.
 	return rec
 }
 
-func writableUI(t *testing.T, dt AnalysisWriter) (*UI, *store.Store, int64) {
+func writableUI(t *testing.T, dt dependencytrack.AnalysisWriter) (*UI, *store.Store, int64) {
 	t.Helper()
 	_, st := setup(t)
 	ctx := context.Background()
@@ -67,7 +68,11 @@ func writableUI(t *testing.T, dt AnalysisWriter) (*UI, *store.Store, int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := New(Options{Store: st, Actions: st, DT: dt, AuthEnabled: true, PublicURL: "https://patchline.example.com",
+	adapter := &dependencytrack.Adapter{}
+	if dt != nil {
+		adapter.Analyses = dt
+	}
+	u, err := New(Options{Store: st, Actions: st, Sources: source.NewRegistry(adapter), AuthEnabled: true, PublicURL: "https://patchline.example.com",
 		EnvWebhookToken: "env-token-abcdefgh", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: time.Now})
 	if err != nil {
 		t.Fatal(err)

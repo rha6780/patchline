@@ -88,7 +88,7 @@ patchline/
 └── docs/                   # how it works, configuration, integration guides
 ```
 
-Dependencies point inwards: `server`, `web` and `api` handle HTTP and call `app`, `impact` and the `store`; `app` holds the rules for changes, so the pages and the API cannot drift apart. Adapters for other systems live in `source/` (inputs) and `sink/` (notifications); a new chat or ticket system is a new `notify.Sink`.
+Dependencies point inwards: `server`, `web` and `api` handle HTTP and call `app`, `impact` and the `store`; `app` holds the rules for changes, so the pages and the API cannot drift apart. Adapters for other systems live in `source/` (inputs) and `sink/` (notifications); a new chat or ticket system is a new `notify.Sink`. A new vulnerability tool is a package under `source/` implementing the ports it can (`Receiver`, `Reporter`, `Advisories`, `DecisionWriter`, `Linker`; see [the design](docs/design/source-ports.md)), registered in `main`. Outside `source/` and `main`, nothing imports an adapter.
 
 ### Tech stack
 

@@ -36,9 +36,6 @@ type Actions interface {
 	RevokeToken(ctx context.Context, id int64, by store.Actor) error
 }
 
-// AnalysisWriter records analysis decisions in Dependency-Track.
-type AnalysisWriter = app.AnalysisWriter
-
 // back redirects to path with a notice or an error key (shown by the page
 // through the i18n catalog).
 func back(w http.ResponseWriter, r *http.Request, path, param, key string) {

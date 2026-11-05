@@ -88,7 +88,7 @@ patchline/
 └── docs/                   # 동작 방식, 설정, 연동 가이드
 ```
 
-의존 방향은 안쪽으로 향합니다. `server`, `web`, `api`는 HTTP를 처리하고 `app`, `impact`, `store`를 호출합니다. 변경 규칙은 `app`에만 있어서 화면과 API의 동작이 어긋나지 않습니다. 외부 시스템 어댑터는 `source/`(입력)와 `sink/`(알림)에 둡니다. 새 채팅·티켓 시스템은 `notify.Sink`를 하나 구현하면 됩니다.
+의존 방향은 안쪽으로 향합니다. `server`, `web`, `api`는 HTTP를 처리하고 `app`, `impact`, `store`를 호출합니다. 변경 규칙은 `app`에만 있어서 화면과 API의 동작이 어긋나지 않습니다. 외부 시스템 어댑터는 `source/`(입력)와 `sink/`(알림)에 둡니다. 새 채팅·티켓 시스템은 `notify.Sink`를 하나 구현하면 됩니다. 새 취약점 도구는 `source/` 아래 패키지 하나로 만들고, 할 수 있는 포트(`Receiver`, `Reporter`, `Advisories`, `DecisionWriter`, `Linker`, [설계 문서](docs/design/source-ports.ko.md) 참고)를 구현해 `main`에서 등록합니다. `source/`와 `main` 밖에서는 어댑터를 import하지 않습니다.
 
 ### 기술 스택
 

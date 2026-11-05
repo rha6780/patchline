@@ -16,6 +16,8 @@ import (
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/sink/console"
+	"github.com/rha6780/patchline/internal/source"
+	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -192,7 +194,8 @@ func TestConsoleSink(t *testing.T) {
 	ctx := context.Background()
 	st, inv := setup(t)
 	var buf bytes.Buffer
-	n := &notify.Notifier{Store: st, Sink: console.New(&buf), Inventory: inv, Logger: quiet, DTUIURL: "http://dt.local/",
+	n := &notify.Notifier{Store: st, Sink: console.New(&buf), Inventory: inv, Logger: quiet,
+		Sources:   source.NewRegistry(&dependencytrack.Adapter{UIURL: "http://dt.local/"}),
 		PublicURL: "https://patchline.example/"}
 	o := obs("storefront", true, "pkg:npm/a@1", finding.SeverityCritical)
 	upsert(t, st, o)

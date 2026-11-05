@@ -14,6 +14,7 @@ import (
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/sink/webhook"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -46,6 +47,7 @@ func message() notify.Message {
 			SLAReasons: []string{"in CISA KEV"}, KEV: true, State: "new", DueAt: &due},
 		Service: &inventory.Service{Name: "storefront", Owners: []string{"alice@example.com"}},
 		URL:     "https://patchline.example/findings/42",
+		Links:   []source.Link{{Source: "dependencytrack", Label: "Dependency-Track", URL: "http://dt.local/projects/p/findings"}},
 		PullRequests: []store.PullRequestLink{{Repository: "acme/api", Number: 12, URL: "https://git/pulls/12",
 			State: "open", ToVersion: "2.17.1", Verdict: "fixes"}},
 	}
@@ -86,7 +88,8 @@ func TestPostAndEvent(t *testing.T) {
 	}
 	f := p.Finding
 	if p.Schema != webhook.Schema || f.Severity != "critical" || f.ScannerSev != "high" || f.Component.Name != "log4j-core" ||
-		f.URL != "https://patchline.example/findings/42" || len(f.Owners) != 1 || len(p.PullRequests) != 1 || p.Event != nil {
+		f.URL != "https://patchline.example/findings/42" || len(f.Owners) != 1 || len(p.PullRequests) != 1 || p.Event != nil ||
+		f.DTURL != "http://dt.local/projects/p/findings" || len(f.Links) != 1 || f.Links[0].Label != "Dependency-Track" {
 		t.Fatalf("opened payload = %s", r.body)
 	}
 

@@ -1,7 +1,8 @@
 // Package app carries out the changes people make to findings: assigning
 // them, requesting exceptions and deciding requests. The web pages and the
-// API both call it, so permissions, validation and the write-back to
-// Dependency-Track are the same whichever way a change arrives. Every
+// API both call it, so permissions, validation and the write-back to the
+// tools that keep their own analysis (Dependency-Track) are the same
+// whichever way a change arrives. Every
 // change is recorded on the finding's timeline and in the audit log by the
 // store.
 package app
@@ -17,7 +18,7 @@ import (
 
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
-	"github.com/rha6780/patchline/internal/source/dependencytrack"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -34,18 +35,16 @@ type Store interface {
 	CreateRequest(ctx context.Context, r store.ExceptionRequest, by store.Actor) (int64, error)
 	GetRequest(ctx context.Context, id int64) (store.ExceptionRequest, error)
 	DecideRequest(ctx context.Context, d store.Decision) error
-}
-
-// AnalysisWriter records analysis decisions in Dependency-Track.
-type AnalysisWriter interface {
-	SetAnalysis(ctx context.Context, a dependencytrack.AnalysisUpdate) error
+	FindingRefs(ctx context.Context, findingID int64) ([]finding.Ref, error)
+	CurrentRefs(ctx context.Context, findingID int64) ([]finding.Ref, error)
 }
 
 // Service applies changes.
 type Service struct {
 	Store Store
-	// DT, when set, receives decisions on findings Dependency-Track reports.
-	DT AnalysisWriter
+	// Sources' decision writers receive approved decisions on the findings
+	// their tools report.
+	Sources *source.Registry
 	// OnChange is called after a change (to wake the SLA job and the
 	// notifier).
 	OnChange func()
@@ -164,9 +163,14 @@ func (s *Service) Request(ctx context.Context, p *auth.Principal, in RequestInpu
 			}
 			req.Justification = in.Justification
 		}
-		// A decision on a Dependency-Track finding is written there; one on
-		// a finding only Patchline reports stays in Patchline.
-		if InDT(f) && s.DT == nil {
+		// A decision on a finding a tool with its own analysis reports is
+		// written there; one on a finding only Patchline reports stays in
+		// Patchline.
+		r, err := s.Recorders(ctx, f)
+		if err != nil {
+			return 0, err
+		}
+		if !r.Ready {
 			return 0, refuse("no_dt")
 		}
 	case store.RequestDueExtension:
@@ -212,8 +216,8 @@ const (
 // was before the decision (also on error, once it was found, so callers
 // can point back to its finding). Approvers cannot decide their own
 // requests; only the requester can withdraw one. Approving a decision on a
-// finding Dependency-Track reports writes it there first, and approves
-// nothing if that fails.
+// finding a tool with its own analysis reports writes it there first, and
+// approves nothing if that fails.
 func (s *Service) Decide(ctx context.Context, p *auth.Principal, requestID int64, action, note string) (store.ExceptionRequest, error) {
 	req, err := s.Store.GetRequest(ctx, requestID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -256,14 +260,21 @@ func (s *Service) Decide(ctx context.Context, p *auth.Principal, requestID int64
 		if err != nil {
 			return req, err
 		}
-		if InDT(f) {
-			if err := s.writeToDT(ctx, f, req, p); err != nil {
+		targets, err := s.targets(ctx, f)
+		if err != nil {
+			return req, err
+		}
+		recorded := []string{}
+		for _, t := range targets {
+			if err := s.write(ctx, t, req, p); err != nil {
 				return req, &Error{Code: "dt_write", Err: err}
 			}
-			d.Evidence = map[string]any{"recorded_in": "dependency-track"}
-		} else {
-			d.Evidence = map[string]any{"recorded_in": "patchline"}
+			recorded = append(recorded, t.w.Name())
 		}
+		if len(recorded) == 0 {
+			recorded = append(recorded, "patchline")
+		}
+		d.Evidence = map[string]any{"recorded_in": strings.Join(recorded, ",")}
 	}
 	if err := s.Store.DecideRequest(ctx, d); errors.Is(err, store.ErrNotPending) {
 		return req, refuse("not_pending")
@@ -284,39 +295,84 @@ func IsDecision(kind string) bool {
 	return false
 }
 
-// InDT reports whether Dependency-Track knows the finding, so decisions
-// about it belong there.
-func InDT(f store.Finding) bool {
-	return f.DTProjectUUID != "" && f.DTComponentUUID != "" && f.DTVulnerabilityUUID != ""
+// Recorders are the tools that keep decisions about a finding.
+type Recorders struct {
+	// Tools names them by source; empty when only Patchline does.
+	Tools []string
+	// Ready is false when one of them cannot be written to now, so
+	// decisions on the finding cannot be approved.
+	Ready bool
 }
 
-// writeToDT records the decision in Dependency-Track, so it lives where
-// the analysis lives. The PROJECT_AUDIT_CHANGE that follows is a no-op:
-// the finding is already closed.
-func (s *Service) writeToDT(ctx context.Context, f store.Finding, req store.ExceptionRequest, p *auth.Principal) error {
-	if s.DT == nil {
-		return errors.New("dependency-track is not configured (PATCHLINE_DT_URL, PATCHLINE_DT_API_KEY)")
+// Recorders says where a decision on f is recorded besides Patchline.
+func (s *Service) Recorders(ctx context.Context, f store.Finding) (Recorders, error) {
+	targets, err := s.targets(ctx, f)
+	if err != nil {
+		return Recorders{}, err
 	}
-	reason := oneLine(req.Reason)
-	a := dependencytrack.AnalysisUpdate{
-		ProjectUUID: f.DTProjectUUID, ComponentUUID: f.DTComponentUUID, VulnerabilityUUID: f.DTVulnerabilityUUID,
-		Justification: "NOT_SET", Response: "NOT_SET", Details: reason,
+	r := Recorders{Ready: true}
+	for _, t := range targets {
+		r.Tools = append(r.Tools, t.w.Name())
+		r.Ready = r.Ready && t.w.Ready()
 	}
-	what := ""
-	switch req.Kind {
-	case store.RequestRiskAcceptance:
-		a.State, a.Response, a.Suppressed, what = "EXPLOITABLE", "WILL_NOT_FIX", true, "Risk accepted"
-	case store.RequestNotAffected:
-		a.State, a.Justification, what = "NOT_AFFECTED", strings.ToUpper(req.Justification), "Not affected ("+req.Justification+")"
-	case store.RequestFalsePositive:
-		a.State, what = "FALSE_POSITIVE", "False positive"
-	}
-	a.Comment = fmt.Sprintf("%s in Patchline (request #%d): requested by %s, approved by %s. %s",
-		what, req.ID, labelOr(req.RequestedByName, req.RequestedBy), p.Label(), reason)
-	return s.DT.SetAnalysis(ctx, a)
+	return r, nil
 }
 
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+// target is a tool to write a decision to, and the refs to write it as.
+type target struct {
+	w    source.DecisionWriter
+	refs []finding.Ref
+}
+
+// targets returns the decision writers keeping refs of f. A writer gets
+// the refs of the projects reporting f now; only when none does, every ref
+// it keeps (a component removed there may be gone with its analysis).
+func (s *Service) targets(ctx context.Context, f store.Finding) ([]target, error) {
+	all, err := s.Store.FindingRefs(ctx, f.ID)
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.Store.CurrentRefs(ctx, f.ID)
+	if err != nil {
+		return nil, err
+	}
+	kept := func(refs []finding.Ref) map[string][]finding.Ref {
+		out := map[string][]finding.Ref{}
+		for _, ref := range refs {
+			if w, ok := s.Sources.DecisionWriter(ref.Source); ok && w.Keeps(ref) {
+				out[ref.Source] = append(out[ref.Source], ref)
+			}
+		}
+		return out
+	}
+	now, ever := kept(current), kept(all)
+	var out []target
+	for _, ref := range all { // in source order, once per source
+		refs, ok := ever[ref.Source]
+		if !ok {
+			continue
+		}
+		delete(ever, ref.Source)
+		if len(now[ref.Source]) > 0 {
+			refs = now[ref.Source]
+		}
+		w, _ := s.Sources.DecisionWriter(ref.Source)
+		out = append(out, target{w: w, refs: refs})
+	}
+	return out, nil
+}
+
+// write records the decision as every ref of the target.
+func (s *Service) write(ctx context.Context, t target, req store.ExceptionRequest, p *auth.Principal) error {
+	d := source.Decision{RequestID: req.ID, Kind: req.Kind, Justification: req.Justification, Reason: req.Reason,
+		RequestedBy: labelOr(req.RequestedByName, req.RequestedBy), ApprovedBy: p.Label()}
+	for _, ref := range t.refs {
+		if err := t.w.WriteDecision(ctx, ref, d); err != nil {
+			return fmt.Errorf("%s project %s: %w", t.w.Name(), ref.Project, err)
+		}
+	}
+	return nil
+}
 
 func labelOr(name, subject string) string {
 	if name != "" {

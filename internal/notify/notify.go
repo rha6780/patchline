@@ -20,6 +20,7 @@ import (
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/i18n"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -36,8 +37,8 @@ type Message struct {
 	Service *inventory.Service
 	// URL points to the finding in Patchline, when PATCHLINE_PUBLIC_URL is set.
 	URL string
-	// DTLink points to the finding in Dependency-Track, when known.
-	DTLink string
+	// Links point to the finding in the tools that report it.
+	Links []source.Link
 	// PullRequests are the pull requests linked to the finding.
 	PullRequests []store.PullRequestLink
 	// Lang is the language of the message text.
@@ -95,6 +96,7 @@ type Store interface {
 	RecordNotification(ctx context.Context, r store.NotificationResult) error
 	MarkNotificationFailed(ctx context.Context, findingID int64, sink string, cause error, retryAfter time.Duration) error
 	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
+	FindingRefs(ctx context.Context, findingID int64) ([]finding.Ref, error)
 }
 
 // Notifier drives a sink.
@@ -111,8 +113,8 @@ type Notifier struct {
 	Route Route
 	// PublicURL, when set, adds a link to the finding in Patchline.
 	PublicURL string
-	// DTUIURL, when set, adds a Dependency-Track link to messages.
-	DTUIURL string
+	// Sources link messages to the finding in the tools that report it.
+	Sources *source.Registry
 	// Lang is the language of messages (default English).
 	Lang i18n.Lang
 
@@ -225,6 +227,11 @@ func (n *Notifier) deliver(ctx context.Context, w store.NotificationWork) error 
 		return err
 	}
 	msg.PullRequests = prs
+	refs, err := n.Store.FindingRefs(ctx, w.Finding.ID)
+	if err != nil {
+		return err
+	}
+	msg.Links = n.Sources.Links(refs)
 	result := store.NotificationResult{FindingID: w.Finding.ID, Sink: n.Sink.Name(), Channel: w.Channel, MessageRef: w.MessageRef, LastEventID: last}
 
 	if w.MessageRef == "" {
@@ -288,9 +295,6 @@ func (n *Notifier) message(f store.Finding) Message {
 	}
 	if n.PublicURL != "" {
 		m.URL = trimSlash(n.PublicURL) + "/findings/" + strconv.FormatInt(f.ID, 10)
-	}
-	if n.DTUIURL != "" && f.DTProjectUUID != "" {
-		m.DTLink = trimSlash(n.DTUIURL) + "/projects/" + f.DTProjectUUID + "/findings"
 	}
 	return m
 }

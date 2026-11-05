@@ -24,7 +24,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/notify"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -82,6 +84,8 @@ type Finding struct {
 	ResolvedAt  *string `json:"resolved_at,omitempty"`
 	// DTURL is the finding's project in Dependency-Track, when known.
 	DTURL string `json:"dependency_track_url,omitempty"`
+	// Links are the finding's pages in the tools that report it.
+	Links []source.Link `json:"links"`
 }
 
 // Event is what happened, for "finding.event".
@@ -157,7 +161,12 @@ func (s *Sink) payload(typ, delivery, text string, m notify.Message) Payload {
 		KEV: f.KEV, EPSS: f.EPSS, State: f.State, Service: f.Service, Registered: f.Registered,
 		Owners: []string{}, Environment: f.Environment, Repository: f.Repository,
 		Assignee: f.Assignee, DueAt: f.DueAt, FirstSeenAt: f.FirstSeenAt, ResolvedAt: f.ResolvedAt,
-		DTURL: m.DTLink,
+		Links: append([]source.Link{}, m.Links...),
+	}
+	for _, l := range m.Links {
+		if l.Source == finding.SourceDependencyTrack && out.DTURL == "" {
+			out.DTURL = l.URL
+		}
 	}
 	if m.Service != nil {
 		out.Owners = nonNil(m.Service.Owners)

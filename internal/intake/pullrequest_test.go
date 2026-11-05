@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rha6780/patchline/internal/purl"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
+	"github.com/rha6780/patchline/internal/source/osv"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -90,31 +93,6 @@ func TestPullRequestWithoutMatchIsIgnored(t *testing.T) {
 	}
 }
 
-func TestJudge(t *testing.T) {
-	purl := "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
-	tests := []struct {
-		to      string
-		detail  dependencytrack.VulnerabilityDetail
-		want    string
-		snippet string
-	}{
-		{"2.17.1", log4shell, store.VerdictFixes, "outside the affected range >= 2.0-beta9, < 2.15.0"},
-		{"2.14.2", log4shell, store.VerdictInsufficient, "still in the affected range"},
-		{"2.17.1", dependencytrack.VulnerabilityDetail{PatchedVersions: "2.15.0"}, store.VerdictFixes, "patched version 2.15.0"},
-		{"2.14.9", dependencytrack.VulnerabilityDetail{PatchedVersions: "2.15.0"}, store.VerdictInsufficient, "< patched"},
-		{"2.17.1", dependencytrack.VulnerabilityDetail{PatchedVersions: ">= 2.15.0"}, store.VerdictUnknown, "no affected version range"},
-		{"2.17.1", dependencytrack.VulnerabilityDetail{AffectedComponents: []dependencytrack.AffectedComponent{{
-			IdentityType: "PURL", Identity: "pkg:maven/other/lib", VersionType: "RANGE", VersionEndExcluding: "9"}}},
-			store.VerdictUnknown, "no affected version range"},
-	}
-	for _, tc := range tests {
-		got, detail := Judge(purl, tc.to, tc.detail)
-		if got != tc.want || !strings.Contains(detail, tc.snippet) {
-			t.Errorf("Judge(%s) = %s %q, want %s containing %q", tc.to, got, detail, tc.want, tc.snippet)
-		}
-	}
-}
-
 func TestPurlHelpers(t *testing.T) {
 	if got := purlName("pkg:npm/%40types/node@20.1.0"); got != "@types/node" {
 		t.Errorf("purlName = %q", got)
@@ -122,7 +100,32 @@ func TestPurlHelpers(t *testing.T) {
 	if got := purlName("pkg:maven/org.apache/Log4j@2?type=jar"); got != "org.apache/log4j" {
 		t.Errorf("purlName = %q", got)
 	}
-	if got := purlBase("pkg:deb/debian/openssl@3.0.11?arch=amd64"); got != "pkg:deb/debian/openssl" {
-		t.Errorf("purlBase = %q", got)
+}
+
+// TestOSVFindingPullRequestVerdict: a finding Patchline detected (no
+// Dependency-Track ids) gets a verdict from the local OSV mirror, asked
+// before Dependency-Track.
+func TestOSVFindingPullRequestVerdict(t *testing.T) {
+	ctx := context.Background()
+	p, st := setup(t, nil)
+	if err := st.UpsertOSV(ctx, []store.OSVRecord{{ID: "GHSA-jfh8-c2jp-5v3q", Ecosystem: purl.Maven, Modified: "2026-01-01T00:00:00Z",
+		Aliases: []string{"CVE-2021-44228"}, Severity: "critical",
+		Affected: []store.OSVAffected{{Ecosystem: purl.Maven, Package: "org.apache.logging.log4j:log4j-core",
+			Ranges: []store.OSVRange{{Introduced: "2.13.0", Fixed: "2.15.0"}}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	dt := &dependencytrack.Adapter{}
+	p.Sources = source.NewRegistry(osv.Advisories{DB: st}, dt)
+	p.Matcher = &fakeMatcher{ready: true, vulns: map[string][]osv.Match{
+		log4j: {{ID: "GHSA-jfh8-c2jp-5v3q", Aliases: []string{"CVE-2021-44228"}, Severity: "critical"}}}}
+	upload(t, st, "u1", bomWith(log4j))
+	drain(t, p)
+
+	enqueueGitea(t, st, "renovate_opened.json") // log4j-core → 2.17.1
+	drain(t, p)
+	f := findingFor(t, st, log4j)
+	prs, _ := st.FindingPullRequests(ctx, f.ID)
+	if len(prs) != 1 || prs[0].Verdict != store.VerdictFixes || !strings.Contains(prs[0].VerdictDetail, "OSV GHSA-jfh8-c2jp-5v3q") {
+		t.Fatalf("links = %+v", prs)
 	}
 }

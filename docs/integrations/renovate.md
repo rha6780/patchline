@@ -13,7 +13,7 @@ Renovate proposes *how to fix it*. Patchline does not talk to Renovate directly:
 | Repository full name | Finding's repository (`repo` in the inventory) |
 | Base branch | Environment the PR is matched in (`main` → findings of `...@main`, plus `default` for projects without a version) |
 
-Each package is matched to open findings by name (Maven `group:artifact` equals `group/artifact`). The target version is then compared with the vulnerability's affected ranges from Dependency-Track.
+Each package is matched to open findings by name (Maven `group:artifact` equals `group/artifact`). The target version is then compared with the vulnerability's affected ranges: first from the local OSV mirror ([built-in detection](native-detection.md)), then from Dependency-Track when it reports the finding. Findings from any source get a verdict this way, as long as one of them knows the ranges.
 
 | Verdict | Meaning |
 |---|---|

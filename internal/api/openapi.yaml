@@ -93,6 +93,28 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
 
+  /api/v1/findings/{id}/refs:
+    get:
+      summary: How each tool names a finding
+      operationId: findingRefs
+      description: >-
+        One entry per source project that reports or reported the finding, kept
+        after it is resolved. `url` is the finding's page in that tool, when
+        Patchline knows it (Dependency-Track with `PATCHLINE_DT_UI_URL`).
+      parameters: [{$ref: "#/components/parameters/FindingID"}]
+      responses:
+        "200":
+          description: Refs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [refs]
+                properties:
+                  refs: {type: array, items: {$ref: "#/components/schemas/Ref"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
   /api/v1/findings/{id}/assignee:
     put:
       summary: Set or clear the assignee
@@ -463,6 +485,18 @@ components:
         head_sha: {type: string}
         merge_sha: {type: string}
         created_at: {type: string, format: date-time}
+
+    Ref:
+      type: object
+      required: [source, project]
+      properties:
+        source: {type: string, description: "dependencytrack, patchline, ..."}
+        project: {type: string, description: "The tool's project id (a Dependency-Track project UUID, or name@version)"}
+        component: {type: string, description: "The tool's component id (a UUID, or the purl)"}
+        vuln: {type: string, description: "The tool's vulnerability id (a UUID, or the vulnerability id)"}
+        vuln_source: {type: string, description: "NVD, GITHUB, OSV, ... as the tool names it"}
+        vuln_name: {type: string, description: "The id within vuln_source"}
+        url: {type: string}
 
     ComponentUse:
       type: object

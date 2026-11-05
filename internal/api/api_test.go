@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,8 @@ import (
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/source"
+	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 	"go.yaml.in/yaml/v3"
 )
@@ -81,6 +84,31 @@ func TestListFindingsAddsOwners(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/findings/1/events", nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"detected"`) {
 		t.Fatalf("events: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestFindingRefsAPI(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	o := observation("storefront", true)
+	o.DTProjectUUID, o.DTComponentUUID, o.DTVulnerabilityUUID, o.DTVulnSource, o.DTVulnID = "p", "c", "v", "NVD", o.VulnID
+	id, _, err := st.UpsertFinding(ctx, o, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := serve(Options{Findings: st, Sources: source.NewRegistry(&dependencytrack.Adapter{UIURL: "http://dt.local"}), Logger: quiet})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/findings/%d/refs", id), nil))
+	var resp struct {
+		Refs []Ref `json:"refs"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	want := Ref{Source: "dependencytrack", Project: "p", Component: "c", Vuln: "v", VulnSource: "NVD", VulnName: o.VulnID,
+		URL: "http://dt.local/projects/p/findings"}
+	if len(resp.Refs) != 1 || resp.Refs[0] != want {
+		t.Fatalf("refs = %+v", resp.Refs)
 	}
 }
 

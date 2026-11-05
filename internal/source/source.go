@@ -117,21 +117,86 @@ type Followup struct {
 	At                  time.Time
 }
 
+// Advisories judges fix pull requests: whether a target version of a
+// finding's component leaves the vulnerability's affected ranges.
+type Advisories interface {
+	Name() string
+	// Verdict returns store.VerdictFixes or store.VerdictInsufficient with
+	// a detail ("2.17.1 is outside the affected range ..."), or
+	// store.VerdictUnknown when this source has no ranges for the
+	// vulnerability and package, so the next one is asked.
+	Verdict(ctx context.Context, f store.Finding, refs []finding.Ref, to string) (verdict, detail string, err error)
+}
+
+// DecisionWriter records approved decisions in a tool that keeps its own
+// analysis, so the decision lives where the tool's users look.
+type DecisionWriter interface {
+	Name() string
+	// Keeps reports whether the tool keeps decisions about ref (and so
+	// must receive them).
+	Keeps(ref finding.Ref) bool
+	// Ready reports whether decisions can be written now (the tool's API
+	// is configured).
+	Ready() bool
+	WriteDecision(ctx context.Context, ref finding.Ref, d Decision) error
+}
+
+// Decision is an approved exception request that closes a finding.
+type Decision struct {
+	RequestID int64
+	// Kind is store.RequestRiskAcceptance, RequestNotAffected or
+	// RequestFalsePositive.
+	Kind string
+	// Justification is the CycloneDX justification of not_affected.
+	Justification string
+	Reason        string
+	RequestedBy   string
+	ApprovedBy    string
+}
+
+// Linker links a ref to the tool's UI.
+type Linker interface {
+	Name() string
+	// Link returns the URL of ref in the tool, or "" when there is none.
+	Link(ref finding.Ref) (label, url string)
+}
+
+// Link is a ref's page in a tool.
+type Link struct {
+	Source string `json:"source"`
+	Label  string `json:"label"`
+	URL    string `json:"url"`
+}
+
 // Registry holds the adapters in use, by name and port.
 type Registry struct {
-	receivers map[string]Receiver
-	reporters map[string]Reporter
+	receivers  map[string]Receiver
+	reporters  map[string]Reporter
+	writers    map[string]DecisionWriter
+	linkers    map[string]Linker
+	advisories []Advisories
 }
 
 // NewRegistry registers each adapter under every port it implements.
+// Advisories are asked in the order given.
 func NewRegistry(adapters ...any) *Registry {
-	r := &Registry{receivers: map[string]Receiver{}, reporters: map[string]Reporter{}}
+	r := &Registry{receivers: map[string]Receiver{}, reporters: map[string]Reporter{},
+		writers: map[string]DecisionWriter{}, linkers: map[string]Linker{}}
 	for _, a := range adapters {
 		if v, ok := a.(Receiver); ok {
 			r.receivers[v.Webhook()] = v
 		}
 		if v, ok := a.(Reporter); ok {
 			r.reporters[v.Name()] = v
+		}
+		if v, ok := a.(DecisionWriter); ok {
+			r.writers[v.Name()] = v
+		}
+		if v, ok := a.(Linker); ok {
+			r.linkers[v.Name()] = v
+		}
+		if v, ok := a.(Advisories); ok {
+			r.advisories = append(r.advisories, v)
 		}
 	}
 	return r
@@ -153,4 +218,43 @@ func (r *Registry) Reporter(name string) (Reporter, bool) {
 	}
 	v, ok := r.reporters[name]
 	return v, ok
+}
+
+// Advisories returns the advisory sources, in the order to ask them.
+func (r *Registry) Advisories() []Advisories {
+	if r == nil {
+		return nil
+	}
+	return r.advisories
+}
+
+// DecisionWriter returns the writer of a ref's source.
+func (r *Registry) DecisionWriter(name string) (DecisionWriter, bool) {
+	if r == nil {
+		return nil, false
+	}
+	v, ok := r.writers[name]
+	return v, ok
+}
+
+// Links returns the refs' pages in their tools, one per distinct URL.
+func (r *Registry) Links(refs []finding.Ref) []Link {
+	if r == nil {
+		return nil
+	}
+	var out []Link
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		l, ok := r.linkers[ref.Source]
+		if !ok {
+			continue
+		}
+		label, url := l.Link(ref)
+		if url == "" || seen[url] {
+			continue
+		}
+		seen[url] = true
+		out = append(out, Link{Source: ref.Source, Label: label, URL: url})
+	}
+	return out
 }

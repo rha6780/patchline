@@ -36,6 +36,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `GET` | `/api/v1/findings` | 서비스 담당자와 처리 담당자를 포함한 Finding 목록. 필터: `q`(취약점 ID·별칭, 구성요소, 제목), `service`, `environment`, `branch`(그 Finding을 보고한 최신 SBOM의 브랜치·태그: `main`, `v1.4.0`), `repository`, `severity`(실효 심각도), `state`, `assignee`, `open=1`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Finding에 연결된 PR |
+| `GET` | `/api/v1/findings/{id}/refs` | 도구별로 Finding을 가리키는 ID(그 도구의 프로젝트·구성요소·취약점 ID)와, 알 수 있으면 그 도구의 페이지 링크 |
 | `GET` | `/api/v1/components` | 저장된 SBOM에서 패키지 사용처 검색. `q`, `ecosystem`, `version`(예: `<2.17.0`), `limit` |
 | `GET` | `/api/v1/vulnerabilities/{id}` | CVE·GHSA의 영향 범위: 영향받는 스냅샷, 고치는 버전, 모든 출처의 Finding |
 | `GET` | `/api/v1/vex` | 프로젝트 버전의 CycloneDX 1.5 VEX(`project`, `version`, 파일로 받으려면 `download=1`) |
@@ -60,7 +61,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
 | `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키 |
 | `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | PR Webhook의 Secret. 비우면 `PATCHLINE_WEBHOOK_TOKEN` 사용 |
-| `PATCHLINE_DT_UI_URL` | — | 메시지에 넣을 Dependency-Track UI 주소 |
+| `PATCHLINE_DT_UI_URL` | — | 메시지·Finding 페이지·`/api/v1/findings/{id}/refs`에 넣을 Dependency-Track UI 주소 |
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |
 | `PATCHLINE_POLICY_PATH` | — | 조치 정책 YAML([예시](../examples/policy/policy.yaml)). 비우면 기본값 |
 | `PATCHLINE_KEV_URL` | CISA 피드 | CISA KEV 카탈로그 주소(하루 한 번 갱신). `off`면 사용 안 함 |

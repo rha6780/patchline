@@ -44,7 +44,9 @@ Both carry the finding's current state:
     "state": "in_progress", "service": "storefront", "registered": true, "owners": ["alice@example.com"],
     "environment": "prod", "repository": "acme/storefront-api",
     "component": {"name": "log4j-core", "version": "2.14.1", "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"},
-    "assignee": "bob@example.com", "due_at": "2026-11-10T00:00:00Z", "first_seen_at": "2026-11-03T00:00:00Z"
+    "assignee": "bob@example.com", "due_at": "2026-11-10T00:00:00Z", "first_seen_at": "2026-11-03T00:00:00Z",
+    "dependency_track_url": "https://dt.example.com/projects/1f0c.../findings",
+    "links": [{"source": "dependencytrack", "label": "Dependency-Track", "url": "https://dt.example.com/projects/1f0c.../findings"}]
   },
   "event": {"id": 9, "kind": "state_changed", "from_state": "new", "to_state": "in_progress",
             "evidence": {"by_name": "Bob"}, "occurred_at": "2026-11-03T01:02:03Z"},

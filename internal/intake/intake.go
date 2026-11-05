@@ -33,6 +33,7 @@ type Store interface {
 	Components(ctx context.Context, source, project string) ([]store.Component, error)
 	SourceProjects(ctx context.Context, source string) ([]store.SourceProject, error)
 	SetSnapshotBOM(ctx context.Context, source, project, serial string, version int) error
+	FindingRefs(ctx context.Context, findingID int64) ([]finding.Ref, error)
 	OpenFindingsInRepository(ctx context.Context, repository string, environments []string) ([]store.Finding, error)
 	LinkPullRequest(ctx context.Context, l store.PullRequestLink) (bool, error)
 	ClosePullRequest(ctx context.Context, repository string, number int, merged bool, mergeSHA string) ([]int64, error)
@@ -45,11 +46,9 @@ const DefaultEnvironment = finding.DefaultEnvironment
 type Processor struct {
 	Store     Store
 	Inventory *inventory.Inventory
-	// Sources are the tools' adapters; their reporters handle the inbox
-	// items of their source.
+	// Sources are the tools' adapters: their reporters handle the inbox
+	// items of their source, and their advisories judge fix pull requests.
 	Sources *source.Registry
-	// Vulnerabilities reads affected ranges for fix PR verdicts. Optional.
-	Vulnerabilities VulnerabilityFetcher
 	// Matcher detects vulnerabilities in SBOMs uploaded to Patchline. Nil
 	// stores uploads without matching them.
 	Matcher Matcher

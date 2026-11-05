@@ -16,8 +16,10 @@ import (
 	"strconv"
 
 	"github.com/rha6780/patchline/internal/app"
+	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -32,6 +34,7 @@ type Findings interface {
 	GetFinding(ctx context.Context, id int64) (store.Finding, error)
 	FindingEvents(ctx context.Context, findingID int64) ([]store.FindingEvent, error)
 	FindingPullRequests(ctx context.Context, findingID int64) ([]store.PullRequestLink, error)
+	FindingRefs(ctx context.Context, findingID int64) ([]finding.Ref, error)
 }
 
 // Options wires the API's dependencies. Endpoints whose dependency is nil
@@ -47,6 +50,8 @@ type Options struct {
 	// Approving stays in the web pages, with people.
 	App      *app.Service
 	Requests Requests
+	// Sources link refs to the tools' pages.
+	Sources *source.Registry
 	// Version is Patchline's version, named as the tool in VEX documents.
 	Version string
 	Logger  *slog.Logger
@@ -58,6 +63,7 @@ type Options struct {
 //	GET /api/v1/findings                      findings with owners (?q=&service=&environment=&branch=&repository=&severity=&state=&assignee=&open=1&limit=)
 //	GET /api/v1/findings/{id}/events          a finding's timeline
 //	GET /api/v1/findings/{id}/pull-requests   linked pull requests
+//	GET /api/v1/findings/{id}/refs            how each tool names the finding
 //	GET /api/v1/components                    where packages are used (?q=&ecosystem=&version=&limit=)
 //	GET /api/v1/vulnerabilities/{id}          what a CVE / GHSA affects
 //	GET /api/v1/vex                           CycloneDX VEX of a project version (?project=&version=)
@@ -81,6 +87,7 @@ func Register(mux *http.ServeMux, o Options) {
 		mux.HandleFunc("GET /api/v1/findings", h.listFindings)
 		mux.HandleFunc("GET /api/v1/findings/{id}/events", h.findingEvents)
 		mux.HandleFunc("GET /api/v1/findings/{id}/pull-requests", h.findingPullRequests)
+		mux.HandleFunc("GET /api/v1/findings/{id}/refs", h.findingRefs)
 	}
 	if o.Findings != nil && o.App != nil && o.Requests != nil {
 		mux.HandleFunc("PUT /api/v1/findings/{id}/assignee", h.assign)
@@ -143,6 +150,23 @@ func (h *handler) findingPullRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pull_requests": newPullRequests(prs)})
+}
+
+func (h *handler) findingRefs(w http.ResponseWriter, r *http.Request) {
+	id, ok := findingID(w, r)
+	if !ok {
+		return
+	}
+	refs, err := h.o.Findings.FindingRefs(r.Context(), id)
+	if err != nil {
+		h.fail(w, "finding refs", err, "could not load refs")
+		return
+	}
+	out := make([]Ref, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, newRef(ref, h.o.Sources))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"refs": out})
 }
 
 func (h *handler) components(w http.ResponseWriter, r *http.Request) {

@@ -44,17 +44,7 @@ func MatchComponent(ctx context.Context, db Candidates, c store.Component) ([]Ma
 func Affects(ecosystem, v string, c store.OSVCandidate) (rng, fixed string, ok bool) {
 	v = normalizeVersion(ecosystem, v)
 	for _, r := range c.Ranges {
-		vr := version.Range{}
-		if r.Introduced != "" && r.Introduced != "0" {
-			vr.StartIncluding = normalizeVersion(ecosystem, r.Introduced)
-		}
-		switch {
-		case r.Fixed != "":
-			vr.EndExcluding = normalizeVersion(ecosystem, r.Fixed)
-		case r.LastAffected != "":
-			vr.EndIncluding = normalizeVersion(ecosystem, r.LastAffected)
-		}
-		if vr.Contains(v) {
+		if vr := rangeOf(ecosystem, r); vr.Contains(v) {
 			return vr.String(), r.Fixed, true
 		}
 	}
@@ -66,6 +56,21 @@ func Affects(ecosystem, v string, c store.OSVCandidate) (rng, fixed string, ok b
 		}
 	}
 	return "", "", false
+}
+
+// rangeOf converts an OSV interval to a version range.
+func rangeOf(ecosystem string, r store.OSVRange) version.Range {
+	vr := version.Range{}
+	if r.Introduced != "" && r.Introduced != "0" {
+		vr.StartIncluding = normalizeVersion(ecosystem, r.Introduced)
+	}
+	switch {
+	case r.Fixed != "":
+		vr.EndExcluding = normalizeVersion(ecosystem, r.Fixed)
+	case r.LastAffected != "":
+		vr.EndIncluding = normalizeVersion(ecosystem, r.LastAffected)
+	}
+	return vr
 }
 
 func fixedFor(ecosystem, v string, ranges []store.OSVRange) string {

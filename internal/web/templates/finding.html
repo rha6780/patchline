@@ -20,7 +20,7 @@
   <div><dt>{{t $L "ui.fact.first_seen"}}</dt><dd>{{ts $f.FirstSeenAt}}</dd></div>
   {{if $f.ResolvedAt}}<div><dt>{{t $L "ui.fact.resolved"}}</dt><dd>{{ts (deref $f.ResolvedAt)}}</dd></div>{{end}}
 </dl>
-{{if .DTLink}}<p><a class="button" href="{{.DTLink}}">{{t $L "ui.open_dt"}}</a> <span class="muted">{{t $L "ui.open_dt_hint"}}</span></p>{{end}}
+{{if .Links}}<p>{{range .Links}}<a class="button" href="{{.URL}}">{{t $L "ui.open_in" .Label}}</a> {{end}}</p>{{end}}
 {{$P := .P}}{{$csrf := .P.CSRF}}
 {{if .Pending}}
 <h2>{{t $L "ui.pending_requests"}}</h2>
@@ -107,7 +107,7 @@
     <div class="row"><button class="btn primary" type="submit" {{if not .CanDecide}}disabled{{end}}>{{t $L "ui.request"}}</button></div>
   </form>
   {{end}}
-  <p class="meta decision-note">{{if not .CanDecide}}{{t $L "ui.risk_no_dt"}}{{else if .InDT}}{{t $L "ui.decision_in_dt"}}{{else}}{{t $L "ui.decision_in_patchline"}}{{end}}</p>
+  <p class="meta decision-note">{{if not .CanDecide}}{{t $L "ui.risk_no_dt"}}{{else if .RecordedInTool}}{{t $L "ui.decision_in_dt"}}{{else}}{{t $L "ui.decision_in_patchline"}}{{end}}</p>
   {{end}}
 </div>
 {{end}}

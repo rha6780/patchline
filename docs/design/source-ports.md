@@ -2,7 +2,7 @@
 
 English | [한국어](source-ports.ko.md)
 
-Status: phases 1–2 implemented.
+Status: phases 1–3 implemented.
 
 ## Goal
 
@@ -101,19 +101,26 @@ type Outcome struct {
     Note         string               // shown on the inbox item
 }
 
-// Advisories returns the affected ranges of a vulnerability for a package.
+// Advisories judges a fix version: fixes, insufficient, or unknown (ask
+// the next one). Each source matches ranges its own way (OSV by package
+// and alias, Dependency-Track by its affected components), so it returns
+// the verdict rather than ranges.
 type Advisories interface {
-    Affected(ctx context.Context, f store.Finding) (ranges []version.Range, fixed string, err error)
+    Name() string
+    Verdict(ctx context.Context, f store.Finding, refs []finding.Ref, to string) (verdict, detail string, err error)
 }
 
 // DecisionWriter records an approved decision in the tool that reports it.
 type DecisionWriter interface {
     Name() string
-    Write(ctx context.Context, ref finding.Ref, d Decision) error
+    Keeps(ref finding.Ref) bool   // the tool keeps decisions about ref
+    Ready() bool                  // and can be written to now
+    WriteDecision(ctx context.Context, ref finding.Ref, d Decision) error
 }
 
 // Linker links a ref to the tool's UI.
 type Linker interface {
+    Name() string
     Link(ref finding.Ref) (label, url string)
 }
 ```
@@ -123,8 +130,8 @@ What moves where:
 - **intake** keeps the inbox loop, retries and applying an `Outcome`. The Dependency-Track groups, the delayed reconciliation and the type mapping move into `source/dependencytrack`. Patchline's own SBOM path stays in intake: it is the core, not an integration, and already goes through the `Detector`s.
 - **server** serves `POST /webhooks/{name}` for every registered `Receiver`, so `/webhooks/dependency-track` keeps its URL. Gitea stays a separate route.
 - **Fix PR verdicts** ask every `Advisories` in order: the OSV mirror first (local, no network), then Dependency-Track. This is the one visible change: PRs on OSV and Trivy findings get *fixes* / *insufficient* instead of *unknown*.
-- **app**: approving a decision asks the registry for a `DecisionWriter` matching one of the finding's refs. With one, it writes there first, as today. Without one, the decision stays in Patchline. "Can this be decided here" becomes "every ref of a source that has a writer is writable", which replaces `InDT` and the `no_dt` case.
-- **web / notify / api** show one link per ref that a `Linker` resolves. The API keeps `dt_project_uuid`, `dt_vuln_source`, `dt_vuln_id`, filled from the Dependency-Track ref, and adds a `refs` array.
+- **app**: approving a decision asks the registry for the `DecisionWriter`s that keep one of the finding's refs, and writes to each first, as today. A writer gets the refs of the projects that report the finding now; only when none does, every ref it keeps (an analysis in a project that dropped the component may be gone, and that must not block the approval). Without a writer, the decision stays in Patchline. "Can this be decided here" becomes "every writer that keeps a ref is `Ready`" (`Service.Recorders`), which replaces `InDT`. The API error codes `no_dt` and `dt_write` keep their names, since Dependency-Track is still the only writer. The `recorded_in` evidence now names the source (`dependencytrack`, earlier `dependency-track`).
+- **web / notify / api** show one link per ref that a `Linker` resolves. The webhook notification keeps `dependency_track_url` and adds `links`. The API keeps `dt_project_uuid`, `dt_vuln_source`, `dt_vuln_id` and serves the refs at `GET /api/v1/findings/{id}/refs`, rather than as a `refs` array on every finding (no N+1 reads in the finding list, and there is no single-finding endpoint to put it on).
 - **store** loses `DTKey`, `ApplyState(DTKey)` and `ResolveMissing(dtProjectUUID)`. In their place: `ApplyStateByRef(Ref, …)` and the existing `ResolveMissingIn(source, project, …)`.
 
 ## Phases
@@ -135,8 +142,8 @@ Each phase is one commit or more, keeps every existing test passing, and can shi
 |---|---|---|
 | 1. Refs in the store | Migration `00014_finding_refs` with backfill; `Observation.Ref`; `UpsertFinding` writes refs (and still the `dt_*` columns); `ApplyStateByRef`. Callers unchanged otherwise | Store tests for backfill, merge of two sources, refs kept after resolution |
 | 2. Ports and the Dependency-Track adapter (done) | `internal/source` ports and registry; Dependency-Track `Receiver` + `Reporter`; intake applies `Outcome`; generic webhook route | Inbox processing (`intake.go`) and `server` no longer import `source/dependencytrack` (PR verdicts follow in phase 3); webhook and reconciliation tests pass with only their wiring changed |
-| 3. Advisories, decisions, links | `Advisories` (OSV, Dependency-Track) for PR verdicts; `DecisionWriter`; `Linker`; `app`, `web`, `notify`, `api` use refs | Outside `source/` and `main`, nothing imports `source/dependencytrack`; an OSV finding's fix PR gets a verdict |
-| 4. Cleanup | Stop writing, then drop, the `findings.dt_*` columns (after one release); remove `DTUIURL` plumbing in favor of the linker | `grep -r DTProjectUUID internal` only finds the adapter |
+| 3. Advisories, decisions, links (done) | `Advisories` (OSV, Dependency-Track) for PR verdicts; `DecisionWriter`; `Linker`; `app`, `web`, `notify`, `api` use refs | Outside `source/` and `main`, nothing imports `source/dependencytrack`; an OSV finding's fix PR gets a verdict |
+| 4. Cleanup | Stop writing, then drop, the `findings.dt_*` columns (after one release); remove `DTKey` / `ApplyState(DTKey)` and the remaining `DTUIURL` plumbing (navigation and project links on the integrations page) in favor of the linker | `grep -r DTProjectUUID internal` only finds the adapter |
 
 ## Risks
 

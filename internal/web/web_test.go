@@ -17,6 +17,8 @@ import (
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/source"
+	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -44,7 +46,8 @@ func setup(t *testing.T) (*UI, *store.Store) {
 		t.Fatal(err)
 	}
 	u, err := New(Options{Store: st, Inventory: inv, DTUIURL: "http://dt.local", Version: "test",
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return time.Now() }})
+		Sources: source.NewRegistry(&dependencytrack.Adapter{UIURL: "http://dt.local"}),
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return time.Now() }})
 	if err != nil {
 		t.Fatal(err)
 	}

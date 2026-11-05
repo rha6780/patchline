@@ -255,3 +255,30 @@ func matchOne(t *testing.T, e Engine, c store.Component) []Match {
 	}
 	return m[c.PURL]
 }
+
+func TestAdvisories(t *testing.T) {
+	db := fakeDB{purl.Maven + " org.apache.logging.log4j:log4j-core": {
+		{ID: "GHSA-jfh8-c2jp-5v3q", Aliases: []string{"CVE-2021-44228"}, Ranges: []store.OSVRange{{Introduced: "2.13.0", Fixed: "2.15.0"}}},
+		{ID: "GHSA-other", Aliases: []string{"CVE-2099-1"}, Ranges: []store.OSVRange{{Introduced: "0"}}},
+	}}
+	a := Advisories{DB: db}
+	f := store.Finding{ComponentRef: "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1", VulnID: "CVE-2021-44228"}
+	tests := []struct {
+		f       store.Finding
+		to      string
+		want    string
+		snippet string
+	}{
+		{f, "2.17.1", store.VerdictFixes, "outside the affected range >= 2.13.0, < 2.15.0 (OSV GHSA-jfh8-c2jp-5v3q)"},
+		{f, "2.14.2", store.VerdictInsufficient, "still in the affected range"},
+		{store.Finding{ComponentRef: f.ComponentRef, VulnID: "GHSA-jfh8-c2jp-5v3q"}, "2.17.1", store.VerdictFixes, "OSV GHSA-jfh8"},
+		{store.Finding{ComponentRef: f.ComponentRef, VulnID: "CVE-2000-0"}, "2.17.1", store.VerdictUnknown, "no OSV record"},
+		{store.Finding{ComponentRef: "pkg:deb/debian/openssl@3.0.11", VulnID: "CVE-2021-44228"}, "3.0.12", store.VerdictUnknown, "no OSV ecosystem"},
+	}
+	for _, tc := range tests {
+		got, detail, err := a.Verdict(context.Background(), tc.f, nil, tc.to)
+		if err != nil || got != tc.want || !strings.Contains(detail, tc.snippet) {
+			t.Errorf("Verdict(%s, %s) = %s %q %v, want %s containing %q", tc.f.VulnID, tc.to, got, detail, err, tc.want, tc.snippet)
+		}
+	}
+}

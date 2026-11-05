@@ -36,6 +36,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/api/v1/findings` | Findings with owners and assignee. Filters: `q` (vulnerability id or alias, component, title), `service`, `environment`, `branch` (of the latest SBOM that reports it: `main`, `v1.4.0`), `repository`, `severity` (effective), `state`, `assignee`, `open=1`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
+| `GET` | `/api/v1/findings/{id}/refs` | How each tool names a finding (project, component, vulnerability ids there), with its page in that tool when known |
 | `GET` | `/api/v1/components` | Where packages are used in the stored SBOMs. `q`, `ecosystem`, `version` (e.g. `<2.17.0`), `limit` |
 | `GET` | `/api/v1/vulnerabilities/{id}` | What a CVE or GHSA affects: affected snapshots, fixed versions, findings from every source |
 | `GET` | `/api/v1/vex` | CycloneDX 1.5 VEX of a project version (`project`, `version`, `download=1` for a file) |
@@ -60,7 +61,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_DT_URL` | — | Dependency-Track API server URL |
 | `PATCHLINE_DT_API_KEY` | — | API key with `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` |
 | `PATCHLINE_GITEA_WEBHOOK_SECRET` | — | Secret of the pull request webhook. Unset = use `PATCHLINE_WEBHOOK_TOKEN` |
-| `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages |
+| `PATCHLINE_DT_UI_URL` | — | Dependency-Track UI URL for links in messages, finding pages and `/api/v1/findings/{id}/refs` |
 | `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | Wait after `BOM_PROCESSED` before comparing findings |
 | `PATCHLINE_POLICY_PATH` | — | Remediation policy YAML ([example](../examples/policy/policy.yaml)). Unset = built-in defaults |
 | `PATCHLINE_KEV_URL` | CISA feed | CISA KEV catalog URL, refreshed daily; `off` disables |

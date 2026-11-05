@@ -99,15 +99,19 @@ func run() error {
 
 	st := store.New(db)
 
-	// Tools plug in as adapters; intake and the server only see the ports.
-	dtAdapter := &dependencytrack.Adapter{ReconcileDelay: cfg.DependencyTrackReconcileDelay, Logger: logger}
-	sources := source.NewRegistry(dtAdapter)
+	// Tools plug in as adapters; the core only sees the ports. Fix PR
+	// verdicts ask the local OSV mirror first, then Dependency-Track.
+	dtAdapter := &dependencytrack.Adapter{ReconcileDelay: cfg.DependencyTrackReconcileDelay,
+		UIURL: cfg.DependencyTrackUIURL, Logger: logger}
+	var adapters []any
+	if len(cfg.OSVEcosystems) > 0 {
+		adapters = append(adapters, osv.Advisories{DB: st})
+	}
+	sources := source.NewRegistry(append(adapters, dtAdapter)...)
 	proc := &intake.Processor{Store: st, Inventory: inv, Logger: logger, Sources: sources}
-	var dt *dependencytrack.Client
 	if cfg.DependencyTrackEnabled() {
-		dt = dependencytrack.NewClient(cfg.DependencyTrackURL, cfg.DependencyTrackAPIKey, nil)
-		dtAdapter.Client = dt
-		proc.Vulnerabilities = dt
+		dt := dependencytrack.NewClient(cfg.DependencyTrackURL, cfg.DependencyTrackAPIKey, nil)
+		dtAdapter.Client, dtAdapter.Vulnerabilities, dtAdapter.Analyses = dt, dt, dt
 	} else {
 		logger.Warn("PATCHLINE_DT_URL or PATCHLINE_DT_API_KEY not set: BOM_PROCESSED events will not fetch findings")
 	}
@@ -115,7 +119,7 @@ func run() error {
 		logger.Warn("PATCHLINE_WEBHOOK_TOKEN not set: webhooks are accepted without authentication")
 	}
 
-	notifier := notifiers(cfg, st, inv, logger)
+	notifier := notifiers(cfg, st, inv, sources, logger)
 	sla := &job.SLA{Store: st, Policy: pol, Inventory: inv, Logger: logger, KEVURL: cfg.KEVURL, OnChange: notifier.Wake}
 	// New findings are posted once the policy has evaluated them, so the
 	// SLA job runs first and wakes the notifier.
@@ -171,13 +175,10 @@ func run() error {
 		return err
 	}
 	// Changes people make (assignment, requests, decisions) go through one
-	// service, which writes decisions back to Dependency-Track.
-	svc := &app.Service{Store: st, OnChange: func() { sla.Wake(); notifier.Wake() }, Now: time.Now}
-	if dt != nil {
-		svc.DT = dt
-	}
+	// service, which writes decisions back to the tools that keep them.
+	svc := &app.Service{Store: st, Sources: sources, OnChange: func() { sla.Wake(); notifier.Wake() }, Now: time.Now}
 	ui, err := web.New(web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger,
-		App: svc, PublicURL: cfg.PublicURL,
+		App: svc, Sources: sources, PublicURL: cfg.PublicURL,
 		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret,
 		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local(), Impact: st})
 	if err != nil {
@@ -235,7 +236,7 @@ func run() error {
 // admin/admin on first start) and, when configured, OIDC.
 // notifiers returns one notifier per configured sink: Slack and the
 // webhook, or the console when neither is set.
-func notifiers(cfg config.Config, st *store.Store, inv *inventory.Inventory, logger *slog.Logger) notify.Group {
+func notifiers(cfg config.Config, st *store.Store, inv *inventory.Inventory, sources *source.Registry, logger *slog.Logger) notify.Group {
 	newNotifier := func(sink notify.Sink, r config.NotifyRoute) *notify.Notifier {
 		if r.MinSeverity == "" {
 			r.MinSeverity = cfg.NotifyMinSeverity
@@ -250,7 +251,7 @@ func notifiers(cfg config.Config, st *store.Store, inv *inventory.Inventory, log
 			DefaultChannel: cfg.SlackDefaultChannel,
 			Route:          notify.Route{MinSeverity: r.MinSeverity, Services: r.Services, Environments: r.Environments},
 			PublicURL:      cfg.PublicURL,
-			DTUIURL:        cfg.DependencyTrackUIURL,
+			Sources:        sources,
 			Lang:           i18n.Lang(cfg.NotifyLang),
 		}
 	}

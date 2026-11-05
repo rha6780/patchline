@@ -74,8 +74,8 @@ func Blocks(m notify.Message) []map[string]any {
 	if m.URL != "" {
 		ctx = append(ctx, "<"+m.URL+"|"+l.T("blk.open_patchline")+">")
 	}
-	if m.DTLink != "" {
-		ctx = append(ctx, "<"+m.DTLink+"|"+l.T("blk.open_dt")+">")
+	for _, link := range m.Links {
+		ctx = append(ctx, "<"+link.URL+"|"+l.T("blk.open_in", escape(link.Label))+">")
 	}
 	blocks = append(blocks, map[string]any{
 		"type":     "context",

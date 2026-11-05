@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 
+	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
 
@@ -155,6 +157,27 @@ func newFinding(f store.Finding, inv *inventory.Inventory) Finding {
 			out.SlackChannel = s.SlackChannel
 			out.Exposure = string(s.Exposure)
 		}
+	}
+	return out
+}
+
+// Ref is how a tool names a finding: its project, component and
+// vulnerability there, and the finding's page in it when known.
+type Ref struct {
+	Source     string `json:"source"`
+	Project    string `json:"project"`
+	Component  string `json:"component,omitempty"`
+	Vuln       string `json:"vuln,omitempty"`
+	VulnSource string `json:"vuln_source,omitempty"`
+	VulnName   string `json:"vuln_name,omitempty"`
+	URL        string `json:"url,omitempty"`
+}
+
+func newRef(r finding.Ref, sources *source.Registry) Ref {
+	out := Ref{Source: r.Source, Project: r.Project, Component: r.Component, Vuln: r.Vuln,
+		VulnSource: r.VulnSource, VulnName: r.VulnName}
+	if links := sources.Links([]finding.Ref{r}); len(links) > 0 {
+		out.URL = links[0].URL
 	}
 	return out
 }

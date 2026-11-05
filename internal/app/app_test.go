@@ -10,6 +10,7 @@ import (
 	"github.com/rha6780/patchline/internal/app"
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
+	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -32,7 +33,7 @@ func person(subject string, perms ...auth.Permission) *auth.Principal {
 	return &auth.Principal{Authenticated: true, Subject: subject, Name: subject, Perms: set}
 }
 
-func setup(t *testing.T, dt app.AnalysisWriter) (*app.Service, *store.Store, int64, int64, *int) {
+func setup(t *testing.T, dt dependencytrack.AnalysisWriter) (*app.Service, *store.Store, int64, int64, *int) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "p.db"))
@@ -57,10 +58,11 @@ func setup(t *testing.T, dt app.AnalysisWriter) (*app.Service, *store.Store, int
 		t.Fatal(err)
 	}
 	changes := 0
-	svc := &app.Service{Store: st, OnChange: func() { changes++ }, Now: time.Now}
+	adapter := &dependencytrack.Adapter{}
 	if dt != nil {
-		svc.DT = dt
+		adapter.Analyses = dt
 	}
+	svc := &app.Service{Store: st, Sources: source.NewRegistry(adapter), OnChange: func() { changes++ }, Now: time.Now}
 	return svc, st, native, inDT, &changes
 }
 
@@ -182,6 +184,57 @@ func TestDecide(t *testing.T) {
 		t.Fatalf("state = %s", f.State)
 	}
 
+}
+
+// TestDecisionTargets: a finding two Dependency-Track projects report is
+// written to both; once a project stops reporting it, only to the other.
+func TestDecisionTargets(t *testing.T) {
+	dt := &fakeDT{}
+	svc, st, native, inDT, _ := setup(t, dt)
+	ctx := context.Background()
+	f, _ := st.GetFinding(ctx, inDT)
+	obs := finding.Observation{Service: f.Service, Registered: true, Environment: f.Environment, ComponentRef: f.ComponentRef,
+		VulnID: f.VulnID, Severity: finding.SeverityHigh, DTProjectUUID: "p2", DTComponentUUID: "c2", DTVulnerabilityUUID: "v"}
+	if _, _, err := st.UpsertFinding(ctx, obs, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := svc.Recorders(ctx, f); len(r.Tools) != 1 || r.Tools[0] != dependencytrack.Name || !r.Ready {
+		t.Fatalf("recorders = %+v", r)
+	}
+	if r, _ := svc.Recorders(ctx, store.Finding{ID: native}); len(r.Tools) != 0 || !r.Ready {
+		t.Fatalf("native recorders = %+v", r)
+	}
+
+	dev := person("dev", auth.ExceptionsRequest)
+	lead := person("lead", auth.ExceptionsApprove)
+	approve := func() {
+		t.Helper()
+		rid, err := svc.Request(ctx, dev, app.RequestInput{FindingID: inDT, Kind: "false_positive", Reason: "r"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.Decide(ctx, lead, rid, app.Approve, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	approve()
+	if len(dt.got) != 2 || dt.got[0].ProjectUUID != "p" || dt.got[1].ProjectUUID != "p2" || dt.got[1].ComponentUUID != "c2" {
+		t.Fatalf("writes = %+v", dt.got)
+	}
+
+	// p2 no longer reports it; reopen the finding through p.
+	if _, err := st.ResolveMissingIn(ctx, dependencytrack.Name, "p2", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ApplyStateByRef(ctx, finding.Ref{Source: dependencytrack.Name, Project: "p", Component: "c", Vuln: "v"},
+		finding.StateInProgress, nil); err != nil {
+		t.Fatal(err)
+	}
+	dt.got = nil
+	approve()
+	if len(dt.got) != 1 || dt.got[0].ProjectUUID != "p" {
+		t.Fatalf("writes after p2 stopped reporting = %+v", dt.got)
+	}
 }
 
 func TestCancel(t *testing.T) {
