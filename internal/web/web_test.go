@@ -100,7 +100,7 @@ func TestPages(t *testing.T) {
 		{"/integrations", []string{`href="/docs/integrations"`}},
 		{"/docs/integrations", []string{"Integrations guide", "Dependency-Track", "OpenCVE", "Planned",
 			"<code>NEW_VULNERABLE_DEPENDENCY</code>", "<code>PATCHLINE_DT_URL</code>", "https://docs.opencve.io/", "CISA KEV",
-			"blob/main/docs/integrations/sbom-ci.md"}},
+			"blob/main/docs/integrations/sbom-ci.md", "blob/main/docs/projects.md", "Registering projects and branches"}},
 		{"/static/style.css", []string{"--crit"}},
 	}
 	for _, tc := range tests {

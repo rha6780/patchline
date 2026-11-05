@@ -4,6 +4,7 @@ English | [한국어](README.ko.md)
 
 - [How it works](how-it-works.md): finding states, intake, resolution, PR linking, due dates, notifications
 - [Configuration](configuration.md): environment variables, endpoints, web UI
+- [Registering projects and branches](projects.md): services in the inventory, project names, versions as environments, branch and commit, retiring them
 - [Design: built-in detection](design/native-detection.md): how Patchline detects alongside Dependency-Track, and what comes next
 - [Sign-in and permissions](access-control.md): OIDC (FusionAuth, Keycloak, ...), group → permission mapping, assignment, approvals
 
@@ -33,7 +34,7 @@ CI ── SBOM + commit ──▶ Dependency-Track ── webhook ──▶ Patc
 Renovate ── fix PR ──▶ Gitea / Forgejo / GitHub ── webhook ─┘   └── CISA KEV
 ```
 
-Every integration meets in the **inventory** (`PATCHLINE_INVENTORY_PATH`): it maps Dependency-Track project names and repositories to services, owners and Slack channels. See [examples/inventory/services.yaml](../examples/inventory/services.yaml).
+Every integration meets in the **inventory** (`PATCHLINE_INVENTORY_PATH`): it maps Dependency-Track project names and repositories to services, owners and Slack channels. See [examples/inventory/services.yaml](../examples/inventory/services.yaml) and [Registering projects and branches](projects.md).
 
 | Name in the tool | Must match in the inventory |
 |---|---|

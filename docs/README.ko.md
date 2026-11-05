@@ -4,6 +4,7 @@
 
 - [동작 방식](how-it-works.ko.md): Finding 상태, 수집, 해결 판정, PR 연결, 기한, 알림
 - [설정](configuration.ko.md): 환경변수, 엔드포인트, 웹 UI
+- [프로젝트와 브랜치 등록](projects.ko.md): 인벤토리의 서비스, 프로젝트 이름, 환경이 되는 버전, 브랜치와 커밋, 정리 방법
 - [설계: 자체 탐지](design/native-detection.ko.md): Dependency-Track과 함께 탐지하는 구조와 다음 단계
 - [로그인과 권한](access-control.ko.md): OIDC(FusionAuth, Keycloak 등), 그룹 → 권한 매핑, 담당자 지정, 승인
 
@@ -33,7 +34,7 @@ CI ── SBOM + 커밋 ──▶ Dependency-Track ── webhook ──▶ Patc
 Renovate ── 수정 PR ──▶ Gitea / Forgejo / GitHub ─ webhook ┘   └── CISA KEV
 ```
 
-모든 연동은 **인벤토리**(`PATCHLINE_INVENTORY_PATH`)에서 만납니다. 인벤토리는 Dependency-Track 프로젝트 이름과 저장소를 서비스, 담당자, Slack 채널에 연결합니다. 예시는 [examples/inventory/services.yaml](../examples/inventory/services.yaml)입니다.
+모든 연동은 **인벤토리**(`PATCHLINE_INVENTORY_PATH`)에서 만납니다. 인벤토리는 Dependency-Track 프로젝트 이름과 저장소를 서비스, 담당자, Slack 채널에 연결합니다. 예시는 [examples/inventory/services.yaml](../examples/inventory/services.yaml), 등록 방법은 [프로젝트와 브랜치 등록](projects.ko.md)을 보세요.
 
 | 도구 쪽 이름 | 인벤토리에서 맞춰야 하는 값 |
 |---|---|
