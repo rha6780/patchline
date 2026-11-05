@@ -34,6 +34,7 @@ const (
 	EventAssigned        = "assigned"
 	EventExceptionAsked  = "exception_requested"
 	EventExceptionDone   = "exception_decided"
+	EventServiceChanged  = "service_changed"
 )
 
 // Severity levels, normalized to lower case.

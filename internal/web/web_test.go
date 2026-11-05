@@ -340,7 +340,7 @@ func TestFindingSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, body := get(t, u, "/findings/"+strconv.FormatInt(id, 10))
-	for _, want := range []string{"Reported by", "Patchline (OSV)", "storefront-api@main", "Detected by Patchline (OSV, GHSA-p6mc-m468-83gw)"} {
+	for _, want := range []string{"Reported by", "Patchline (built-in)", "storefront-api@main", "Detected by Patchline (OSV, GHSA-p6mc-m468-83gw)"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("finding page lacks %q", want)
 		}

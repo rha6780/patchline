@@ -46,7 +46,12 @@ func bomWith(purls ...string) json.RawMessage {
 
 func upload(t *testing.T, st *store.Store, key string, bom json.RawMessage) {
 	t.Helper()
-	payload, _ := json.Marshal(sbom.Upload{Project: "storefront-api", Version: "main", BOM: sbom.Raw(bom)})
+	uploadAs(t, st, key, "storefront-api", bom)
+}
+
+func uploadAs(t *testing.T, st *store.Store, key, project string, bom json.RawMessage) {
+	t.Helper()
+	payload, _ := json.Marshal(sbom.Upload{Project: project, Version: "main", BOM: sbom.Raw(bom)})
 	if _, _, err := st.InsertInbox(context.Background(), SourcePatchline, EventSBOM, key, payload); err != nil {
 		t.Fatal(err)
 	}

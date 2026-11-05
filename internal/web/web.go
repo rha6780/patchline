@@ -725,7 +725,7 @@ func (u *UI) integrations(w http.ResponseWriter, r *http.Request) {
 	var missing []missingProject
 	for _, s := range u.o.Inventory.Services() {
 		for _, repo := range s.Repositories {
-			for _, proj := range repo.Projects() {
+			for _, proj := range repo.ProjectNames() {
 				if !seen[proj] {
 					missing = append(missing, missingProject{Service: s.Name, Repository: repo.Repo, Project: proj})
 				}
@@ -881,6 +881,8 @@ func eventIcon(kind string) string {
 		return "🔀"
 	case finding.EventPRClosed:
 		return "🚫"
+	case finding.EventServiceChanged:
+		return "🏷️"
 	}
 	return "•"
 }

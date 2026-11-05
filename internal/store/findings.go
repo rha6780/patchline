@@ -75,6 +75,11 @@ func (f Finding) DisplaySeverity() string {
 // fields when the observation comes from the finding's primary source (or
 // from Dependency-Track, which takes over as primary). Either way the
 // source project is recorded as a sighting.
+//
+// A project moved to another service in the inventory keeps its findings:
+// when the service has no such finding yet but the same source project
+// reported it under another one, that finding moves (see moveFinding), with
+// its history, assignee and decisions.
 func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evidence map[string]any) (id int64, created bool, err error) {
 	aliases, err := json.Marshal(nonNil(obs.Aliases))
 	if err != nil {
@@ -98,6 +103,18 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 		SELECT id, severity, state, primary_source FROM findings
 		WHERE service = ? AND environment = ? AND component_purl = ? AND vuln_id = ?`,
 		obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id, &prevSeverity, &prevState, &primary)
+	if errors.Is(err, sql.ErrNoRows) && project != "" {
+		var moved bool
+		if moved, err = moveFinding(ctx, tx, obs, source, project, evidence, now); err == nil {
+			err = sql.ErrNoRows
+			if moved {
+				err = tx.QueryRowContext(ctx, `
+					SELECT id, severity, state, primary_source FROM findings
+					WHERE service = ? AND environment = ? AND component_purl = ? AND vuln_id = ?`,
+					obs.Service, obs.Environment, obs.ComponentRef, obs.VulnID).Scan(&id, &prevSeverity, &prevState, &primary)
+			}
+		}
+	}
 
 	switch {
 	case err == nil:
@@ -219,6 +236,49 @@ func (s *Store) UpsertFinding(ctx context.Context, obs finding.Observation, evid
 		return 0, false, err
 	}
 	return id, created, nil
+}
+
+// moveFinding moves the finding the source project reported under another
+// service to obs.Service, recording a service_changed event. It only moves
+// a finding that no project of another name reports now (projects of one
+// name, such as the Dependency-Track project and the SBOM uploaded to
+// Patchline, belong to the same service): one still reported for the old
+// service stays there, and obs gets its own.
+func moveFinding(ctx context.Context, tx *sql.Tx, obs finding.Observation, source, project string, evidence map[string]any, now string) (bool, error) {
+	var (
+		id   int64
+		from string
+	)
+	err := tx.QueryRowContext(ctx, `
+		SELECT f.id, f.service FROM findings f
+		JOIN finding_refs r ON r.finding_id = f.id AND r.source = ? AND r.project = ?
+		WHERE f.environment = ? AND f.component_purl = ? AND f.vuln_id = ? AND f.service != ?
+		  AND NOT EXISTS (
+		    SELECT 1 FROM finding_sightings g
+		    LEFT JOIN source_projects p ON p.source = g.source AND p.project_id = g.project_id
+		    WHERE g.finding_id = f.id AND NOT (g.source = ? AND g.project_id = ?)
+		      AND COALESCE(p.name, '') != COALESCE((SELECT name FROM source_projects WHERE source = ? AND project_id = ?), '-'))
+		ORDER BY f.id DESC LIMIT 1`,
+		source, project, obs.Environment, obs.ComponentRef, obs.VulnID, obs.Service, source, project, source, project).Scan(&id, &from)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE findings SET service = ?, registered = ?, repository = ?, updated_at = ? WHERE id = ?`,
+		obs.Service, obs.Registered, obs.Repository, now, id); err != nil {
+		return false, err
+	}
+	ev, err := json.Marshal(map[string]any{"from": from, "to": obs.Service, "source": source, "project": project, "observation": evidence})
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO finding_events (finding_id, kind, evidence, occurred_at) VALUES (?, ?, ?, ?)`,
+		id, finding.EventServiceChanged, string(ev), now); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // DTKey identifies a finding by its Dependency-Track identifiers.

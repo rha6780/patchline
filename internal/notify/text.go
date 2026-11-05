@@ -174,6 +174,8 @@ func EventText(l i18n.Lang, e store.FindingEvent) string {
 			return l.T("rem.overdue", dateOnly(str("due")))
 		}
 		return l.T("rem.soon", dateOnly(str("due")))
+	case finding.EventServiceChanged:
+		return l.T("ev.service", str("from"), str("to"))
 	case finding.EventAssigned:
 		if to := str("to"); to != "" {
 			return l.T("ev.assigned", to, str("by_name"))
@@ -217,15 +219,24 @@ func Describe(l i18n.Lang, e store.FindingEvent) string {
 	switch e.Kind {
 	case finding.EventDetected:
 		var ev struct {
-			Source string `json:"source"`
-			OSVID  string `json:"osv_id"`
+			Source   string `json:"source"`
+			Engine   string `json:"engine"`
+			Advisory string `json:"advisory"`
+			OSVID    string `json:"osv_id"`
 		}
 		_ = json.Unmarshal(e.Evidence, &ev)
 		if ev.Source == finding.SourcePatchline {
-			if ev.OSVID != "" {
-				return l.T("ev.detected_patchline", ev.OSVID)
+			engine := map[string]string{"osv": "OSV", "trivy": "Trivy"}[ev.Engine]
+			if engine == "" {
+				engine = "OSV" // recorded before Trivy, when OSV was the only engine
 			}
-			return l.T("ev.detected_patchline_plain")
+			if ev.Advisory == "" {
+				ev.Advisory = ev.OSVID
+			}
+			if ev.Advisory != "" {
+				return l.T("ev.detected_patchline", engine, ev.Advisory)
+			}
+			return l.T("ev.detected_patchline_plain", engine)
 		}
 		return l.T("ev.detected")
 	case finding.EventNotified:

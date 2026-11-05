@@ -282,6 +282,7 @@ var en = map[string]string{
 	"ev.approved_by":            " (approved by %s)",
 	"ev.assigned":               "👤 Assigned to %s (by %s)",
 	"ev.unassigned":             "👤 Unassigned (by %s)",
+	"ev.service":                "🏷️ Service: %s → %s (project moved in the inventory)",
 	"req.asked.risk_acceptance": "📝 %s requested risk acceptance",
 	"req.asked.due_extension":   "📝 %s requested a due date extension to %s",
 	"req.approved":              "✅ %s approved by %s",
@@ -403,10 +404,10 @@ var en = map[string]string{
 
 	// Native detection
 	"source.dependencytrack":      "Dependency-Track",
-	"source.patchline":            "Patchline (OSV)",
+	"source.patchline":            "Patchline (built-in)",
 	"ui.fact.sources":             "Reported by",
-	"ev.detected_patchline":       "Detected by Patchline (OSV, %s)",
-	"ev.detected_patchline_plain": "Detected by Patchline (OSV)",
+	"ev.detected_patchline":       "Detected by Patchline (%s, %s)",
+	"ev.detected_patchline_plain": "Detected by Patchline (%s)",
 
 	// Components and impact
 	"ui.nav.components":         "Components",
@@ -767,6 +768,7 @@ var ko = map[string]string{
 	"ev.approved_by":            " (승인: %s)",
 	"ev.assigned":               "👤 담당자 지정: %s (%s)",
 	"ev.unassigned":             "👤 담당자 해제 (%s)",
+	"ev.service":                "🏷️ 서비스: %s → %s (인벤토리에서 프로젝트 이동)",
 	"req.asked.risk_acceptance": "📝 %s님이 위험 수용을 요청했습니다",
 	"req.asked.due_extension":   "📝 %s님이 기한을 %s로 연장해 달라고 요청했습니다",
 	"req.approved":              "✅ %s 승인 (%s)",
@@ -888,10 +890,10 @@ var ko = map[string]string{
 
 	// Native detection
 	"source.dependencytrack":      "Dependency-Track",
-	"source.patchline":            "Patchline (OSV)",
+	"source.patchline":            "Patchline (자체 탐지)",
 	"ui.fact.sources":             "탐지한 곳",
-	"ev.detected_patchline":       "Patchline에서 탐지 (OSV, %s)",
-	"ev.detected_patchline_plain": "Patchline에서 탐지 (OSV)",
+	"ev.detected_patchline":       "Patchline에서 탐지 (%s, %s)",
+	"ev.detected_patchline_plain": "Patchline에서 탐지 (%s)",
 
 	// Components and impact
 	"ui.nav.components":         "구성요소",

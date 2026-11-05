@@ -122,3 +122,30 @@ func TestLoadEmptyPath(t *testing.T) {
 		t.Fatal("expected empty inventory")
 	}
 }
+
+func TestProjectsAndTheirEarlierName(t *testing.T) {
+	doc, err := Parse([]byte(`
+services:
+  - name: storefront
+    repositories:
+      - repo: acme/storefront-api
+        projects: [storefront-api, storefront-api-image]
+      - repo: acme/storefront-web
+        dependency_track_projects: [web]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, err := build(doc.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"storefront-api", "storefront-api-image", "web"} {
+		if m, ok := inv.LookupProject(name); !ok || m.Service.Name != "storefront" {
+			t.Errorf("%s: %+v %v", name, m, ok)
+		}
+	}
+	if _, ok := inv.LookupProject("storefront-web"); ok {
+		t.Error("listed projects replace the default name")
+	}
+}

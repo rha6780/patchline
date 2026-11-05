@@ -39,23 +39,28 @@ type Service struct {
 	Repositories []Repository `yaml:"repositories"`
 }
 
-// Repository links a Git repository to the Dependency-Track projects built
-// from it (for example one project for the app SBOM and one for the image).
+// Repository links a Git repository to the projects built from it (for
+// example one project for the app SBOM and one for the image). A project
+// is the name SBOMs are uploaded under, to Patchline or to
+// Dependency-Track.
 type Repository struct {
-	Repo                    string   `yaml:"repo"`
+	Repo     string   `yaml:"repo"`
+	Projects []string `yaml:"projects"`
+	// DependencyTrackProjects is the earlier name of Projects; both are
+	// read.
 	DependencyTrackProjects []string `yaml:"dependency_track_projects"`
 }
 
-// Projects returns the Dependency-Track project names for the repository.
-// When none are listed, the last path segment of Repo is used.
-func (r Repository) Projects() []string {
-	if len(r.DependencyTrackProjects) > 0 {
-		return r.DependencyTrackProjects
+// ProjectNames returns the project names of the repository. When none are
+// listed, the last path segment of Repo is used.
+func (r Repository) ProjectNames() []string {
+	if names := append(append([]string{}, r.Projects...), r.DependencyTrackProjects...); len(names) > 0 {
+		return names
 	}
 	return []string{path.Base(r.Repo)}
 }
 
-// Match is the result of resolving a Dependency-Track project.
+// Match is the result of resolving a project.
 type Match struct {
 	Service    *Service
 	Repository string
@@ -63,9 +68,9 @@ type Match struct {
 
 // Inventory is a validated, indexed set of services.
 type Inventory struct {
-	services []Service
-	byName   map[string]*Service
-	byDTProj map[string]Match
+	services  []Service
+	byName    map[string]*Service
+	byProject map[string]Match
 }
 
 // Empty returns an inventory with no services. Every lookup misses.
@@ -131,9 +136,9 @@ func Parse(data []byte) (File, error) {
 
 func build(services []Service) (*Inventory, error) {
 	inv := &Inventory{
-		services: services,
-		byName:   make(map[string]*Service, len(services)),
-		byDTProj: make(map[string]Match),
+		services:  services,
+		byName:    make(map[string]*Service, len(services)),
+		byProject: make(map[string]Match),
 	}
 	var errs []error
 	for i := range inv.services {
@@ -161,13 +166,13 @@ func build(services []Service) (*Inventory, error) {
 				errs = append(errs, fmt.Errorf("service %q: repositories[%d]: repo is required", s.Name, j))
 				continue
 			}
-			for _, proj := range r.Projects() {
-				if prev, dup := inv.byDTProj[proj]; dup {
-					errs = append(errs, fmt.Errorf("dependency-track project %q: claimed by %s (%s) and %s (%s)",
+			for _, proj := range r.ProjectNames() {
+				if prev, dup := inv.byProject[proj]; dup {
+					errs = append(errs, fmt.Errorf("project %q: claimed by %s (%s) and %s (%s)",
 						proj, prev.Service.Name, prev.Repository, s.Name, r.Repo))
 					continue
 				}
-				inv.byDTProj[proj] = Match{Service: s, Repository: r.Repo}
+				inv.byProject[proj] = Match{Service: s, Repository: r.Repo}
 			}
 		}
 	}
@@ -177,9 +182,9 @@ func build(services []Service) (*Inventory, error) {
 	return inv, nil
 }
 
-// LookupProject resolves a Dependency-Track project name.
+// LookupProject resolves a project name.
 func (inv *Inventory) LookupProject(name string) (Match, bool) {
-	m, ok := inv.byDTProj[name]
+	m, ok := inv.byProject[name]
 	return m, ok
 }
 
