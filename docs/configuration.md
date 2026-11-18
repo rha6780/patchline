@@ -83,7 +83,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_LOCAL_ADMIN` | `true` | Built-in `admin` account (starts with a one-time password printed in the log, password change forced). `false` needs OIDC |
 | `PATCHLINE_ADMIN_PASSWORD` | — | The admin's one-time password when the account is created or reset, instead of a random one |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | Let requests without a session read; only behind an authenticating proxy |
-| `PATCHLINE_TRUSTED_PROXIES` | — | Reverse proxies in front of Patchline (addresses or CIDRs, comma-separated). Their `X-Forwarded-For` tells sign-in attempts from different clients apart; it is ignored from anyone else |
+| `PATCHLINE_TRUSTED_PROXIES` | — | Reverse proxies in front of Patchline (addresses or CIDRs, comma-separated). Their `X-Forwarded-For` tells sign-in attempts from different clients apart, and their `X-Forwarded-Proto: https` makes the session cookie Secure; both headers are ignored from anyone else |
 | `PATCHLINE_OIDC_ISSUER` | — | OIDC issuer URL. Unset = local admin only |
 | `PATCHLINE_OIDC_CLIENT_ID` | — | OIDC client id |
 | `PATCHLINE_OIDC_CLIENT_SECRET` | — | OIDC client secret |

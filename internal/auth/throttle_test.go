@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,5 +79,31 @@ func TestThrottle(t *testing.T) {
 	ran := false
 	if !th.check(context.Background(), func() { ran = true }) || !ran {
 		t.Error("check did not run with a free slot")
+	}
+}
+
+func TestSecureRequest(t *testing.T) {
+	proxies := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+	for _, tc := range []struct {
+		public, remote, proto string
+		want                  bool
+	}{
+		{"https://p.example.com", "203.0.113.7:1", "", true},
+		{"", "203.0.113.7:1", "https", false}, // not a proxy: header ignored
+		{"", "10.0.0.2:1", "https", true},
+		{"", "10.0.0.2:1", "HTTPS, http", true},
+		{"", "10.0.0.2:1", "http", false},
+		{"", "10.0.0.2:1", "", false},
+		{"http://localhost:8080", "10.0.0.2:1", "https", true},
+	} {
+		a := &Authenticator{opts: Options{TrustedProxies: proxies}, secure: strings.HasPrefix(tc.public, "https://")}
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = tc.remote
+		if tc.proto != "" {
+			r.Header.Set("X-Forwarded-Proto", tc.proto)
+		}
+		if got := a.secureRequest(r); got != tc.want {
+			t.Errorf("%+v: got %v", tc, got)
+		}
 	}
 }

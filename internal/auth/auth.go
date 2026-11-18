@@ -315,10 +315,25 @@ func (a *Authenticator) startSession(w http.ResponseWriter, r *http.Request, ses
 		return err
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: cookieSession, Value: id, Path: "/", HttpOnly: true, Secure: a.secure || r.TLS != nil,
+		Name: cookieSession, Value: id, Path: "/", HttpOnly: true, Secure: a.secureRequest(r),
 		SameSite: http.SameSiteLaxMode, MaxAge: int(a.opts.SessionTTL.Seconds()),
 	})
 	return nil
+}
+
+// secureRequest reports whether the session cookie must be Secure: the
+// public URL is https, the connection is TLS, or a trusted proxy says the
+// browser reached it over https (X-Forwarded-Proto). The header is
+// ignored from anyone else.
+func (a *Authenticator) secureRequest(r *http.Request) bool {
+	if a.secure || r.TLS != nil {
+		return true
+	}
+	if !isTrusted(remoteAddr(r.RemoteAddr), a.opts.TrustedProxies) {
+		return false
+	}
+	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
+	return strings.EqualFold(strings.TrimSpace(proto), "https")
 }
 
 func unsafe(method string) bool {
@@ -435,7 +450,7 @@ func (a *Authenticator) logout(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieSession, Value: "", Path: "/", HttpOnly: true, Secure: a.secure,
+	http.SetCookie(w, &http.Cookie{Name: cookieSession, Value: "", Path: "/", HttpOnly: true, Secure: a.secureRequest(r),
 		SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	http.Redirect(w, r, "/signed-out", http.StatusSeeOther)
 }
