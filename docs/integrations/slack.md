@@ -54,7 +54,7 @@ Findings below `PATCHLINE_NOTIFY_MIN_SEVERITY`, and findings closed before they 
 
 - Progress is stored per finding, so restarts and Slack outages only delay messages.
 - `429` responses pause delivery for `Retry-After`; other errors are retried with backoff.
-- The first sync after installing Patchline on a database with many open findings posts all of them that meet the threshold; raise `PATCHLINE_NOTIFY_MIN_SEVERITY` first if that is too many.
+- When Slack is first connected to a database that already has many open findings, every finding that meets the threshold is posted; raise `PATCHLINE_NOTIFY_MIN_SEVERITY` first if that would be too many.
 
 ## Check
 

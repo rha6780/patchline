@@ -15,7 +15,7 @@ PATCHLINE_NOTIFY_WEBHOOK_ENVIRONMENTS=prod     # default: all environments
 PATCHLINE_PUBLIC_URL=https://patchline.example.com      # adds finding.url
 ```
 
-Slack takes the same filters as `PATCHLINE_SLACK_MIN_SEVERITY`, `PATCHLINE_SLACK_SERVICES` and `PATCHLINE_SLACK_ENVIRONMENTS`. Without Slack and a webhook, messages are printed to stdout.
+Slack has the same filters: `PATCHLINE_SLACK_MIN_SEVERITY`, `PATCHLINE_SLACK_SERVICES` and `PATCHLINE_SLACK_ENVIRONMENTS`. Without either Slack or a webhook, messages are printed to stdout.
 
 ## Requests
 
@@ -72,4 +72,4 @@ Compute it over the raw body, before parsing.
 - Any `2xx` is success. `429` and `503` pause delivery for `Retry-After` (30 s without one); other responses and network errors are retried with backoff up to an hour.
 - Events are sent in order per finding; a finding's next event waits until the current one succeeds.
 - Failed deliveries are listed under **Integrations → Notification failures** with sink `webhook`.
-- Setting the URL on a database with many open findings sends all of those that match. Set the filters first.
+- Setting the URL on a database that already has many open findings sends every one that matches, so set the filters first.

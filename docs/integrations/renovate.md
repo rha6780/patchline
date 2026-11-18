@@ -2,7 +2,7 @@
 
 English | [한국어](renovate.ko.md)
 
-Renovate proposes *how to fix it*. Patchline does not talk to Renovate directly: it reads Renovate's pull requests through the [Git webhooks](git-webhooks.md) and links them to findings.
+Renovate proposes *how to fix* a vulnerability. Patchline does not talk to Renovate directly: it reads Renovate's pull requests through the [Git webhooks](git-webhooks.md) and links them to findings.
 
 ## What Patchline reads from a pull request
 
@@ -13,7 +13,7 @@ Renovate proposes *how to fix it*. Patchline does not talk to Renovate directly:
 | Repository full name | Finding's repository (`repo` in the inventory) |
 | Base branch | Environment the PR is matched in (`main` → findings of `...@main`, plus `default` for projects without a version) |
 
-Each package is matched to open findings by name (Maven `group:artifact` equals `group/artifact`). The target version is then compared with the vulnerability's affected ranges: first from the local OSV mirror ([built-in detection](native-detection.md)), then from Dependency-Track when it reports the finding. Findings from any source get a verdict this way, as long as one of them knows the ranges.
+Each package is matched to open findings by name (Maven `group:artifact` equals `group/artifact`). The target version is then compared with the vulnerability's affected ranges: first from the local OSV mirror ([built-in detection](native-detection.md)), then from Dependency-Track when it reports the finding. This way a finding from any source gets a verdict, as long as one of the two knows the affected ranges.
 
 | Verdict | Meaning |
 |---|---|
@@ -21,7 +21,7 @@ Each package is matched to open findings by name (Maven `group:artifact` equals 
 | ⚠️ still affected | Target version is still inside a range: the PR is not enough |
 | ❔ not verified | No range known for this package |
 
-A linked PR moves the finding to *in progress*; merging moves it to *awaiting verification*. Only the next BOM resolves it.
+A linked PR moves the finding to *in progress*; merging moves it to *awaiting verification*. Only the next SBOM resolves it.
 
 ## Renovate configuration
 

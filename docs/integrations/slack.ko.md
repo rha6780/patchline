@@ -54,7 +54,7 @@ Finding은 서비스의 채널로, 없으면 `PATCHLINE_SLACK_DEFAULT_CHANNEL`�
 
 - Finding별로 진행 상황을 저장하므로 재시작이나 Slack 장애가 있어도 메시지가 늦어질 뿐 빠지지 않습니다.
 - `429`를 받으면 `Retry-After`만큼 쉬고, 그 밖의 오류는 간격을 늘려 재시도합니다.
-- 열린 Finding이 많은 DB에서 처음 연결하면 기준을 넘는 건이 한꺼번에 전송됩니다. 너무 많다면 먼저 `PATCHLINE_NOTIFY_MIN_SEVERITY`를 올리세요.
+- 열린 Finding이 이미 많은 상태에서 Slack을 처음 연결하면 기준을 넘는 Finding이 한꺼번에 전송됩니다. 너무 많다면 먼저 `PATCHLINE_NOTIFY_MIN_SEVERITY`를 올리세요.
 
 ## 확인
 

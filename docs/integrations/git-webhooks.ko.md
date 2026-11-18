@@ -2,7 +2,7 @@
 
 [English](git-webhooks.md) | 한국어
 
-Patchline은 `POST /webhooks/gitea`에서 `pull_request` 이벤트를 받습니다. Gitea, Forgejo, GitHub 모두 같은 엔드포인트를 씁니다(payload 형식이 같음).
+Patchline은 `POST /webhooks/gitea`에서 `pull_request` 이벤트를 받습니다. Gitea, Forgejo, GitHub 모두 같은 엔드포인트를 씁니다. payload 형식이 같기 때문입니다.
 
 ## Patchline 설정
 
@@ -52,4 +52,4 @@ Secret을 설정하면 모든 요청에 올바른 HMAC-SHA256 서명(`X-Gitea-Si
 
 ## 확인
 
-Pull request 이벤트로 **Test delivery**(Gitea/Forgejo) 또는 **Redeliver**(GitHub)를 실행하면 Patchline이 `202`로 응답합니다. `401`이면 Secret이 다릅니다.
+Pull request 이벤트로 **Test delivery**(Gitea/Forgejo) 또는 **Redeliver**(GitHub)를 실행하면 Patchline이 `202`로 응답합니다. `401`이면 Secret이 일치하지 않는 것입니다.

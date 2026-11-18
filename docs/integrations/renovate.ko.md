@@ -13,7 +13,7 @@ Renovate는 *어떻게 고칠지*를 제안합니다. Patchline은 Renovate와 �
 | 저장소 전체 이름 | Finding의 저장소(인벤토리의 `repo`) |
 | base 브랜치 | PR을 연결할 환경(`main` → `...@main`의 Finding, 버전이 없는 프로젝트의 `default`도 포함) |
 
-패키지마다 열린 Finding과 이름으로 연결합니다(Maven `group:artifact`는 `group/artifact`와 같게 봄). 이어서 목표 버전을 취약 버전 범위와 비교합니다. 범위는 먼저 로컬 OSV 미러([자체 탐지](native-detection.ko.md))에서 찾고, 없으면 Finding을 보고한 Dependency-Track에서 찾습니다. 그래서 어느 출처의 Finding이든 둘 중 하나가 범위를 알면 판정을 받습니다.
+패키지마다 열린 Finding과 이름으로 연결합니다(Maven `group:artifact`는 `group/artifact`와 같게 봄). 이어서 목표 버전을 취약 버전 범위와 비교합니다. 범위는 먼저 로컬 OSV 미러([자체 탐지](native-detection.ko.md))에서 찾고, 없으면 Finding을 보고한 Dependency-Track에서 찾습니다. 따라서 Finding의 출처와 관계없이, 둘 중 하나라도 범위를 알면 판정할 수 있습니다.
 
 | 판정 | 의미 |
 |---|---|
@@ -21,13 +21,13 @@ Renovate는 *어떻게 고칠지*를 제안합니다. Patchline은 Renovate와 �
 | ⚠️ 여전히 영향 있음 | 목표 버전이 아직 범위 안에 있음. 이 PR로는 부족함 |
 | ❔ 확인 불가 | 이 패키지의 범위 정보가 없음 |
 
-PR이 연결되면 Finding은 *조치중*, Merge되면 *검증대기*가 됩니다. 해결은 다음 BOM에서만 판정합니다.
+PR이 연결되면 Finding은 *조치중*, Merge되면 *검증대기*가 됩니다. 해결 여부는 다음 SBOM으로만 판정합니다.
 
 ## Renovate 설정
 
 Patchline은 Renovate 기본 설정으로 동작합니다. 기본 PR 본문을 유지하세요(`prBodyTemplate`을 바꿔 변경 표를 없애지 마세요).
 
-Gitea에서 셀프호스팅하는 예시입니다.
+Gitea에서 Renovate를 직접 운영하는 예시입니다.
 
 ```js
 // config.js (Renovate runner)

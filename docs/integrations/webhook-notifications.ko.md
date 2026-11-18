@@ -26,7 +26,7 @@ Slack에도 같은 필터를 `PATCHLINE_SLACK_MIN_SEVERITY`, `PATCHLINE_SLACK_SE
 | `X-Patchline-Signature-256` | 본문을 secret으로 HMAC-SHA256한 hex 값에 `sha256=`를 붙인 값 (secret이 있을 때만) |
 
 - `finding.opened`: Finding이 처음으로 기준을 넘었을 때. 첫 정책 평가 뒤에 보내므로 기한이 들어 있습니다.
-- `finding.event`: 이후 생긴 모든 변경(상태·심각도·기한 변경, 수정 PR, 리마인더, 담당자 지정, 요청). `event` 객체가 붙습니다.
+- `finding.event`: 이후 생긴 모든 변경(상태·심각도·기한 변경, 수정 PR, 기한 알림, 담당자 지정, 요청). `event` 객체가 붙습니다.
 
 두 요청 모두 Finding의 현재 상태를 담습니다. 본문 예시와 필드는 [영문 문서](webhook-notifications.md#requests)와 같습니다.
 
@@ -47,5 +47,5 @@ def valid(secret: bytes, body: bytes, header: str) -> bool:
 
 - `2xx`면 성공입니다. `429`, `503`은 `Retry-After`만큼(없으면 30초) 멈췄다 다시 보냅니다. 그 밖의 응답과 네트워크 오류는 최대 1시간까지 간격을 늘려 재시도합니다.
 - Finding마다 이벤트를 순서대로 보냅니다. 앞 이벤트가 성공해야 다음 이벤트를 보냅니다.
-- 실패한 전달은 **연동 → 알림 실패**에 sink `webhook`으로 표시됩니다.
-- 열린 Finding이 많은 DB에 URL을 설정하면 조건에 맞는 Finding이 모두 전송됩니다. 필터부터 설정하세요.
+- 실패한 전달은 **연동 상태 → 알림 실패**에 sink `webhook`으로 표시됩니다.
+- 열린 Finding이 이미 많은 상태에서 URL을 설정하면 조건에 맞는 Finding이 모두 전송되므로, 필터부터 설정하세요.

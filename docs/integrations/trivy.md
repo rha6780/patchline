@@ -2,7 +2,7 @@
 
 English | [한국어](trivy.ko.md)
 
-Trivy has up to three roles around Patchline:
+Trivy can play up to three roles alongside Patchline:
 
 | Use | What it does | Guide |
 |---|---|---|
@@ -41,7 +41,7 @@ To run without Trivy, set `PATCHLINE_TRIVY_URL=` (empty); then only language pac
 
 - OS packages need the `distro` qualifier in their purl (`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`), as `trivy image --format cyclonedx` writes it. Packages without it are skipped.
 - Debian and Ubuntu advisories name source packages: Patchline reads Trivy's `aquasecurity:trivy:SrcName` properties (or Syft's `upstream` qualifier), so `libssl1.1` is checked as `openssl`.
-- One upload is one scan per OS release. If Trivy cannot be reached, the upload is retried and nothing resolves in the meantime.
+- Each upload is sent to Trivy as one scan per OS release. If Trivy cannot be reached, the upload is retried and nothing resolves in the meantime.
 - Each CVE is its own finding, even when one distribution advisory (`DLA-3942-1`) fixes several; the advisory is kept as an alias.
 
 ## Air-gapped servers

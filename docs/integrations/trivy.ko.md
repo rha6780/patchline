@@ -2,11 +2,11 @@
 
 [English](trivy.md) | 한국어
 
-Trivy는 Patchline 주변에서 최대 세 가지 역할을 합니다.
+Trivy는 Patchline과 함께 최대 세 가지 역할을 합니다.
 
 | 용도 | 하는 일 | 가이드 |
 |---|---|---|
-| Patchline의 엔진 | Patchline이 올라온 SBOM의 OS 패키지(deb, rpm, apk)를 Trivy 서버로 보내고, 결과를 Finding으로 기록 | 이 문서 |
+| Patchline의 엔진 | Patchline이 업로드된 SBOM의 OS 패키지(deb, rpm, apk)를 Trivy 서버로 보내고, 결과를 Finding으로 기록 | 이 문서 |
 | CI의 SBOM 생성기 | `trivy fs` / `trivy image`로 CI가 올릴 CycloneDX SBOM 생성 | [CI의 SBOM 생성](sbom-ci.ko.md) |
 | Dependency-Track 분석기(선택) | Dependency-Track이 BOM의 구성요소를 같은 Trivy 서버로 보냄 | [아래](#선택-dependency-track-분석기) |
 
@@ -25,7 +25,7 @@ docker run -d --name trivy -p 8083:8080 -v trivy-cache:/root/.cache/trivy \
   -e TRIVY_LISTEN=0.0.0.0:8080 -e TRIVY_TOKEN=<token> aquasec/trivy:<version> server
 ```
 
-버전(`TRIVY_VERSION`)은 검토한 것으로 고정하세요. Patchline과 Dependency-Track이 쓰는 Trivy 서버 API는 공개 문서가 없으므로, Trivy를 올린 뒤에는 업로드가 계속 대조되는지 확인하세요.
+버전(`TRIVY_VERSION`)은 검토한 것으로 고정하세요. Patchline과 Dependency-Track이 쓰는 Trivy 서버 API는 공개 문서가 없으므로, Trivy를 업그레이드한 뒤에는 업로드가 계속 대조되는지 확인하세요.
 
 ## 2. Patchline 연결
 
@@ -39,9 +39,9 @@ PATCHLINE_TRIVY_SCOPE=os        # all: 언어 패키지도 보냄(OSV 결과와 
 
 Trivy 없이 쓰려면 `PATCHLINE_TRIVY_URL=`(빈 값)로 둡니다. 그러면 언어 패키지만 대조합니다.
 
-- OS 패키지의 purl에는 `distro` 한정자가 필요합니다(`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`). `trivy image --format cyclonedx`가 이렇게 씁니다. 없으면 건너뜁니다.
+- OS 패키지의 purl에는 `distro` 한정자가 필요합니다(`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`). `trivy image --format cyclonedx`는 이 한정자를 넣어 줍니다. 한정자가 없는 패키지는 건너뜁니다.
 - Debian·Ubuntu 권고는 소스 패키지 이름을 씁니다. Trivy의 `aquasecurity:trivy:SrcName` 속성(또는 Syft의 `upstream` 한정자)을 읽어 `libssl1.1`을 `openssl`로 조회합니다.
-- 업로드 한 번에 OS 릴리스마다 한 번씩 스캔합니다. Trivy에 연결할 수 없으면 업로드를 재시도하고, 그동안은 해결 판정을 하지 않습니다.
+- 업로드 한 번마다 OS 릴리스별로 Trivy 스캔을 한 번씩 합니다. Trivy에 연결할 수 없으면 업로드를 재시도하고, 그동안은 해결 판정을 하지 않습니다.
 - 배포판 권고 하나(`DLA-3942-1`)가 CVE 여러 개를 고쳐도 CVE마다 별도 Finding입니다. 권고 ID는 별칭으로 보관합니다.
 
 ## 인터넷이 막힌 서버

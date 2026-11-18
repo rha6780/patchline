@@ -2,9 +2,9 @@
 
 [English](dependency-track.md) | 한국어
 
-선택 사항입니다. Patchline은 스스로 취약점을 찾습니다([탐지](native-detection.ko.md)). 이미 Dependency-Track을 쓰고 있다면 두 번째 출처로 연결하세요. Patchline은 Dependency-Track의 알림을 받고 REST API로 Finding을 조회합니다. 판정은 Patchline의 승인 흐름에서 하며, Dependency-Track이 보고한 Finding의 승인된 판정은 그곳에도 분석으로 기록해 두 도구가 같은 판정을 갖게 합니다. Dependency-Track에서 직접 한 분석도 Patchline의 Finding 상태에 반영됩니다.
+선택 사항입니다. Patchline은 스스로 취약점을 찾습니다([탐지](native-detection.ko.md)). 이미 Dependency-Track을 쓰고 있다면 두 번째 출처로 연결하세요. Patchline은 Dependency-Track의 알림을 받고 REST API로 Finding을 조회합니다. 판정은 Patchline의 승인 흐름에서 합니다. Dependency-Track이 보고한 Finding의 판정이 승인되면 Dependency-Track에도 분석 결과로 기록해 두 도구의 판정을 맞춥니다. Dependency-Track에서 직접 한 분석도 Patchline의 Finding 상태에 반영됩니다.
 
-둘이 보고한 Finding은 하나로 합쳐집니다. 같은 SBOM을 둘 다에 올리거나([CI의 SBOM 생성](sbom-ci.ko.md)), Patchline이 직접 대조하지 않을 프로젝트는 Dependency-Track에만 올리세요.
+양쪽에서 보고한 같은 취약점은 Finding 하나로 합쳐집니다. 같은 SBOM을 둘 다에 올리거나([CI의 SBOM 생성](sbom-ci.ko.md)), Patchline이 직접 대조하지 않을 프로젝트는 Dependency-Track에만 올리세요.
 
 Dependency-Track 4.14로 확인했습니다.
 
@@ -58,13 +58,13 @@ PATCHLINE_DT_RECONCILE_DELAY=2m                     # 큰 BOM 분석이 오래 �
 | 프로젝트 **이름** | 인벤토리(`projects`)에서 찾아 서비스, 담당자, Slack 채널에 연결 |
 | 프로젝트 **버전** | 환경(`main`, `prod` 등). 비어 있으면 `default` |
 
-Patchline에 올릴 때와 같은 이름을 쓰세요([프로젝트와 브랜치 등록](../projects.ko.md)). 환경마다 프로젝트 버전을 하나씩 씁니다. 예를 들어 기본 브랜치는 `storefront-api@main`, 배포된 이미지는 `storefront-api@prod`입니다. 버전마다 따로 해결되므로, UI에서 "main에서는 해결됐지만 prod에는 남은 건"을 보여줄 수 있습니다.
+Patchline에 올릴 때와 같은 이름을 쓰세요([프로젝트와 브랜치 등록](../projects.ko.md)). 환경마다 프로젝트 버전을 하나씩 씁니다. 예를 들어 기본 브랜치는 `storefront-api@main`, 배포된 이미지는 `storefront-api@prod`입니다. 버전마다 따로 해결되므로, UI에서 "main에서는 해결됐지만 prod에는 남은 건"을 보여 줄 수 있습니다.
 
 인벤토리에 없는 프로젝트는 *미등록*으로 저장되고 UI의 **연동 상태**에 표시됩니다.
 
 ## 5. 분석 판정
 
-판정은 Dependency-Track에서 합니다(Finding → **Analysis**). Patchline은 다음과 같이 반영합니다.
+Dependency-Track에서 Finding의 분석(Finding → **Analysis**)을 바꾸면 Patchline은 다음과 같이 상태에 반영합니다.
 
 | Dependency-Track | Patchline 상태 |
 |---|---|

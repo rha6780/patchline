@@ -2,9 +2,9 @@
 
 English | [한국어](dependency-track.ko.md)
 
-Optional. Patchline finds vulnerabilities on its own ([Detection](native-detection.md)); if you already run Dependency-Track, connect it as a second source. Patchline receives its notifications and reads findings through its REST API. Decisions stay in Patchline's approvals, and an approved decision on a finding Dependency-Track reports is written back as its analysis, so both tools agree. Analyses made directly in Dependency-Track move the finding in Patchline too.
+Optional. Patchline finds vulnerabilities on its own ([Detection](native-detection.md)); if you already run Dependency-Track, connect it as a second source. Patchline receives its notifications and reads findings through its REST API. Decisions are still made through Patchline's approvals; when one is approved on a finding Dependency-Track reports, it is written back there as an analysis, so both tools agree. An analysis made directly in Dependency-Track also updates the finding's state in Patchline.
 
-Findings both report are one finding. Upload the same SBOM to both ([SBOM in CI](sbom-ci.md#uploading-to-dependency-track-as-well)), or only to Dependency-Track for projects Patchline should not match itself.
+A vulnerability that both report is a single finding. Upload the same SBOM to both ([SBOM in CI](sbom-ci.md#uploading-to-dependency-track-as-well)), or only to Dependency-Track for projects Patchline should not match itself.
 
 Tested with Dependency-Track 4.14.
 
@@ -64,7 +64,7 @@ Projects missing from the inventory are kept as *unregistered* and listed on **I
 
 ## 5. Analysis decisions
 
-Triage in Dependency-Track (finding → **Analysis**). Patchline maps the decision:
+When you triage a finding in Dependency-Track (finding → **Analysis**), Patchline maps the decision to a state:
 
 | Dependency-Track | Patchline state |
 |---|---|

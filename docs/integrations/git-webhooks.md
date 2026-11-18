@@ -52,4 +52,4 @@ The repository's full name (`owner/name`) must be listed as `repo` in the invent
 
 ## Check
 
-Use **Test delivery** (Gitea/Forgejo) or **Redeliver** (GitHub) on a pull request event: Patchline answers `202`. A `401` means the secret differs.
+Use **Test delivery** (Gitea/Forgejo) or **Redeliver** (GitHub) on a pull request event: Patchline answers `202`. A `401` means the secret does not match.
