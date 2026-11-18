@@ -3,11 +3,13 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"strings"
 	"testing"
@@ -147,21 +149,47 @@ func TestLocalAdminFirstSignIn(t *testing.T) {
 	}
 }
 
+// Failures block the client that made them, not the account: someone
+// guessing cannot keep the admin out.
 func TestLocalAdminLockout(t *testing.T) {
-	srv, _ := localApp(t, Options{LocalAdmin: true})
-	b := newBrowser(t, srv.URL)
+	srv, _ := localApp(t, Options{LocalAdmin: true, TrustedProxies: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}})
+	attacker, admin := newBrowser(t, srv.URL), newBrowser(t, srv.URL)
+	from := func(b *browser, ip, password string) string {
+		_, loc, _ := b.do(http.MethodPost, "/auth/local", url.Values{"username": {AdminUser}, "password": {password}, "next": {"/findings"}},
+			"X-Forwarded-For", ip)
+		return loc
+	}
 	var loc string
 	for i := 0; i < maxFailures; i++ {
-		_, loc = b.login("guess")
+		loc = from(attacker, "203.0.113.7", "guess")
 	}
 	if !strings.Contains(loc, "error=login_locked") {
 		t.Fatalf("after %d failures: %s", maxFailures, loc)
 	}
-	if _, loc = b.login(DefaultPassword); !strings.Contains(loc, "error=login_locked") {
-		t.Fatalf("right password while locked: %s", loc)
+	if loc = from(attacker, "203.0.113.7", DefaultPassword); !strings.Contains(loc, "error=login_locked") {
+		t.Fatalf("right password from the blocked client: %s", loc)
 	}
-	if _, loc = newBrowser(t, srv.URL).login(DefaultPassword); !strings.Contains(loc, "login_locked") {
-		t.Fatalf("other client while locked: %s", loc)
+	// A forged hop left of the proxy's does not get the attacker out.
+	if loc = from(attacker, "198.51.100.1, 203.0.113.7", DefaultPassword); !strings.Contains(loc, "error=login_locked") {
+		t.Fatalf("forged X-Forwarded-For: %s", loc)
+	}
+	if loc = from(admin, "192.0.2.10", DefaultPassword); loc != "/account/password" {
+		t.Fatalf("the admin from elsewhere: %s", loc)
+	}
+}
+
+// Without trusted proxies X-Forwarded-For is ignored, so a client cannot
+// shed its failures by making up addresses.
+func TestLocalAdminLockoutIgnoresForwardedFor(t *testing.T) {
+	srv, _ := localApp(t, Options{LocalAdmin: true})
+	b := newBrowser(t, srv.URL)
+	var loc string
+	for i := 0; i < maxFailures; i++ {
+		_, loc, _ = b.do(http.MethodPost, "/auth/local", url.Values{"username": {AdminUser}, "password": {"guess"}},
+			"X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i))
+	}
+	if !strings.Contains(loc, "error=login_locked") {
+		t.Fatalf("rotating X-Forwarded-For escaped the block: %s", loc)
 	}
 }
 

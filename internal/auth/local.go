@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -24,16 +23,12 @@ const (
 
 	// MinPasswordLength is the shortest password accepted for the admin.
 	MinPasswordLength = 12
-	// maxFailures failed logins in a row lock the account for lockFor.
-	maxFailures = 5
-	lockFor     = 15 * time.Minute
-	bcryptCost  = 12
+	bcryptCost        = 12
 )
 
 // LocalStore keeps the local admin account.
 type LocalStore interface {
 	GetLocalAccount(ctx context.Context, username string) (store.LocalAccount, error)
-	RecordLoginFailure(ctx context.Context, username string, max int, lock time.Duration) (bool, error)
 	RecordLoginSuccess(ctx context.Context, username string) error
 	SetLocalPassword(ctx context.Context, username, hash string, mustChange bool, by store.Actor, keepSession string) error
 }
@@ -97,30 +92,39 @@ func (a *Authenticator) localLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user, password := strings.TrimSpace(r.PostForm.Get("username")), r.PostForm.Get("password")
 	next := SafeNext(r.PostForm.Get("next"))
+	addr := clientAddr(r, a.opts.TrustedProxies)
+	client := clientKey(addr)
 
-	acct, err := a.store.GetLocalAccount(ctx, user)
-	if errors.Is(err, sql.ErrNoRows) {
-		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
-		a.logger.Warn("local sign-in failed", "username", user, "reason", "unknown user", "remote", r.RemoteAddr)
-		loginRedirect(w, r, "login_invalid", next)
+	if until, ok := a.throttle.blocked(client); ok {
+		a.logger.Warn("local sign-in refused", "username", user, "reason", "too many failures", "client", client, "until", until)
+		loginRedirect(w, r, "login_locked", next)
 		return
 	}
-	if err != nil {
+	acct, err := a.store.GetLocalAccount(ctx, user)
+	unknown := errors.Is(err, sql.ErrNoRows)
+	if err != nil && !unknown {
 		a.logger.Error("load local account", "err", err)
 		http.Error(w, "could not sign in", http.StatusInternalServerError)
 		return
 	}
-	if acct.LockedUntil != nil && *acct.LockedUntil > a.store.TimeFromNow(0) {
-		a.logger.Warn("local sign-in refused", "username", user, "reason", "locked", "until", *acct.LockedUntil, "remote", r.RemoteAddr)
-		loginRedirect(w, r, "login_locked", next)
+	// An unknown user costs the same check as a wrong password.
+	hash := dummyHash
+	if !unknown {
+		hash = []byte(acct.PasswordHash)
+	}
+	var match bool
+	if !a.throttle.check(ctx, func() { match = bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil }) {
+		a.logger.Warn("local sign-in refused", "username", user, "reason", "busy", "client", client)
+		loginRedirect(w, r, "login_busy", next)
 		return
 	}
-	if bcrypt.CompareHashAndPassword([]byte(acct.PasswordHash), []byte(password)) != nil {
-		locked, err := a.store.RecordLoginFailure(ctx, user, maxFailures, lockFor)
-		if err != nil {
-			a.logger.Error("record login failure", "err", err)
+	if unknown || !match {
+		locked := a.throttle.fail(client)
+		reason := "wrong password"
+		if unknown {
+			reason = "unknown user"
 		}
-		a.logger.Warn("local sign-in failed", "username", user, "reason", "wrong password", "locked", locked, "remote", r.RemoteAddr)
+		a.logger.Warn("local sign-in failed", "username", user, "reason", reason, "client", client, "blocked", locked)
 		if locked {
 			loginRedirect(w, r, "login_locked", next)
 			return
@@ -128,6 +132,7 @@ func (a *Authenticator) localLogin(w http.ResponseWriter, r *http.Request) {
 		loginRedirect(w, r, "login_invalid", next)
 		return
 	}
+	a.throttle.succeed(client)
 	if err := a.store.RecordLoginSuccess(ctx, user); err != nil {
 		a.logger.Error("record login", "err", err)
 	}

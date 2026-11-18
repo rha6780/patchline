@@ -170,6 +170,25 @@ func TestSelfScan(t *testing.T) {
 	}
 }
 
+func TestTrustedProxies(t *testing.T) {
+	cfg, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_TRUSTED_PROXIES": "10.0.0.0/8, 192.168.1.5,::ffff:172.16.0.1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range cfg.TrustedProxies {
+		got = append(got, p.String())
+	}
+	if want := []string{"10.0.0.0/8", "192.168.1.5/32", "172.16.0.1/32"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for _, v := range []string{"10.0.0.0/33", "proxy.internal"} {
+		if _, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_TRUSTED_PROXIES": v})); err == nil {
+			t.Errorf("%q: want an error", v)
+		}
+	}
+}
+
 func TestTrivySettings(t *testing.T) {
 	cfg, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_TRIVY_URL": "http://trivy:8080", "PATCHLINE_TRIVY_TOKEN": "t", "PATCHLINE_TRIVY_SCOPE": "ALL"}))
 	if err != nil || cfg.TrivyURL != "http://trivy:8080" || cfg.TrivyToken != "t" || !cfg.TrivyAll {

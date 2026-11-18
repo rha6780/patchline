@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -105,6 +106,11 @@ type Config struct {
 	// AllowAnonymous lets requests without a session read
 	// (PATCHLINE_ALLOW_ANONYMOUS), for use behind an authenticating proxy.
 	AllowAnonymous bool
+	// TrustedProxies are the reverse proxies in front of Patchline
+	// (PATCHLINE_TRUSTED_PROXIES: comma-separated addresses or CIDRs).
+	// Their X-Forwarded-For tells sign-in attempts from different clients
+	// apart; without it everyone behind the proxy shares one address.
+	TrustedProxies []netip.Prefix
 
 	// OSVEcosystems are matched against SBOMs uploaded to Patchline
 	// (PATCHLINE_OSV_ECOSYSTEMS, comma-separated; "off" disables matching).
@@ -307,6 +313,18 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			*b.dst = p
 		}
 	}
+	if v, ok := lookup("PATCHLINE_TRUSTED_PROXIES"); ok && v != "" {
+		for _, e := range strings.Split(v, ",") {
+			if e = strings.TrimSpace(e); e == "" {
+				continue
+			}
+			p, err := parsePrefix(e)
+			if err != nil {
+				return Config{}, fmt.Errorf("PATCHLINE_TRUSTED_PROXIES: want addresses or CIDRs such as 10.0.0.0/8, got %q", e)
+			}
+			cfg.TrustedProxies = append(cfg.TrustedProxies, p)
+		}
+	}
 	if v, ok := lookup("PATCHLINE_OSV_ECOSYSTEMS"); ok && v != "" {
 		cfg.OSVEcosystems = nil
 		if !strings.EqualFold(strings.TrimSpace(v), "off") {
@@ -352,6 +370,20 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// parsePrefix reads a CIDR, or a single address as a one-address prefix.
+func parsePrefix(s string) (netip.Prefix, error) {
+	if strings.Contains(s, "/") {
+		p, err := netip.ParsePrefix(s)
+		return p.Masked(), err
+	}
+	a, err := netip.ParseAddr(s)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	a = a.Unmap()
+	return netip.PrefixFrom(a, a.BitLen()), nil
 }
 
 func severity(name, v string) (string, error) {

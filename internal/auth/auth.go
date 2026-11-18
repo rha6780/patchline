@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
@@ -53,6 +55,9 @@ type Options struct {
 	PublicURL string
 	// SessionTTL is how long a sign-in lasts.
 	SessionTTL time.Duration
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For is
+	// believed when telling clients apart (PATCHLINE_TRUSTED_PROXIES).
+	TrustedProxies []netip.Prefix
 }
 
 // Store keeps sessions, logins in flight and the local admin account.
@@ -79,6 +84,7 @@ type Authenticator struct {
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier // nil without OIDC
 	secure   bool
+	throttle *throttle
 }
 
 const (
@@ -98,7 +104,7 @@ func New(ctx context.Context, opts Options, policy Policy, st Store, logger *slo
 	if opts.OIDC == nil && !opts.LocalAdmin && !opts.AllowAnonymous {
 		return nil, errors.New("no way to sign in: enable the local admin, configure OIDC, or allow anonymous access")
 	}
-	a := &Authenticator{opts: opts, policy: policy, store: st, logger: logger}
+	a := &Authenticator{opts: opts, policy: policy, store: st, logger: logger, throttle: newThrottle(runtime.NumCPU())}
 	if opts.PublicURL != "" {
 		pub, err := url.Parse(strings.TrimRight(opts.PublicURL, "/"))
 		if err != nil || pub.Scheme == "" || pub.Host == "" {

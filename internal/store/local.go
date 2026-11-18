@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"time"
 )
 
 // LocalAccount is the built-in admin account.
@@ -51,35 +50,6 @@ func (s *Store) GetLocalAccount(ctx context.Context, username string) (LocalAcco
 		a.LastLoginAt = &last.String
 	}
 	return a, nil
-}
-
-// RecordLoginFailure counts a failed login. After max failures in a row the
-// account is locked for lock, and the counter starts over. It reports
-// whether this failure locked the account.
-func (s *Store) RecordLoginFailure(ctx context.Context, username string, max int, lock time.Duration) (locked bool, err error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return false, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-	var n int
-	if err = tx.QueryRowContext(ctx, `
-		UPDATE local_accounts SET failed_attempts = failed_attempts + 1 WHERE username = ?
-		RETURNING failed_attempts`, username).Scan(&n); err != nil {
-		return false, err
-	}
-	if n >= max {
-		if _, err = tx.ExecContext(ctx, `UPDATE local_accounts SET failed_attempts = 0, locked_until = ? WHERE username = ?`,
-			formatTime(s.now().Add(lock)), username); err != nil {
-			return false, err
-		}
-		locked = true
-	}
-	return locked, tx.Commit()
 }
 
 // RecordLoginSuccess clears failures and records the login time.

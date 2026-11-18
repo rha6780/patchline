@@ -30,7 +30,7 @@ Webhook(`/webhooks/*`)과 헬스체크에는 로그인이 필요 없습니다. �
 
 | | |
 |---|---|
-| 잠금 | 연속 5회 실패하면 15분 동안 잠김 |
+| 잠금 | 한 주소(IPv6는 /64)에서 15분 안에 5회 실패하면 **그 주소**를 15분 동안 막습니다. 계정 자체는 잠그지 않으므로 비밀번호를 추측하는 사람이 관리자를 막을 수 없습니다. 리버스 프록시 뒤라면 `PATCHLINE_TRUSTED_PROXIES`를 설정하세요. 설정하지 않으면 모든 사용자가 프록시 주소 하나를 공유합니다. 비밀번호 확인은 동시에 몇 개만 실행하고 나머지는 다시 시도하게 합니다. 실패 횟수는 메모리에만 있어 재시작하면 초기화됩니다 |
 | 비밀번호 변경 | 관리자의 다른 세션이 종료됨 |
 | 비밀번호 분실 | `patchline reset-admin-password`(같은 `PATCHLINE_DB_PATH`로 실행)를 실행하면 `admin`으로 돌아가고(다음 로그인 때 변경 필요) 세션이 종료됩니다. 직접 설치용 compose에서는 `docker compose run --rm patchline reset-admin-password` |
 | 끄기 | SSO가 동작하면 `PATCHLINE_LOCAL_ADMIN=false`. 기존 세션도 종료됨 |

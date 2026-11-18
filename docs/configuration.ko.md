@@ -82,6 +82,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_PUBLIC_URL` | — | 사용자가 접속하는 Patchline 주소. OIDC를 쓰면 필수(Redirect URI `/auth/callback`). `https://`면 세션 쿠키에 Secure가 붙음 |
 | `PATCHLINE_LOCAL_ADMIN` | `true` | 내장 `admin` 계정(`admin` / `admin`으로 시작, 비밀번호 변경 강제). `false`로 하려면 OIDC 필요 |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | 세션 없는 요청도 조회 허용. 인증 프록시 뒤에서만 사용 |
+| `PATCHLINE_TRUSTED_PROXIES` | — | Patchline 앞의 리버스 프록시(주소 또는 CIDR, 쉼표로 구분). 이 프록시가 보낸 `X-Forwarded-For`로만 로그인 시도의 클라이언트를 구분하고, 다른 곳에서 온 값은 무시합니다 |
 | `PATCHLINE_OIDC_ISSUER` | — | OIDC Issuer URL. 비우면 로컬 관리자만 사용 |
 | `PATCHLINE_OIDC_CLIENT_ID` | — | OIDC 클라이언트 ID |
 | `PATCHLINE_OIDC_CLIENT_SECRET` | — | OIDC 클라이언트 Secret |

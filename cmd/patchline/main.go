@@ -312,7 +312,8 @@ func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, l
 	if err != nil {
 		return nil, err
 	}
-	opts := auth.Options{LocalAdmin: cfg.LocalAdmin, AllowAnonymous: cfg.AllowAnonymous, PublicURL: cfg.PublicURL, SessionTTL: cfg.SessionTTL}
+	opts := auth.Options{LocalAdmin: cfg.LocalAdmin, AllowAnonymous: cfg.AllowAnonymous, PublicURL: cfg.PublicURL, SessionTTL: cfg.SessionTTL,
+		TrustedProxies: cfg.TrustedProxies}
 	if cfg.OIDCEnabled() {
 		opts.OIDC = &auth.Config{Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret,
 			Scopes: cfg.OIDCScopes, GroupsClaims: cfg.OIDCGroupsClaims}
@@ -343,7 +344,7 @@ func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, l
 	if cfg.LocalAdmin {
 		summary = "admin (local): all permissions; " + summary
 	}
-	logger.Info("sign-in", "local_admin", cfg.LocalAdmin, "oidc_issuer", cfg.OIDCIssuer, "anonymous_read", cfg.AllowAnonymous,
+	logger.Info("sign-in", "trusted_proxies", cfg.TrustedProxies, "local_admin", cfg.LocalAdmin, "oidc_issuer", cfg.OIDCIssuer, "anonymous_read", cfg.AllowAnonymous,
 		"access_policy", cfg.AccessPolicyPath, "policy", summary)
 	if cfg.AllowAnonymous {
 		logger.Warn("PATCHLINE_ALLOW_ANONYMOUS=true: anyone who can reach Patchline can read findings")

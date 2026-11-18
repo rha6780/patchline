@@ -30,7 +30,7 @@ On first start Patchline creates the account `admin` with the password `admin`, 
 
 | | |
 |---|---|
-| Lockout | 5 failed sign-ins in a row lock the account for 15 minutes |
+| Lockout | 5 failed sign-ins from one address within 15 minutes block **that address** (an IPv6 /64) for 15 minutes; the account itself is never locked, so someone guessing cannot keep the admin out. Behind a reverse proxy, set `PATCHLINE_TRUSTED_PROXIES`, or every client shares the proxy's address. A few password checks run at once; the rest are asked to retry. The counts live in memory and a restart clears them |
 | Password change | Ends the admin's other sessions |
 | Lost password | `patchline reset-admin-password` (with the same `PATCHLINE_DB_PATH`) sets it back to `admin`, to be changed at the next sign-in, and ends its sessions. In the self-hosted setup: `docker compose run --rm patchline reset-admin-password` |
 | Turn it off | `PATCHLINE_LOCAL_ADMIN=false` once single sign-on works; its sessions end |
