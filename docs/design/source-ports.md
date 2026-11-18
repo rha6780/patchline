@@ -14,7 +14,7 @@ Non-goals:
 - No separate Go modules and no runtime plugins: adapters are compiled in and registered in `main`.
 - Gitea / GitHub pull request webhooks are not a vulnerability source. They keep their own handler and only use the new advisory port.
 
-## Where Dependency-Track leaks today
+## Where the core depended on Dependency-Track (before phase 1)
 
 | Place | What depends on Dependency-Track |
 |---|---|
@@ -136,7 +136,7 @@ What moves where:
 
 ## Phases
 
-Each phase is one commit or more, keeps every existing test passing, and can ship alone.
+Each phase is one or more commits, keeps every existing test passing, and can ship alone.
 
 | Phase | Change | Done when |
 |---|---|---|

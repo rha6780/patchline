@@ -29,7 +29,7 @@ CI ── SBOM ───────┤ patchline: SBOM inbox → components →
 
 ### Sources and sightings
 
-A **source** reports **sightings**: "project P of source S contains component C with vulnerability V". Today the only source is `dependencytrack`; phase 1 adds `patchline`.
+A **source** reports **sightings**: "project P of source S contains component C with vulnerability V". Before phase 1 the only source was `dependencytrack`; phase 1 added `patchline`.
 
 - A finding is still one service × environment × component (purl) × vulnerability (canonical id, CVE preferred). When Dependency-Track and Patchline see the same thing, they update the **same finding**: one message, one due date.
 - `finding_sightings` records which source projects currently report a finding. A reconciliation of one source project (a new BOM, or a re-analysis) replaces that project's sightings.
@@ -38,7 +38,7 @@ A **source** reports **sightings**: "project P of source S contains component C 
 
 ### SBOM intake (source `patchline`)
 
-- `POST /ingest/sbom?project=<name>&version=<version>` takes a CycloneDX (JSON) or SPDX (JSON) document. It authenticates with the webhook token, and the request may also be multipart with a `bom` field, like Dependency-Track's upload.
+- `POST /ingest/sbom?project=<name>&version=<version>` takes a CycloneDX (JSON or XML) or SPDX (JSON) document. It authenticates with the webhook token or an API token with `sbom.upload`, and the request may also be multipart with a `bom` field, like Dependency-Track's upload.
 - The handler only stores the upload in the inbox (same retries and de-duplication as webhooks). The processor then works through it:
   1. parses the SBOM: components with purls, the serial, and the `patchline:git:commit` / `patchline:git:ref` properties
   2. replaces the project version's component snapshot
@@ -61,9 +61,9 @@ Done. **Components** (`/components`, `GET /api/v1/components`) finds where a pac
 
 Done.
 - Requests now include *not affected* (with a CycloneDX justification) and *false positive* besides risk acceptance, all through the request/approve flow; nobody approves their own.
-- A finding Dependency-Track knows gets the decision written there (`NOT_AFFECTED` + justification, `FALSE_POSITIVE`, or `EXPLOITABLE` + `WILL_NOT_FIX` + suppressed); one only Patchline reports keeps it in Patchline (`analysis_*` columns).
+- For a finding that Dependency-Track also reports, the decision is written there (`NOT_AFFECTED` + justification, `FALSE_POSITIVE`, or `EXPLOITABLE` + `WILL_NOT_FIX` + suppressed); for one that only Patchline reports, it is kept in Patchline (`analysis_*` columns).
 - `GET /api/v1/vex?project=&version=` exports the snapshot's findings as CycloneDX 1.5 VEX: open → `in_triage`, fix merged → `in_triage` + `update`, decisions as decided. The output validates against the CycloneDX schema.
-- VEX `affects` are BOM-Links into the uploaded CycloneDX SBOM (`urn:cdx:<serial>/<version>#<bom-ref>`); Trivy's `--vex` applies them (checked: a not-affected Log4Shell disappears, the open CVE stays).
+- VEX `affects` are BOM-Links into the uploaded CycloneDX SBOM (`urn:cdx:<serial>/<version>#<bom-ref>`); Trivy's `--vex` applies them (verified: a not-affected Log4Shell disappears, the open CVE stays).
 - Not yet: revoking a decision from the UI.
 
 ### Phase 4: Trivy as an optional engine
