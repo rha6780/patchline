@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/rha6780/patchline/internal/job"
 	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/policy"
+	"github.com/rha6780/patchline/internal/selfscan"
 	"github.com/rha6780/patchline/internal/server"
 	"github.com/rha6780/patchline/internal/sink/console"
 	"github.com/rha6780/patchline/internal/sink/slack"
@@ -158,6 +160,21 @@ func run() error {
 		proc.Matcher = engines[0]
 	default:
 		proc.Matcher = engines
+	}
+
+	// Patchline watches itself: its own build is queued like an upload, so
+	// advisories against it become findings and notifications.
+	if cfg.SelfScan {
+		if !slices.Contains(cfg.OSVEcosystems, "Go") {
+			logger.Warn("self scan: PATCHLINE_OSV_ECOSYSTEMS does not include Go, so Patchline's own modules are not matched")
+		}
+		if _, err := selfscan.Enqueue(ctx, st, version, time.Now()); err != nil {
+			logger.Warn("self scan: could not queue Patchline's own SBOM", "err", err)
+		} else {
+			logger.Info("self scan: Patchline's own build queued for analysis", "project", selfscan.Project, "version", version)
+		}
+	} else {
+		logger.Info("self scan off (PATCHLINE_SELF_SCAN=false): Patchline does not check its own dependencies")
 	}
 
 	var workers sync.WaitGroup

@@ -78,6 +78,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_TRIVY_URL` | — | 자체 탐지의 두 번째 엔진인 Trivy 서버. OS 패키지(deb, rpm, apk) 대조 |
 | `PATCHLINE_TRIVY_TOKEN` | — | Trivy 서버의 `--token` |
 | `PATCHLINE_TRIVY_SCOPE` | `os` | `all`이면 언어 패키지도 Trivy로 보냄(OSV 결과와 합쳐짐) |
+| `PATCHLINE_SELF_SCAN` | `true` | Patchline 자체 빌드(Go 모듈, Go 표준 라이브러리)의 취약점 점검. [Patchline 자체 취약점](#patchline-자체-취약점) 참고. `false`면 끔 |
 | `PATCHLINE_PUBLIC_URL` | — | 사용자가 접속하는 Patchline 주소. OIDC를 쓰면 필수(Redirect URI `/auth/callback`). `https://`면 세션 쿠키에 Secure가 붙음 |
 | `PATCHLINE_LOCAL_ADMIN` | `true` | 내장 `admin` 계정(`admin` / `admin`으로 시작, 비밀번호 변경 강제). `false`로 하려면 OIDC 필요 |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | 세션 없는 요청도 조회 허용. 인증 프록시 뒤에서만 사용 |
@@ -88,6 +89,12 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_OIDC_GROUPS_CLAIM` | `groups` | 그룹으로 읽을 ID 토큰 클레임. 쉼표로 여러 개, 점(.)으로 중첩 클레임(`realm_access.roles`) |
 | `PATCHLINE_SESSION_TTL` | `12h` | 로그인 유지 시간 |
 | `PATCHLINE_ACCESS_POLICY_PATH` | — | 그룹 → 권한 매핑([예시](../examples/access/access-policy.yaml)). 비우면 로그인한 사람은 조회만 가능 |
+
+### Patchline 자체 취약점
+
+Patchline은 시작할 때마다 자신의 바이너리(빌드에 쓰인 Go 모듈과 Go 표준 라이브러리)를 SBOM으로 만들어 업로드와 똑같이 매칭합니다. 찾은 취약점은 프로젝트 `patchline`(환경 `default`)의 finding이 되고 다른 finding처럼 알림이 갑니다: `PATCHLINE_SLACK_DEFAULT_CHANNEL`, 웹훅 또는 stdout으로, 인벤토리에서 `patchline`을 프로젝트로 가진 서비스가 있으면 그 `slack_channel`로 보냅니다. 나중에 공개된 권고는 OSV 데이터가 바뀔 때 다시 분석되어 잡히고, Patchline을 업그레이드하면 새 빌드에서 고쳐진 finding은 해결됩니다. finding의 수정 버전은 다음 Patchline 릴리스에 필요한 모듈 버전입니다.
+
+`PATCHLINE_OSV_ECOSYSTEMS`에 `Go`가 있어야 합니다(기본값). 끄려면 `PATCHLINE_SELF_SCAN=false`로 설정하세요.
 
 ### Dependency-Track(선택)
 

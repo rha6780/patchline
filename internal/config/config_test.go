@@ -74,6 +74,7 @@ func TestFromLookupOverrides(t *testing.T) {
 	d := Default()
 	want.OIDCScopes, want.OIDCGroupsClaims, want.SessionTTL, want.LocalAdmin = d.OIDCScopes, d.OIDCGroupsClaims, d.SessionTTL, d.LocalAdmin
 	want.OSVEcosystems, want.OSVURL, want.OSVRefresh = d.OSVEcosystems, d.OSVURL, d.OSVRefresh
+	want.SelfScan = d.SelfScan
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
@@ -153,6 +154,19 @@ func TestOSVSettings(t *testing.T) {
 		if _, err := FromLookup(lookupFrom(v)); err == nil {
 			t.Errorf("%v: want an error", v)
 		}
+	}
+}
+
+func TestSelfScan(t *testing.T) {
+	if !Default().SelfScan {
+		t.Fatal("self scan should be on by default")
+	}
+	cfg, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_SELF_SCAN": "false"}))
+	if err != nil || cfg.SelfScan {
+		t.Fatalf("PATCHLINE_SELF_SCAN=false: %v %v", cfg.SelfScan, err)
+	}
+	if _, err := FromLookup(lookupFrom(map[string]string{"PATCHLINE_SELF_SCAN": "sometimes"})); err == nil {
+		t.Error("want an error")
 	}
 }
 

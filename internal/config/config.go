@@ -121,6 +121,12 @@ type Config struct {
 	// TrivyAll also sends language packages to Trivy
 	// (PATCHLINE_TRIVY_SCOPE=all; default os).
 	TrivyAll bool
+
+	// SelfScan matches Patchline's own build (its Go modules and the Go
+	// standard library) at start-up and files the findings under the
+	// project "patchline", so the people running it are told when it needs
+	// an upgrade (PATCHLINE_SELF_SCAN, default true).
+	SelfScan bool
 }
 
 // NotifyRoute selects the findings a notification sink is told about.
@@ -171,6 +177,8 @@ func Default() Config {
 		OSVEcosystems: DefaultOSVEcosystems,
 		OSVURL:        "https://osv-vulnerabilities.storage.googleapis.com",
 		OSVRefresh:    6 * time.Hour,
+
+		SelfScan: true,
 	}
 }
 
@@ -289,7 +297,8 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	for _, b := range []struct {
 		name string
 		dst  *bool
-	}{{"PATCHLINE_LOCAL_ADMIN", &cfg.LocalAdmin}, {"PATCHLINE_ALLOW_ANONYMOUS", &cfg.AllowAnonymous}} {
+	}{{"PATCHLINE_LOCAL_ADMIN", &cfg.LocalAdmin}, {"PATCHLINE_ALLOW_ANONYMOUS", &cfg.AllowAnonymous},
+		{"PATCHLINE_SELF_SCAN", &cfg.SelfScan}} {
 		if v, ok := lookup(b.name); ok && v != "" {
 			p, err := strconv.ParseBool(v)
 			if err != nil {

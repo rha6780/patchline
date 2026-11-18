@@ -78,6 +78,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_TRIVY_URL` | — | Trivy server as a second engine for built-in detection: OS packages (deb, rpm, apk) |
 | `PATCHLINE_TRIVY_TOKEN` | — | The Trivy server's `--token` |
 | `PATCHLINE_TRIVY_SCOPE` | `os` | `all` also sends language packages (merged with the OSV matches) |
+| `PATCHLINE_SELF_SCAN` | `true` | Check Patchline's own build (its Go modules and Go standard library) for vulnerabilities; see [Patchline's own vulnerabilities](#patchlines-own-vulnerabilities). `false` turns it off |
 | `PATCHLINE_PUBLIC_URL` | — | Where users reach Patchline; required with OIDC (redirect URI `/auth/callback`). `https://` makes the session cookie Secure |
 | `PATCHLINE_LOCAL_ADMIN` | `true` | Built-in `admin` account (starts as `admin` / `admin`, password change forced). `false` needs OIDC |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | Let requests without a session read; only behind an authenticating proxy |
@@ -88,6 +89,12 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_OIDC_GROUPS_CLAIM` | `groups` | ID token claim(s) read as groups, comma-separated; dotted names for nested claims (`realm_access.roles`) |
 | `PATCHLINE_SESSION_TTL` | `12h` | How long a sign-in lasts |
 | `PATCHLINE_ACCESS_POLICY_PATH` | — | Groups → permissions ([example](../examples/access/access-policy.yaml)). Unset = everyone who signs in can read |
+
+### Patchline's own vulnerabilities
+
+On every start Patchline describes its own binary — the Go modules it was built from and the Go standard library — as an SBOM and matches it like an upload. Advisories against it become findings of the project `patchline` (environment `default`) and are notified like any other: to `PATCHLINE_SLACK_DEFAULT_CHANNEL`, the webhook or stdout, or to the `slack_channel` of a service in the inventory that lists `patchline` as a project. Advisories published later are picked up when the OSV data changes, and upgrading Patchline resolves the findings the new build fixes. A finding's fixed version is the version of the module the next Patchline release needs.
+
+It needs `Go` in `PATCHLINE_OSV_ECOSYSTEMS` (the default). Set `PATCHLINE_SELF_SCAN=false` to turn it off.
 
 ### Dependency-Track (optional)
 
