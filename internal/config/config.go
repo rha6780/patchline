@@ -176,7 +176,7 @@ func Default() Config {
 
 		OSVEcosystems: DefaultOSVEcosystems,
 		OSVURL:        "https://osv-vulnerabilities.storage.googleapis.com",
-		OSVRefresh:    6 * time.Hour,
+		OSVRefresh:    30 * time.Minute,
 
 		SelfScan: true,
 	}
@@ -325,7 +325,7 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	if v, ok := lookup("PATCHLINE_OSV_REFRESH"); ok && v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil || d < time.Minute {
-			return Config{}, fmt.Errorf("PATCHLINE_OSV_REFRESH: want a duration of at least 1m such as 6h, got %q", v)
+			return Config{}, fmt.Errorf("PATCHLINE_OSV_REFRESH: want a duration of at least 1m such as 30m, got %q", v)
 		}
 		cfg.OSVRefresh = d
 	}

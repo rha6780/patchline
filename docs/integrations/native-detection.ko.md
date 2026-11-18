@@ -17,7 +17,7 @@ OSV 데이터가 바뀔 때마다 저장된 SBOM을 다시 분석합니다. 판�
 
 ```sh
 PATCHLINE_OSV_ECOSYSTEMS=Maven,npm,PyPI,Go    # 끄려면 off
-PATCHLINE_OSV_REFRESH=6h                       # 변경분을 받는 주기
+PATCHLINE_OSV_REFRESH=30m                      # 변경분을 받는 주기
 # PATCHLINE_OSV_URL=https://osv-mirror.internal  # 사내 미러(같은 구조)
 ```
 

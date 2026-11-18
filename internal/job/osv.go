@@ -12,7 +12,7 @@ import (
 // stored SBOMs whenever records changed.
 type OSV struct {
 	Syncer   *osv.Syncer
-	Interval time.Duration // default 6h
+	Interval time.Duration // default 30m
 	Logger   *slog.Logger
 	// OnChanged is called after a sync that changed records.
 	OnChanged func(ctx context.Context)
@@ -21,7 +21,7 @@ type OSV struct {
 // Run syncs at once, then every Interval, until ctx is cancelled.
 func (j *OSV) Run(ctx context.Context) {
 	if j.Interval == 0 {
-		j.Interval = 6 * time.Hour
+		j.Interval = 30 * time.Minute
 	}
 	if j.Logger == nil {
 		j.Logger = slog.Default()

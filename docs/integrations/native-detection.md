@@ -17,7 +17,7 @@ It is on by default for Maven, npm, PyPI and Go:
 
 ```sh
 PATCHLINE_OSV_ECOSYSTEMS=Maven,npm,PyPI,Go    # or off
-PATCHLINE_OSV_REFRESH=6h                       # how often to fetch changes
+PATCHLINE_OSV_REFRESH=30m                      # how often to fetch changes
 # PATCHLINE_OSV_URL=https://osv-mirror.internal  # internal mirror (same layout)
 ```
 

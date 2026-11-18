@@ -74,7 +74,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown limit |
 | `PATCHLINE_OSV_ECOSYSTEMS` | `Maven,npm,PyPI,Go` | OSV ecosystems for built-in detection (also `crates.io`, `NuGet`, `RubyGems`, `Packagist`). `off` only stores SBOMs |
 | `PATCHLINE_OSV_URL` | OSV exports | Where the OSV exports are served, for an internal mirror |
-| `PATCHLINE_OSV_REFRESH` | `6h` | How often OSV changes are fetched |
+| `PATCHLINE_OSV_REFRESH` | `30m` | How often OSV changes are fetched |
 | `PATCHLINE_TRIVY_URL` | — | Trivy server as a second engine for built-in detection: OS packages (deb, rpm, apk) |
 | `PATCHLINE_TRIVY_TOKEN` | — | The Trivy server's `--token` |
 | `PATCHLINE_TRIVY_SCOPE` | `os` | `all` also sends language packages (merged with the OSV matches) |
