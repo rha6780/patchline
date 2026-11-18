@@ -11,7 +11,7 @@ Patchline only knows what you upload. CI produces an SBOM per build and uploads 
 | Default branch (application dependencies) | Trivy `fs`, or the CycloneDX Gradle / Maven plugin | `main` |
 | Image that is deployed | Trivy `image` (includes OS packages) | `prod` |
 
-Use the project names listed in the inventory ([Registering projects and branches](../projects.md)). Gradle projects get exact versions only from a build-time plugin (Spring Boot BOMs resolve versions at build time); Trivy `fs` reads lockfiles.
+Use the project names listed in the inventory ([Registering projects and branches](../projects.md)). For Gradle projects, only a build-time plugin records exact versions, because Spring Boot BOMs resolve them at build time; Trivy `fs` reads lockfiles.
 
 ## Attach the commit
 
@@ -80,7 +80,7 @@ jobs:
             --data-binary @bom.patchline.json
 ```
 
-Pin `aquasec/trivy` to a version you have reviewed. The daily run matters less than it seems: Patchline re-analyzes stored SBOMs whenever its OSV data changes. It still refreshes the image's OS packages, which Trivy checks at upload time.
+Pin `aquasec/trivy` to a version you have reviewed. The daily run matters less than it may seem, because Patchline re-analyzes stored SBOMs whenever its OSV data changes. It still helps for image SBOMs, whose OS packages Trivy checks only at upload time.
 
 ## Gradle (Kotlin / Spring Boot)
 
@@ -131,4 +131,4 @@ curl -sSf -X POST "$DT_URL/api/v1/bom" -H "X-Api-Key: $DT_UPLOAD_KEY" \
   -F bom=@bom.patchline.json
 ```
 
-`DT_UPLOAD_KEY` belongs to a team with `BOM_UPLOAD` and `PROJECT_CREATION_UPLOAD`, not the key Patchline uses. The findings of both merge; Dependency-Track's resolve about `PATCHLINE_DT_RECONCILE_DELAY` after the upload.
+`DT_UPLOAD_KEY` belongs to a team with `BOM_UPLOAD` and `PROJECT_CREATION_UPLOAD`, not the key Patchline uses. Findings from both sources are merged. Those that Dependency-Track stops reporting resolve about `PATCHLINE_DT_RECONCILE_DELAY` after the upload.

@@ -30,13 +30,13 @@ Dependency-Track (optional) ── webhook ──┘      │     └──▶ O
 | `risk_accepted` | A risk acceptance is approved (or the finding is suppressed in Dependency-Track) |
 | `reopened` | A resolved finding is reported again |
 
-Decisions are made **in Patchline**: someone requests an exception, someone else approves it ([Sign-in and permissions](access-control.md)). The decision stays with the finding (who, when, why), closes it, and is exported as [VEX](integrations/native-detection.md#decisions-and-vex). When Dependency-Track also reports the finding, the approved decision is written there first, so both tools agree.
+Decisions are made **in Patchline**: someone requests an exception, someone else approves it ([Sign-in and permissions](access-control.md)). The finding keeps the decision (who, when, why), is closed by it, and the decision is exported as [VEX](integrations/native-detection.md#decisions-and-vex). When Dependency-Track also reports the finding, the approved decision is written there first, so both tools agree.
 
 ## Intake
 
 1. SBOM uploads (`/ingest/sbom`) and webhooks are validated, stored in an inbox table, and answered with `202`. Webhook deliveries are de-duplicated by the platform's delivery id when there is one, otherwise by content hash.
 2. A background processor handles inbox entries, retrying failures with backoff (30s → 30m, 5 attempts).
-3. An SBOM becomes the **snapshot** of its project version. Its components are matched: language packages against the OSV mirror, OS packages by the Trivy server. Every match is recorded as a finding with the advisory, the affected range and the fixed version as evidence. When the OSV data changes, every stored snapshot is matched again, so a new advisory creates findings without a new build.
+3. An SBOM becomes the **snapshot** of its project version. Its components are matched: language packages against the OSV mirror, OS packages through the Trivy server. Every match is recorded as a finding with the advisory, the affected range and the fixed version as evidence. When the OSV data changes, every stored snapshot is matched again, so a new advisory creates findings without a new build.
 4. The project **name** is resolved to a service through the inventory, and the **version** becomes the environment (`main`, `prod`; empty becomes `default`). Projects not in the inventory are kept as *unregistered*. A project moved to another service keeps its findings, with their history and decisions ([Registering projects and branches](projects.md)).
 5. A finding is one service × environment × component × vulnerability. CVE ids are preferred over GHSA/OSV ids as the canonical id; the others are kept as aliases. The same vulnerability reported by OSV and Trivy, or by Patchline and Dependency-Track, is one finding.
 6. With Dependency-Track: `NEW_VULNERABILITY` and `NEW_VULNERABLE_DEPENDENCY` carry findings; `BOM_PROCESSED` schedules a reconciliation (see below); `PROJECT_AUDIT_CHANGE` (an analysis decision there) moves the state: `IN_TRIAGE`/`EXPLOITABLE` → in progress, `NOT_AFFECTED`/`FALSE_POSITIVE` → not affected, suppressed → risk accepted, `RESOLVED` → awaiting verification.
@@ -76,7 +76,7 @@ The policy ([example](../examples/policy/policy.yaml)) turns risk signals into a
 5. The due date is the SLA for that severity (default critical 7d, high 30d, medium 90d, low 180d), counted from first detection or from reopening.
 6. An approved due date extension replaces it while the effective severity stays at or below the level it was approved at; an escalation or a reopening drops the extension.
 
-The SLA job re-evaluates open findings every 5 minutes and right after intake, so a CVE added to KEV escalates findings that are already open (the thread says why and moves the due date). It records one reminder before the due date and repeats while overdue. New findings are posted after their first evaluation, so the first message already shows the due date, and the notification threshold uses the effective severity.
+The SLA job re-evaluates open findings every 5 minutes and right after intake, so a CVE added to KEV escalates findings that are already open (the thread says why and moves the due date). It sends one reminder before the due date and keeps reminding while a finding is overdue. New findings are posted after their first evaluation, so the first message already shows the due date, and the notification threshold uses the effective severity.
 
 ## Notifications
 

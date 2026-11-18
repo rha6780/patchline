@@ -2,7 +2,7 @@
 
 [English](native-detection.md) | 한국어
 
-Patchline은 이렇게 취약점을 찾습니다. CI가 SBOM을 Patchline에 올리면 구성요소를 대조합니다.
+Patchline은 CI가 올린 SBOM의 구성요소를 대조해 취약점을 찾습니다.
 
 | 패키지 | 엔진 |
 |---|---|
@@ -23,7 +23,7 @@ PATCHLINE_OSV_REFRESH=30m                      # 변경분을 받는 주기
 
 처음 실행하면 생태계별 전체 export를 한 번 받습니다(Maven 약 10MB, npm 약 220MB, PyPI 약 40MB, Go 약 13MB). 이후에는 바뀐 레코드만 받습니다(`modified_id.csv`). 데이터는 SQLite DB에 저장되며, npm을 포함하면 DB가 80MB 정도 늘어납니다. 시작 로그에 `osv synced ecosystem=… records=…`가 남습니다.
 
-설정한 모든 생태계가 한 번씩 동기화되기 전에는 업로드를 분석은 하되 해결 판정은 하지 않습니다. 덜 받은 데이터를 "고쳐졌다"로 오해하지 않기 위해서입니다.
+설정한 모든 생태계가 한 번씩 동기화되기 전에는 업로드된 SBOM을 대조는 하지만 해결 판정은 하지 않습니다. 덜 받은 데이터를 "고쳐졌다"로 오해하지 않기 위해서입니다.
 
 ### Trivy로 OS 패키지 대조
 
@@ -35,10 +35,10 @@ PATCHLINE_TRIVY_TOKEN=<서버의 --token>
 PATCHLINE_TRIVY_SCOPE=os        # all: 언어 패키지도 보냄(OSV 결과와 합쳐짐)
 ```
 
-- OS 패키지의 purl에는 `distro` 한정자가 필요합니다(`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`). `trivy image --format cyclonedx`가 이렇게 씁니다. 없으면 건너뜁니다.
+- OS 패키지의 purl에는 `distro` 한정자가 필요합니다(`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`). `trivy image --format cyclonedx`는 이 한정자를 넣어 줍니다. 한정자가 없는 패키지는 건너뜁니다.
 - Debian·Ubuntu 권고는 소스 패키지 이름을 씁니다. Trivy의 `aquasecurity:trivy:SrcName` 속성(또는 Syft의 `upstream` 한정자)을 읽어 `libssl1.1`을 `openssl`로 조회합니다.
-- 업로드 한 번에 OS 릴리스마다 한 번씩 스캔합니다. Trivy에 연결할 수 없으면 업로드를 재시도하고, 그동안은 해결 판정을 하지 않습니다.
-- 확인 결과: `debian:11.6-slim` SBOM에서 Patchline이 `trivy sbom`과 똑같이 474개의 패키지 × 취약점을 보고했습니다.
+- 업로드 한 번마다 OS 릴리스별로 Trivy 스캔을 한 번씩 합니다. Trivy에 연결할 수 없으면 업로드를 재시도하고, 그동안은 해결 판정을 하지 않습니다.
+- 검증 결과: `debian:11.6-slim` SBOM에서 Patchline은 `trivy sbom`과 똑같은 474개의 패키지 × 취약점 쌍을 보고했습니다.
 
 ## 2. CI에서 SBOM 올리기
 
@@ -82,10 +82,10 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 
 ## Finding이 어떻게 바뀌나
 
-- 업로드할 때마다 그 프로젝트 버전의 스냅샷이 바뀝니다. 스냅샷에서 사라진 취약점은 커밋을 근거로 해결됩니다. 단, 다른 프로젝트나 출처가 아직 보고 중이면 열린 채로 둡니다. 다시 나타나면 재발로 처리합니다.
+- 업로드할 때마다 해당 프로젝트 버전의 스냅샷을 교체합니다. 스냅샷에서 사라진 취약점은 커밋을 근거로 해결됩니다. 단, 다른 프로젝트나 출처가 아직 보고 중이면 열린 채로 둡니다. 다시 나타나면 재발로 처리합니다.
 - OSV가 갱신될 때마다 저장된 스냅샷을 모두 다시 분석합니다. 새 권고가 나오면 빌드 없이도 Finding과 알림이 생기고, 철회된 권고의 Finding은 해결됩니다.
 - 심각도는 권고의 값을 씁니다. OSV는 GitHub 등급(없으면 CVSS v3 기본 점수), Trivy는 Trivy의 등급입니다.
-- 기한, KEV 상향, Renovate PR 판정(OSV 범위 사용), Slack 메시지, 승인이 모두 동작합니다.
+- 이렇게 만든 Finding에도 기한, KEV 상향, Renovate PR 판정(OSV 범위 사용), Slack 메시지, 승인이 모두 똑같이 적용됩니다.
 
 ## 판정과 VEX
 
@@ -117,11 +117,11 @@ curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?
 trivy sbom --vex storefront-api.vex.json bom.json   # not_affected / false_positive Finding이 빠짐
 ```
 
-serial이나 bom-ref가 없으면(또는 SPDX면) VEX 안에 취약한 구성요소를 직접 담고 purl로 가리킵니다. **연동** 화면에서 Patchline 프로젝트마다 내려받을 수 있습니다.
+serial이나 bom-ref가 없으면(또는 SPDX면) VEX 안에 취약한 구성요소를 직접 담고 purl로 가리킵니다. **연동 상태** 화면에서 Patchline 프로젝트마다 내려받을 수 있습니다.
 
 ## 구성요소 검색과 영향 분석
 
-저장된 스냅샷으로 두 가지를 답합니다. UI의 **구성요소** 메뉴나 API로 확인할 수 있습니다.
+저장된 스냅샷으로 두 가지 질문에 답할 수 있습니다. UI의 **구성요소** 메뉴나 API로 확인할 수 있습니다.
 
 | 질문 | UI | API |
 |---|---|---|
@@ -158,8 +158,8 @@ Patchline은 [Dependency-Track](dependency-track.ko.md)의 Finding도 받을 수
 |---|---|---|
 | SBOM을 보내는 곳 | Dependency-Track | Patchline(`/ingest/sbom`) |
 | 대조 | 자체 분석기(NVD, OSS Index, OSV, GitHub, Trivy) | OSV 미러와 Trivy 서버 |
-| 판정 | Dependency-Track에서 | Patchline에서. Dependency-Track이 보고한 Finding이면 그곳에도 기록 |
+| 판정 | Dependency-Track에서 | Patchline에서. Dependency-Track이 보고한 Finding이면 Dependency-Track에도 기록 |
 
-- 둘이 보고한 같은 취약점은 출처 두 개가 붙은 **Finding 하나**입니다. 둘 다 보고를 멈춰야 해결됩니다.
+- 양쪽이 보고한 같은 취약점은 두 출처가 함께 표시되는 **Finding 하나**입니다. 양쪽 모두 더 이상 보고하지 않아야 해결됩니다.
 - Dependency-Track이 보고한 Finding은 그쪽 심각도를 쓰고, 그 EPSS 점수가 정책의 EPSS 상향에 쓰입니다(Patchline은 자체 EPSS 출처가 없습니다).
 - 수정 PR 판정은 OSV 미러에 먼저 묻고, 다음에 Dependency-Track에 묻습니다.

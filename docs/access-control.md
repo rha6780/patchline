@@ -31,9 +31,9 @@ On first start Patchline creates the account `admin` with a random one-time pass
 
 | | |
 |---|---|
-| Lockout | 5 failed sign-ins from one address within 15 minutes block **that address** (an IPv6 /64) for 15 minutes; the account itself is never locked, so someone guessing cannot keep the admin out. Behind a reverse proxy, set `PATCHLINE_TRUSTED_PROXIES`, or every client shares the proxy's address. A few password checks run at once; the rest are asked to retry. The counts live in memory and a restart clears them |
+| Lockout | Five failed sign-ins from one address (an IPv6 /64) within 15 minutes block **that address** for 15 minutes. The account itself is never locked, so someone guessing passwords cannot lock the admin out. Behind a reverse proxy, set `PATCHLINE_TRUSTED_PROXIES`; otherwise every client shares the proxy's address. Only a few password checks run at once, and the others are asked to try again. The counts are kept in memory, so a restart clears them |
 | Password change | Ends the admin's other sessions |
-| Lost password | `patchline reset-admin-password` (with the same `PATCHLINE_DB_PATH`) prints a new one-time password (or sets `PATCHLINE_ADMIN_PASSWORD`), to be changed at the next sign-in, and ends its sessions. In the self-hosted setup: `docker compose run --rm patchline reset-admin-password` |
+| Lost password | `patchline reset-admin-password` (with the same `PATCHLINE_DB_PATH`) sets a new one-time password (`PATCHLINE_ADMIN_PASSWORD` if set, otherwise a random one that it prints), which must be changed at the next sign-in, and ends the admin's sessions. In the self-hosted setup: `docker compose run --rm patchline reset-admin-password` |
 | Turn it off | `PATCHLINE_LOCAL_ADMIN=false` once single sign-on works; its sessions end |
 
 Sign in and choose the password **before** exposing Patchline beyond localhost: whoever has the one-time password can take the account. An install from an older version that still has `admin` / `admin` gets a one-time password at the next start.
@@ -93,7 +93,7 @@ PATCHLINE_SESSION_TTL=12h
 PATCHLINE_ACCESS_POLICY_PATH=/etc/patchline/access-policy.yaml
 ```
 
-Patchline reads the provider's discovery document at startup and does not start if it cannot. Serve it over HTTPS: the session cookie is `Secure` when `PATCHLINE_PUBLIC_URL` is `https://`.
+Patchline reads the provider's discovery document at startup and does not start if it cannot. Serve Patchline over HTTPS: the session cookie is `Secure` when `PATCHLINE_PUBLIC_URL` starts with `https://`, or when a proxy listed in `PATCHLINE_TRUSTED_PROXIES` sends `X-Forwarded-Proto: https`.
 
 ## 3. Map groups to permissions
 
@@ -113,7 +113,7 @@ users:                                 # by email or subject
 - Permissions add up: `default`, then every matching group, then the person's own entry.
 - An email counts only when the ID token says it is verified (`email_verified: true`); otherwise anyone could type in someone else's address. Without it, use the subject or groups. Microsoft Entra ID does not send `email_verified`: give its users permissions through `roles` or groups.
 - Unknown permissions or fields stop Patchline at startup, so typos do not silently grant or drop access.
-- Groups are re-read from the session on every request and the policy at startup. A policy change applies after a restart, without signing in again. A group change in the identity provider applies at the next sign-in.
+- Groups are read from the session on every request; the policy is read at startup. A policy change applies after a restart, without signing in again. A group change in the identity provider applies at the next sign-in.
 - Without a policy file, everyone who signs in can read and nothing else.
 - Someone who signs in without `findings.read` sees a "no access" page.
 
@@ -138,7 +138,7 @@ The decision is kept in Patchline with the finding (who requested and approved i
 
 - People with `exceptions.request` ask from the finding page; approvers see every pending request under **Approvals**.
 - **Nobody approves their own request**, even with both permissions. The requester can withdraw a pending request.
-- One pending request per kind and finding.
+- A finding can have one pending request of each kind.
 - If Dependency-Track rejects the analysis, nothing is approved and the request stays pending. Patchline's API key then needs `VULNERABILITY_ANALYSIS` in addition to `VIEW_PORTFOLIO` and `VIEW_VULNERABILITY`.
 - An extension holds while the effective severity stays at or below the level it was approved at. If the finding is escalated (for example, its CVE enters CISA KEV) or reopened, the policy's due date applies again.
 - Requests, decisions and notes appear on the finding's timeline and in its Slack thread.

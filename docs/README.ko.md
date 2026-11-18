@@ -18,9 +18,9 @@ Patchline은 이미 쓰고 있는 도구들 사이에서 동작합니다. 가이
 | 도구 | 역할 | 가이드 |
 |---|---|---|
 | CI의 SBOM 생성(Trivy, CycloneDX) | 빌드마다 SBOM을 만들어 Patchline에 올리고 커밋을 근거로 남김 | [sbom-ci.ko.md](integrations/sbom-ci.ko.md) |
-| 탐지: OSV와 Trivy | 올린 SBOM을 대조. 언어 패키지는 로컬 OSV 미러, OS 패키지는 Trivy 서버. 판정과 VEX | [native-detection.ko.md](integrations/native-detection.ko.md), [trivy.ko.md](integrations/trivy.ko.md) |
+| 탐지: OSV와 Trivy | 올린 SBOM을 대조. 언어 패키지는 로컬 OSV 미러, OS 패키지는 Trivy 서버로 대조하고, 판정과 VEX도 다룸 | [native-detection.ko.md](integrations/native-detection.ko.md), [trivy.ko.md](integrations/trivy.ko.md) |
 | Renovate | 수정 PR을 만들고, Patchline이 Finding과 연결해 영향 범위를 벗어나는지 판정 | [renovate.ko.md](integrations/renovate.ko.md) |
-| Gitea / Forgejo / GitHub | Pull request Webhook | [git-webhooks.ko.md](integrations/git-webhooks.ko.md) |
+| Gitea / Forgejo / GitHub | PR Webhook | [git-webhooks.ko.md](integrations/git-webhooks.ko.md) |
 | Slack | Finding당 메시지 1개, 갱신과 스레드 이력 | [slack.ko.md](integrations/slack.ko.md) |
 | Webhook 알림 | Finding과 변경마다 서명된 JSON 전송, 다른 시스템 연동용 | [webhook-notifications.ko.md](integrations/webhook-notifications.ko.md) |
 | CISA KEV, EPSS | 심각도를 올리고 기한을 앞당기는 위험 신호 | [kev-epss.ko.md](integrations/kev-epss.ko.md) |
@@ -36,7 +36,7 @@ CI ── SBOM + 커밋 ──▶ Patchline ──▶ Slack, Webhook
                             └── Dependency-Track Webhook(선택)
 ```
 
-모든 연동은 **인벤토리**(`PATCHLINE_INVENTORY_PATH`)에서 만납니다. 인벤토리는 프로젝트 이름과 저장소를 서비스, 담당자, Slack 채널에 연결합니다. 예시는 [examples/inventory/services.yaml](../examples/inventory/services.yaml), 등록 방법은 [프로젝트와 브랜치 등록](projects.ko.md)을 보세요.
+모든 연동은 **인벤토리**(`PATCHLINE_INVENTORY_PATH`)를 기준으로 이어집니다. 인벤토리는 프로젝트 이름과 저장소를 서비스, 담당자, Slack 채널에 연결합니다. 예시는 [examples/inventory/services.yaml](../examples/inventory/services.yaml), 등록 방법은 [프로젝트와 브랜치 등록](projects.ko.md)을 보세요.
 
 | 도구 쪽 이름 | 인벤토리에서 맞춰야 하는 값 |
 |---|---|

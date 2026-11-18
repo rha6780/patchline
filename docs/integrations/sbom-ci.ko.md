@@ -2,7 +2,7 @@
 
 [English](sbom-ci.md) | 한국어
 
-Patchline은 업로드된 것만 압니다. CI가 빌드마다 SBOM을 만들어 Patchline에 올리면, Patchline이 대조하고([탐지](native-detection.ko.md)) SBOM에서 커밋을 읽어 해결 판정의 근거로 남깁니다.
+Patchline은 업로드된 SBOM에 있는 것만 알 수 있습니다. CI가 빌드마다 SBOM을 만들어 Patchline에 올리면, Patchline이 대조하고([탐지](native-detection.ko.md)) SBOM에서 커밋을 읽어 해결 판정의 근거로 남깁니다.
 
 ## 어떤 SBOM을 어떤 프로젝트 버전으로
 
@@ -119,11 +119,11 @@ stage('SBOM: prod') {
 ## 확인
 
 - UI의 **연동 상태**에 프로젝트, 마지막 SBOM 시각, 커밋이 표시됩니다.
-- 취약한 구성요소를 제거한 수정본을 올리면 바로 해당 Finding이 해결되고 Slack 스레드에 커밋이 남습니다.
+- 취약한 구성요소를 없앤 빌드의 SBOM을 올리면 해당 Finding이 바로 해결되고 Slack 스레드에 커밋이 남습니다.
 
 ## Dependency-Track에도 올릴 때
 
-[Dependency-Track](dependency-track.ko.md)도 쓴다면 같은 파일을 같은 이름으로 그곳에도 올립니다.
+[Dependency-Track](dependency-track.ko.md)도 쓴다면 같은 파일을 같은 이름으로 Dependency-Track에도 올립니다.
 
 ```sh
 curl -sSf -X POST "$DT_URL/api/v1/bom" -H "X-Api-Key: $DT_UPLOAD_KEY" \

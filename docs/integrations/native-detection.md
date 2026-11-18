@@ -2,7 +2,7 @@
 
 English | [한국어](native-detection.ko.md)
 
-This is how Patchline finds vulnerabilities. CI uploads an SBOM to Patchline, which matches its components:
+Patchline finds vulnerabilities by matching the components of the SBOMs that CI uploads:
 
 | Packages | Engine |
 |---|---|
@@ -37,8 +37,8 @@ PATCHLINE_TRIVY_SCOPE=os        # all: language packages too, merged with OSV
 
 - OS packages need the `distro` qualifier in their purl (`pkg:deb/debian/libssl1.1@1.1.1n-0+deb11u4?distro=debian-11.6`), as `trivy image --format cyclonedx` writes it. Packages without it are skipped.
 - Debian and Ubuntu advisories name source packages: Patchline reads Trivy's `aquasecurity:trivy:SrcName` properties (or Syft's `upstream` qualifier), so `libssl1.1` is checked as `openssl`.
-- One upload is one scan per OS release. If Trivy cannot be reached, the upload is retried and nothing resolves in the meantime.
-- Checked: for a `debian:11.6-slim` SBOM, Patchline reports the same 474 package × vulnerability pairs as `trivy sbom`.
+- Each upload is sent to Trivy as one scan per OS release. If Trivy cannot be reached, the upload is retried and nothing resolves in the meantime.
+- Verified: for a `debian:11.6-slim` SBOM, Patchline reports the same 474 package × vulnerability pairs as `trivy sbom`.
 
 ## 2. Upload SBOMs from CI
 
@@ -65,7 +65,7 @@ curl -sSf -X POST "$PATCHLINE_URL/ingest/sbom" -H "Authorization: Bearer $PATCHL
 | Commit | `patchline:git:commit` / `patchline:git:ref` in the BOM metadata, as in [SBOM in CI](sbom-ci.md). SPDX: an annotation `patchline:git:commit=<sha>` |
 | Token | An [API token](../access-control.md#api-tokens) with `sbom.upload` (one per pipeline), or the shared `PATCHLINE_WEBHOOK_TOKEN` |
 
-The answer is `202` with `{"format": "CycloneDX", "components": 3, "without_purl": 0}`; matching happens right after.
+Patchline answers `202` with `{"format": "CycloneDX", "components": 3, "without_purl": 0}` and starts matching right after.
 
 ### Gitea / GitHub Actions
 
@@ -89,7 +89,7 @@ The answer is `202` with `{"format": "CycloneDX", "components": 3, "without_purl
 
 ## Decisions and VEX
 
-Findings are decided in Patchline: someone requests, someone else approves ([Sign-in and permissions](../access-control.md)):
+Decisions on findings are made in Patchline: one person requests, another approves ([Sign-in and permissions](../access-control.md)):
 
 | Request | VEX analysis |
 |---|---|
@@ -111,7 +111,7 @@ curl -sS -H "Authorization: Bearer $PATCHLINE_TOKEN" "$PATCHLINE_URL/api/v1/vex?
 | Fix merged, waiting for the rescan | `in_triage`, response `update` |
 | Not affected / false positive / risk accepted | As decided, with the justification and the reason as `detail` |
 
-The document is CycloneDX 1.5 and validates against the official schema. When the uploaded SBOM was CycloneDX with a `serialNumber` and `bom-ref`s (Trivy and the CycloneDX plugins write both), each vulnerability points into it with a BOM-Link: `urn:cdx:<serial>/<version>#<bom-ref>`. Scanners apply the VEX to that SBOM:
+The document is CycloneDX 1.5 and validates against the official schema. When the uploaded SBOM was CycloneDX with a `serialNumber` and `bom-ref`s (Trivy and the CycloneDX plugins write both), each vulnerability points into it with a BOM-Link (`urn:cdx:<serial>/<version>#<bom-ref>`), so scanners can apply the VEX to that SBOM:
 
 ```sh
 trivy sbom --vex storefront-api.vex.json bom.json   # not_affected / false_positive findings disappear
@@ -138,7 +138,7 @@ The stored snapshots answer two questions, under **Components** in the UI and th
 
 ## Check
 
-1. `osv synced` lines in the log for each ecosystem.
+1. The log shows an `osv synced` line for each ecosystem.
 2. Upload an SBOM: the log shows `sbom analyzed … result="N findings (N new), 0 resolved"`.
 3. **Integrations** lists the project with source *Patchline (built-in)* and its commit. A finding shows *Reported by: Patchline (built-in)*, and its timeline *Detected by Patchline (OSV, …)* or *(Trivy, …)*.
 
@@ -160,6 +160,6 @@ Patchline can also take findings from [Dependency-Track](dependency-track.md). Y
 | Matching | Its analyzers (NVD, OSS Index, OSV, GitHub, Trivy) | OSV mirror and Trivy server |
 | Decisions | In Dependency-Track | In Patchline; written to Dependency-Track too when it reports the finding |
 
-- The same vulnerability from both is **one finding** listing both sources. It resolves only when neither reports it.
+- A vulnerability that both report is **one finding** that lists both sources. It resolves only when neither reports it.
 - Dependency-Track's severity is used when it reports the finding, and its EPSS score feeds the policy's EPSS escalation (Patchline has no EPSS source of its own).
 - Fix PR verdicts ask the OSV mirror first, then Dependency-Track.

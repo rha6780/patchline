@@ -41,7 +41,7 @@ services:
       - repo: acme/storefront-web   # project "storefront-web"
 ```
 
-- `PATCHLINE_INVENTORY_PATH` is a file or a directory. A directory is read as every `*.yaml` / `*.yml` file in it, merged, so each team can own one file.
+- `PATCHLINE_INVENTORY_PATH` is a file or a directory. For a directory, every `*.yaml` / `*.yml` file in it is read and merged, so each team can own one file.
 - Unknown fields, a duplicate service, and a project claimed by two repositories all stop Patchline from starting. A typo cannot silently send findings to the wrong team.
 - `projects` was called `dependency_track_projects` before; that name still works.
 - The inventory is read at startup. **Restart Patchline after changing it.** Keep it in Git and roll it out like any other configuration change.
@@ -93,7 +93,7 @@ If you also run Dependency-Track, use the same names there as `projectName` and 
 
 ## 6. Check
 
-1. **Integrations** lists the project version with its last SBOM time and commit. Projects that are in the inventory but have never sent an SBOM appear under *Inventory projects without a BOM*: there the name in CI and the inventory usually differ.
+1. **Integrations** lists the project version with its last SBOM time and commit. Projects that are in the inventory but have never sent an SBOM appear under *Inventory projects without a BOM*; this usually means the project name in CI differs from the one in the inventory.
 2. A finding shows the service and its owners. *Not in inventory* means the project name matched no `projects` entry.
 3. Open a Renovate PR against the default branch: the finding links it (see [Renovate](integrations/renovate.md)).
 
@@ -102,7 +102,7 @@ If you also run Dependency-Track, use the same names there as `projectName` and 
 | Change | What happens |
 |---|---|
 | Add a repository or project to a service | Restart. The next SBOM is assigned to the service |
-| Move a project to another service | Restart. With the next SBOM, its findings move to the new service with their history, assignee and decisions, and the timeline records *Service: old → new*. Due dates are re-evaluated with the new service's exposure. A finding another project (of another name) still reports for the old service stays there, and the moved project gets its own |
+| Move a project to another service | Restart. With the next SBOM, its findings move to the new service with their history, assignee and decisions, and the timeline records *Service: old → new*. Due dates are re-evaluated with the new service's exposure. A finding that a differently named project still reports under the old service stays there, and the moved project gets a finding of its own |
 | Remove a project from the inventory | Its findings move under the project's own name, marked *not in inventory*, and notifications go to `PATCHLINE_SLACK_DEFAULT_CHANNEL`. Adding it back moves them again |
 | Retire an environment (a branch you no longer build, a decommissioned deploy) | There is no delete. Upload an empty SBOM to that version once; every finding it reported resolves. In Dependency-Track, upload an empty BOM to that project version the same way |
 

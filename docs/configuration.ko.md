@@ -16,7 +16,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | Finding 목록: 빠른 필터(열림, 기한 초과, 7일 내 기한, 열린 critical, 검증대기)와 서비스·환경·상태·심각도 필터 | `/findings` |
 | Finding 상세: 정보, 수정 PR, 근거 타임라인 | `/findings/{id}` |
 | 서비스: 담당자, 저장소, 프로젝트별 브랜치·커밋, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조). 검색, 심각도, 환경, 브랜치, 저장소로 필터 | `/services/{name}` |
-| 연동 상태: 프로젝트(SBOM 업로드, 연결했다면 Dependency-Track)별 마지막 SBOM·커밋과 새 Finding 알림이 가는 곳(Slack 채널, 웹훅, stdout, 또는 보내지 않는 이유), SBOM이 없는 인벤토리 프로젝트, 처리·알림 실패 | `/integrations` |
+| 연동 상태: 프로젝트(SBOM 업로드, 연결했다면 Dependency-Track)별 마지막 SBOM·커밋과 새 Finding 알림이 가는 곳(Slack 채널, Webhook, stdout, 또는 보내지 않는 이유), SBOM이 없는 인벤토리 프로젝트, 처리·알림 실패 | `/integrations` |
 | 구성요소: 패키지 사용처 검색, 취약점 영향 분석 | `/components`, `/vulnerabilities/{id}` |
 | 승인: 대기 중인 위험 수용·기한 연장 요청, 최근 결정(`exceptions.request` 또는 `exceptions.approve`) | `/approvals` |
 | 설정: Webhook 토큰·Secret 교체와 알림·탐지 설정 요약(읽기 전용, `settings.webhooks`), API 토큰(`tokens.manage`), 감사 로그(`audit.read`) | `/settings` |
@@ -32,7 +32,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `GET` | `/readyz` | Readiness(DB) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track Outbound Webhook(`?token=` 또는 `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` Webhook(HMAC 서명 또는 토큰) |
-| `POST` | `/ingest/sbom` | CycloneDX(JSON·XML)·SPDX(JSON) SBOM 업로드, 자체 탐지([가이드](integrations/native-detection.ko.md)). Webhook 토큰으로 인증 |
+| `POST` | `/ingest/sbom` | 자체 탐지용 CycloneDX(JSON·XML)·SPDX(JSON) SBOM 업로드([가이드](integrations/native-detection.ko.md)). Webhook 토큰이나 `sbom.upload` 권한의 API 토큰으로 인증 |
 | `GET` | `/api/v1/findings` | 서비스 담당자와 처리 담당자를 포함한 Finding 목록. 필터: `q`(취약점 ID·별칭, 구성요소, 제목), `service`, `environment`, `branch`(그 Finding을 보고한 최신 SBOM의 브랜치·태그: `main`, `v1.4.0`), `repository`, `severity`(실효 심각도), `state`, `assignee`, `open=1`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | Finding 타임라인 |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Finding에 연결된 PR |
@@ -42,7 +42,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `GET` | `/api/v1/vex` | 프로젝트 버전의 CycloneDX 1.5 VEX(`project`, `version`, 파일로 받으려면 `download=1`) |
 | `PUT` | `/api/v1/findings/{id}/assignee` | 처리 담당자 지정·해제(`findings.assign`) |
 | `GET`, `POST` | `/api/v1/findings/{id}/requests` | Finding의 예외 요청 목록, 예외 요청(`exceptions.request`) |
-| `POST` | `/api/v1/requests/{id}/cancel` | 대기 중인 자기 요청 철회 |
+| `POST` | `/api/v1/requests/{id}/cancel` | 본인이 낸 대기 중인 요청 철회 |
 | `GET` | `/api/v1/openapi.yaml` | 모든 필드를 담은 API의 OpenAPI 3.1 명세 |
 | `GET` | `/login` | 로그인 화면(로컬 관리자, SSO) |
 | `POST` | `/auth/local`, `/account/password` | 로컬 관리자 로그인과 비밀번호 변경 |
@@ -66,8 +66,8 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_SLACK_MIN_SEVERITY`, `PATCHLINE_SLACK_SERVICES`, `PATCHLINE_SLACK_ENVIRONMENTS` | — | Slack으로 보낼 심각도·서비스·환경 제한(쉼표 구분) |
 | `PATCHLINE_NOTIFY_WEBHOOK_URL` | — | Finding과 변경마다 JSON을 POST ([Webhook 알림](integrations/webhook-notifications.ko.md)) |
 | `PATCHLINE_NOTIFY_WEBHOOK_SECRET` | — | `X-Patchline-Signature-256`용 HMAC-SHA256 키 |
-| `PATCHLINE_NOTIFY_WEBHOOK_MIN_SEVERITY`, `_SERVICES`, `_ENVIRONMENTS` | — | Webhook용 같은 필터 |
-| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | 알림을 보낼 최소 심각도. 자체 값이 없는 sink에 적용 |
+| `PATCHLINE_NOTIFY_WEBHOOK_MIN_SEVERITY`, `_SERVICES`, `_ENVIRONMENTS` | — | Webhook에 적용할 같은 필터 |
+| `PATCHLINE_NOTIFY_MIN_SEVERITY` | `medium` | 알림을 보낼 최소 심각도. sink별 값이 없을 때 적용 |
 | `PATCHLINE_NOTIFY_LANG` | `en` | 메시지 언어(Slack, Webhook `text`, 콘솔): `en` 또는 `ko` |
 | `PATCHLINE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PATCHLINE_LOG_FORMAT` | `text` | `text` 또는 `json` |
@@ -94,9 +94,9 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 
 ### Patchline 자체 취약점
 
-Patchline은 시작할 때마다 자신의 바이너리(빌드에 쓰인 Go 모듈과 Go 표준 라이브러리)를 SBOM으로 만들어 업로드와 똑같이 매칭합니다. 찾은 취약점은 프로젝트 `patchline`(환경 `default`)의 finding이 되고 다른 finding처럼 알림이 갑니다: `PATCHLINE_SLACK_DEFAULT_CHANNEL`, 웹훅 또는 stdout으로, 인벤토리에서 `patchline`을 프로젝트로 가진 서비스가 있으면 그 `slack_channel`로 보냅니다. 나중에 공개된 권고는 OSV 데이터가 바뀔 때 다시 분석되어 잡히고, Patchline을 업그레이드하면 새 빌드에서 고쳐진 finding은 해결됩니다. finding의 수정 버전은 다음 Patchline 릴리스에 필요한 모듈 버전입니다.
+Patchline은 시작할 때마다 자신의 바이너리(빌드에 쓰인 Go 모듈과 Go 표준 라이브러리)로 SBOM을 만들어 업로드된 SBOM과 똑같이 대조합니다. 찾은 취약점은 프로젝트 `patchline`(환경 `default`)의 Finding이 되고, 다른 Finding과 같은 방식으로 알림이 갑니다. 인벤토리에 `patchline`을 프로젝트로 등록한 서비스가 있으면 그 서비스의 `slack_channel`로, 없으면 `PATCHLINE_SLACK_DEFAULT_CHANNEL`, Webhook, stdout으로 보냅니다. 나중에 공개된 권고는 OSV 데이터가 갱신될 때 다시 대조해 찾아내고, Patchline을 업그레이드하면 새 빌드에서 고쳐진 Finding은 해결됩니다. Finding의 수정 버전은 Patchline 릴리스에 포함돼야 할 모듈 버전입니다.
 
-`PATCHLINE_OSV_ECOSYSTEMS`에 `Go`가 있어야 합니다(기본값). 끄려면 `PATCHLINE_SELF_SCAN=false`로 설정하세요.
+`PATCHLINE_OSV_ECOSYSTEMS`에 `Go`가 있어야 하며, 기본값에 포함돼 있습니다. 끄려면 `PATCHLINE_SELF_SCAN=false`로 설정하세요.
 
 ### Dependency-Track(선택)
 
@@ -107,4 +107,4 @@ Patchline은 시작할 때마다 자신의 바이너리(빌드에 쓰인 Go 모�
 | `PATCHLINE_DT_URL` | — | Dependency-Track API 서버 URL |
 | `PATCHLINE_DT_API_KEY` | — | `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY` 권한의 API 키(판정을 기록하려면 `VULNERABILITY_ANALYSIS`도) |
 | `PATCHLINE_DT_UI_URL` | — | 메시지·Finding 페이지·`/api/v1/findings/{id}/refs`에 넣을 Dependency-Track UI 주소 |
-| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED` 이후 Finding을 비교하기 전 대기 시간 |
+| `PATCHLINE_DT_RECONCILE_DELAY` | `2m` | `BOM_PROCESSED`를 받은 뒤 Finding을 대조하기 전에 기다리는 시간 |

@@ -11,7 +11,7 @@
 |---|---|
 | `findings.read` | 웹 UI와 `GET /api/v1/*` 사용 |
 | `findings.assign` | Finding의 처리 담당자 지정·해제(UI 또는 `PUT /api/v1/findings/{id}/assignee`) |
-| `exceptions.request` | **위험 수용**, **영향 없음**, **오탐**, **기한 연장** 요청(UI 또는 `POST /api/v1/findings/{id}/requests`) |
+| `exceptions.request` | **위험 수용**, **해당 없음**, **오탐**, **기한 연장** 요청(UI 또는 `POST /api/v1/findings/{id}/requests`) |
 | `exceptions.approve` | 다른 사람의 요청 승인·반려 |
 | `settings.webhooks` | Webhook 토큰과 Git Webhook Secret 확인(일부만 표시)·교체 |
 | `audit.read` | 감사 로그 확인 |
@@ -19,7 +19,7 @@
 | `sbom.upload` | `/ingest/sbom`에 SBOM 업로드(API 토큰용) |
 | `*` | 위 전부 |
 
-Webhook(`/webhooks/*`)과 헬스체크에는 로그인이 필요 없습니다. 각자의 비밀값으로 인증합니다.
+Webhook(`/webhooks/*`)과 헬스체크에는 로그인이 필요 없습니다. 각각 자체 비밀값으로 인증합니다.
 
 ## 로컬 관리자
 
@@ -31,9 +31,9 @@ Webhook(`/webhooks/*`)과 헬스체크에는 로그인이 필요 없습니다. �
 
 | | |
 |---|---|
-| 잠금 | 한 주소(IPv6는 /64)에서 15분 안에 5회 실패하면 **그 주소**를 15분 동안 막습니다. 계정 자체는 잠그지 않으므로 비밀번호를 추측하는 사람이 관리자를 막을 수 없습니다. 리버스 프록시 뒤라면 `PATCHLINE_TRUSTED_PROXIES`를 설정하세요. 설정하지 않으면 모든 사용자가 프록시 주소 하나를 공유합니다. 비밀번호 확인은 동시에 몇 개만 실행하고 나머지는 다시 시도하게 합니다. 실패 횟수는 메모리에만 있어 재시작하면 초기화됩니다 |
+| 잠금 | 한 주소(IPv6는 /64)에서 15분 안에 5회 실패하면 **그 주소**를 15분 동안 막습니다. 계정 자체는 잠그지 않으므로 비밀번호를 추측하는 사람이 관리자의 로그인을 막을 수 없습니다. 리버스 프록시 뒤라면 `PATCHLINE_TRUSTED_PROXIES`를 설정하세요. 설정하지 않으면 모든 사용자가 프록시 주소 하나를 공유합니다. 비밀번호 확인은 동시에 몇 개만 실행하고 나머지는 다시 시도하게 합니다. 실패 횟수는 메모리에만 있어 재시작하면 초기화됩니다 |
 | 비밀번호 변경 | 관리자의 다른 세션이 종료됨 |
-| 비밀번호 분실 | `patchline reset-admin-password`(같은 `PATCHLINE_DB_PATH`로 실행)를 실행하면 새 일회용 비밀번호를 출력하고(`PATCHLINE_ADMIN_PASSWORD`가 있으면 그 값으로 설정, 다음 로그인 때 변경 필요) 세션을 종료합니다. 직접 설치용 compose에서는 `docker compose run --rm patchline reset-admin-password` |
+| 비밀번호 분실 | `patchline reset-admin-password`(같은 `PATCHLINE_DB_PATH`로 실행)는 새 일회용 비밀번호를 설정하고(`PATCHLINE_ADMIN_PASSWORD`가 있으면 그 값, 없으면 무작위로 만들어 출력) 관리자 세션을 종료합니다. 다음 로그인 때 비밀번호를 바꿔야 합니다. 직접 설치용 compose에서는 `docker compose run --rm patchline reset-admin-password` |
 | 끄기 | SSO가 동작하면 `PATCHLINE_LOCAL_ADMIN=false`. 기존 세션도 종료됨 |
 
 localhost 밖으로 공개하기 **전에** 로그인해 비밀번호를 정하세요. 그 전에는 일회용 비밀번호를 아는 사람이면 누구나 이 계정을 가져갈 수 있습니다. 이전 버전으로 설치해 아직 `admin` / `admin`인 계정은 다음 시작 때 일회용 비밀번호로 바뀝니다.
@@ -93,7 +93,7 @@ PATCHLINE_SESSION_TTL=12h
 PATCHLINE_ACCESS_POLICY_PATH=/etc/patchline/access-policy.yaml
 ```
 
-Patchline은 시작할 때 IdP의 discovery 문서를 읽고, 읽지 못하면 시작하지 않습니다. HTTPS로 서비스하세요. `PATCHLINE_PUBLIC_URL`이 `https://`이면 세션 쿠키에 `Secure`가 붙습니다.
+Patchline은 시작할 때 IdP의 discovery 문서를 읽고, 읽지 못하면 시작하지 않습니다. Patchline은 HTTPS로 서비스하세요. `PATCHLINE_PUBLIC_URL`이 `https://`로 시작하거나, `PATCHLINE_TRUSTED_PROXIES`의 프록시가 `X-Forwarded-Proto: https`를 보내면 세션 쿠키에 `Secure`가 붙습니다.
 
 ## 3. 그룹에 권한 매핑
 
@@ -112,18 +112,18 @@ users:                                 # 이메일 또는 subject
 
 - 권한은 합쳐집니다: `default` + 해당하는 모든 그룹 + 본인 항목.
 - 이메일은 ID 토큰이 검증됐다고 할 때(`email_verified: true`)만 씁니다. 그렇지 않으면 누구나 다른 사람의 주소를 입력해 그 권한을 얻을 수 있습니다. 검증되지 않으면 subject나 그룹으로 지정하세요. Microsoft Entra ID는 `email_verified`를 보내지 않으므로 `roles`나 그룹으로 권한을 주세요.
-- 모르는 권한이나 항목이 있으면 시작하지 않습니다. 오타로 권한이 잘못 부여되거나 빠지지 않습니다.
+- 모르는 권한이나 항목이 있으면 시작하지 않습니다. 오타 때문에 권한이 잘못 주어지거나 빠지는 일을 막기 위해서입니다.
 - 그룹은 요청마다 세션에서 읽고, 정책은 시작할 때 읽습니다. 정책을 바꾸면 재시작 후 적용되고 다시 로그인할 필요는 없습니다. IdP에서 그룹을 바꾸면 다음 로그인부터 적용됩니다.
 - 정책 파일이 없으면 로그인한 사람은 조회만 할 수 있습니다.
 - `findings.read`가 없는 사람이 로그인하면 "접근 권한 없음" 화면이 나옵니다.
 
-시작 로그에 승인권자와 설정 변경권자가 표시됩니다(`policy="exceptions.approve: sec-team; settings.webhooks: platform-ops"`). 로그인할 때마다 그룹과 결과 권한도 로그에 남습니다.
+시작 로그에 누가 승인할 수 있고 누가 설정을 바꿀 수 있는지 표시됩니다(`policy="exceptions.approve: sec-team; settings.webhooks: platform-ops"`). 로그인할 때마다 그룹과 결과 권한도 로그에 남습니다.
 
 ## 할 수 있는 일
 
 ### 담당자 지정
 
-`findings.assign` 권한이 있으면 Finding의 **처리 담당자**를 이메일로 지정합니다(*나에게 지정*도 가능). 인벤토리의 서비스 담당자는 그대로입니다. 처리 담당자는 다음 위치에 표시됩니다.
+`findings.assign` 권한이 있으면 Finding의 **처리 담당자**를 이메일로 지정합니다(*나에게 지정*도 가능). 인벤토리의 서비스 담당자는 바뀌지 않습니다. 처리 담당자는 다음 위치에 표시됩니다.
 - Finding 상세
 - 목록(*내 담당*)
 - Slack 메시지
@@ -138,13 +138,13 @@ users:                                 # 이메일 또는 subject
 | **오탐**(사유) | Finding을 *해당 없음*으로 바꿈(VEX: `false_positive`) |
 | **기한 연장**(새 날짜, 사유) | 기한을 그 날짜의 끝으로 옮김 |
 
-판정은 Finding과 함께 Patchline에 보관되고(누가 요청·승인했는지, 언제, 왜) [VEX](integrations/native-detection.ko.md)로 내보냅니다. [Dependency-Track](integrations/dependency-track.ko.md)도 그 Finding을 보고하면 그곳에도 기록합니다. `EXPLOITABLE` + `WILL_NOT_FIX` + Suppress, 근거를 붙인 `NOT_AFFECTED`, `FALSE_POSITIVE` 중 하나이고, 코멘트에 사유와 요청자·승인자가 들어갑니다. Patchline이 Dependency-Track에 기록할 수 없으면 요청 단계에서 거부합니다.
+판정은 누가 요청·승인했는지, 언제, 왜 했는지와 함께 Patchline의 Finding에 보관되고 [VEX](integrations/native-detection.ko.md)로도 내보냅니다. [Dependency-Track](integrations/dependency-track.ko.md)도 그 Finding을 보고하고 있으면 Dependency-Track에도 기록합니다. 기록되는 값은 `EXPLOITABLE` + `WILL_NOT_FIX` + Suppress, 근거를 붙인 `NOT_AFFECTED`, `FALSE_POSITIVE` 중 하나이고, 코멘트에 사유와 요청자·승인자가 들어갑니다. Patchline이 Dependency-Track에 기록할 수 없으면 요청 단계에서 거부합니다.
 
 - `exceptions.request` 권한이 있으면 Finding 상세에서 요청합니다. 승인권자는 **승인** 메뉴에서 대기 중인 요청을 모두 봅니다.
 - **본인의 요청은 승인할 수 없습니다.** 두 권한을 모두 가져도 마찬가지입니다. 요청자는 대기 중인 요청을 철회할 수 있습니다.
 - Finding마다 종류별로 대기 중인 요청은 하나만 둘 수 있습니다.
 - Dependency-Track이 분석 기록을 거부하면 승인되지 않고 요청은 대기 상태로 남습니다. 이 기능을 쓰려면 Patchline의 API 키에 `VIEW_PORTFOLIO`, `VIEW_VULNERABILITY`에 더해 `VULNERABILITY_ANALYSIS` 권한이 필요합니다.
-- 연장된 기한은 실효 심각도가 승인 당시 수준 이하일 때만 유지됩니다. 상향되거나(예: CVE가 CISA KEV에 등재) 재발하면 정책의 기한이 다시 적용됩니다.
+- 연장된 기한은 실효 심각도가 승인 당시 수준 이하일 때만 유지됩니다. 심각도가 올라가거나(예: CVE가 CISA KEV에 등재) 재발하면 정책의 기한이 다시 적용됩니다.
 - 요청, 결정, 메모는 Finding 타임라인과 Slack 스레드에 남습니다.
 
 ### Webhook 설정
@@ -161,7 +161,7 @@ users:                                 # 이메일 또는 subject
 
 | | |
 |---|---|
-| 권한 | `findings.read`(조회 API: Finding, 구성요소, 영향 분석, VEX), `findings.assign`(처리 담당자 지정), `exceptions.request`(예외 요청, 자기 요청 철회), `sbom.upload`(`/ingest/sbom`) 중 선택. 쓰기 권한 두 개를 고르면 `findings.read`가 함께 들어감. 승인(`exceptions.approve`)과 설정 변경은 사람만 할 수 있음 |
+| 권한 | `findings.read`(조회 API: Finding, 구성요소, 영향 분석, VEX), `findings.assign`(처리 담당자 지정), `exceptions.request`(예외 요청, 자신이 만든 요청 철회), `sbom.upload`(`/ingest/sbom`) 중 선택. 쓰기 권한 두 개를 고르면 `findings.read`가 함께 들어감. 승인(`exceptions.approve`)과 설정 변경은 사람만 할 수 있음 |
 | 만료 | 30일, 90일, 365일 또는 만료 없음 |
 | 값 | `plt_…`. 한 번만 표시하고, Patchline에는 SHA-256만 저장 |
 | 범위 | `/api/*`와 `/ingest/sbom`. 토큰으로 웹 UI는 열 수 없음 |
@@ -188,11 +188,11 @@ curl -sS -X POST -H "Authorization: Bearer $PATCHLINE_TOKEN" -H "Content-Type: a
 
 ### 감사 로그
 
-`audit.read` 권한이 있으면 담당자 지정, 요청, 결정, 설정 변경을 누가 언제 했는지 봅니다. 설정 값 자체는 기록하지 않습니다.
+`audit.read` 권한이 있으면 담당자 지정, 요청, 결정, 설정 변경을 누가 언제 했는지 볼 수 있습니다. 설정 값 자체는 기록하지 않습니다.
 
 ## 보안 참고
 
 - Authorization Code + PKCE, `state`, `nonce`를 사용합니다. ID 토큰은 IdP의 키로 서명을 검증하고 issuer, audience, 만료를 확인합니다.
 - 세션은 256비트 난수 쿠키입니다(`HttpOnly`, `SameSite=Lax`, HTTPS면 `Secure`). DB에는 SHA-256 해시만 저장합니다.
 - 모든 폼에 세션별 CSRF 토큰이 들어갑니다.
-- 로그아웃하면 Patchline 세션이 끝납니다. IdP 세션은 대부분의 SSO 애플리케이션처럼 유지됩니다.
+- 로그아웃하면 Patchline 세션이 끝납니다. IdP 세션은 대부분의 SSO 애플리케이션과 마찬가지로 그대로 유지됩니다.

@@ -32,7 +32,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/readyz` | Readiness (database) |
 | `POST` | `/webhooks/dependency-track` | Dependency-Track outbound webhook (`?token=` or `Authorization: Bearer`) |
 | `POST` | `/webhooks/gitea` | Gitea / Forgejo / GitHub `pull_request` webhook (HMAC signature, or the token) |
-| `POST` | `/ingest/sbom` | CycloneDX (JSON or XML) or SPDX (JSON) SBOM upload for built-in detection ([guide](integrations/native-detection.md)). Authenticated with the webhook token |
+| `POST` | `/ingest/sbom` | CycloneDX (JSON or XML) or SPDX (JSON) SBOM upload for built-in detection ([guide](integrations/native-detection.md)). Authenticated with the webhook token or an API token with `sbom.upload` |
 | `GET` | `/api/v1/findings` | Findings with owners and assignee. Filters: `q` (vulnerability id or alias, component, title), `service`, `environment`, `branch` (of the latest SBOM that reports it: `main`, `v1.4.0`), `repository`, `severity` (effective), `state`, `assignee`, `open=1`, `limit` |
 | `GET` | `/api/v1/findings/{id}/events` | A finding's timeline |
 | `GET` | `/api/v1/findings/{id}/pull-requests` | Pull requests linked to a finding |
@@ -42,7 +42,7 @@ Every page has a footer with links to the integrations guide, this documentation
 | `GET` | `/api/v1/vex` | CycloneDX 1.5 VEX of a project version (`project`, `version`, `download=1` for a file) |
 | `PUT` | `/api/v1/findings/{id}/assignee` | Set or clear the assignee (`findings.assign`) |
 | `GET`, `POST` | `/api/v1/findings/{id}/requests` | A finding's exception requests; request one (`exceptions.request`) |
-| `POST` | `/api/v1/requests/{id}/cancel` | Withdraw one's own pending request |
+| `POST` | `/api/v1/requests/{id}/cancel` | Withdraw your own pending request |
 | `GET` | `/api/v1/openapi.yaml` | OpenAPI 3.1 description of the API, with every field |
 | `GET` | `/login` | Sign-in page (local admin, single sign-on) |
 | `POST` | `/auth/local`, `/account/password` | Local admin sign-in and password change |
@@ -94,9 +94,9 @@ Every page has a footer with links to the integrations guide, this documentation
 
 ### Patchline's own vulnerabilities
 
-On every start Patchline describes its own binary — the Go modules it was built from and the Go standard library — as an SBOM and matches it like an upload. Advisories against it become findings of the project `patchline` (environment `default`) and are notified like any other: to `PATCHLINE_SLACK_DEFAULT_CHANNEL`, the webhook or stdout, or to the `slack_channel` of a service in the inventory that lists `patchline` as a project. Advisories published later are picked up when the OSV data changes, and upgrading Patchline resolves the findings the new build fixes. A finding's fixed version is the version of the module the next Patchline release needs.
+On every start, Patchline builds an SBOM of its own binary (the Go modules it was built from and the Go standard library) and matches it like any upload. Vulnerabilities in it become findings of the project `patchline` (environment `default`) and are notified like any other finding: to the `slack_channel` of the inventory service that lists `patchline` as a project, otherwise to `PATCHLINE_SLACK_DEFAULT_CHANNEL`, the webhook or stdout. Advisories published later are picked up when the OSV data changes, and upgrading Patchline resolves the findings that the new build fixes. A finding's fixed version is the module version a Patchline release needs to include.
 
-It needs `Go` in `PATCHLINE_OSV_ECOSYSTEMS` (the default). Set `PATCHLINE_SELF_SCAN=false` to turn it off.
+This needs `Go` in `PATCHLINE_OSV_ECOSYSTEMS`, which is the default. Set `PATCHLINE_SELF_SCAN=false` to turn it off.
 
 ### Dependency-Track (optional)
 
