@@ -76,7 +76,7 @@ Create a confidential client with the redirect URI. Then add a *Group Membership
 | Provider | Groups claim | Note |
 |---|---|---|
 | Okta | `groups` | Add a *groups* claim to the ID token (filter, for example, *starts with* `patchline-`) |
-| Microsoft Entra ID | `groups` or `roles` | Group claims are object ids; app roles (`roles`) are easier to read in a policy |
+| Microsoft Entra ID | `groups` or `roles` | Group claims are object ids; app roles (`roles`) are easier to read in a policy. Its email is not verified, so `users:` entries by email do not apply |
 | Google | — | No groups in the token; use `users:` entries by email |
 
 ## 2. Configure Patchline
@@ -110,6 +110,7 @@ users:                                 # by email or subject
 ```
 
 - Permissions add up: `default`, then every matching group, then the person's own entry.
+- An email counts only when the ID token says it is verified (`email_verified: true`); otherwise anyone could type in someone else's address. Without it, use the subject or groups. Microsoft Entra ID does not send `email_verified`: give its users permissions through `roles` or groups.
 - Unknown permissions or fields stop Patchline at startup, so typos do not silently grant or drop access.
 - Groups are re-read from the session on every request and the policy at startup. A policy change applies after a restart, without signing in again. A group change in the identity provider applies at the next sign-in.
 - Without a policy file, everyone who signs in can read and nothing else.

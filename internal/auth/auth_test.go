@@ -161,7 +161,7 @@ func readJSON(t *testing.T, resp *http.Response) map[string]any {
 }
 
 func TestSignInFlow(t *testing.T) {
-	idp := newIdP(t, map[string]any{"email": "alice@example.com", "name": "Alice",
+	idp := newIdP(t, map[string]any{"email": "alice@example.com", "email_verified": true, "name": "Alice",
 		"groups": []string{"sec-team"}, "realm_access": map[string]any{"roles": []string{"developers"}}})
 	policy, err := ParsePolicy([]byte(`
 default: [findings.read]
@@ -242,7 +242,7 @@ groups:
 }
 
 func TestSignInWithoutAccess(t *testing.T) {
-	idp := newIdP(t, map[string]any{"email": "eve@example.com", "groups": []string{"contractors"}})
+	idp := newIdP(t, map[string]any{"email": "eve@example.com", "email_verified": "true", "groups": []string{"contractors"}})
 	srv, client := app(t, idp, Policy{Groups: map[string][]Permission{"staff": {FindingsRead}}})
 	resp, err := client.Get(srv.URL + "/")
 	if err != nil {
@@ -252,6 +252,36 @@ func TestSignInWithoutAccess(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(body), "eve@example.com") {
 		t.Fatalf("got %d %s", resp.StatusCode, body)
+	}
+}
+
+// An email the provider has not verified must not pick up the permissions
+// the policy gives that address: anyone could have typed it in.
+func TestSignInIgnoresUnverifiedEmail(t *testing.T) {
+	policy, err := ParsePolicy([]byte(`
+default: [findings.read]
+users:
+  admin@example.com: ["*"]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, claims := range map[string]map[string]any{
+		"unverified": {"email": "admin@example.com", "email_verified": false},
+		"no claim":   {"email": "admin@example.com"},
+		"string":     {"email": "admin@example.com", "email_verified": "false"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, client := app(t, newIdP(t, claims), policy)
+			resp, err := client.Get(srv.URL + "/findings")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := readJSON(t, resp)
+			if got["email"] != "" || !reflect.DeepEqual(got["perms"], []any{"findings.read"}) {
+				t.Fatalf("unverified email kept or granted: %v", got)
+			}
+		})
 	}
 }
 

@@ -76,7 +76,7 @@ Redirect URI를 넣은 Confidential 클라이언트를 만듭니다. 그다음 *
 | IdP | 그룹 클레임 | 참고 |
 |---|---|---|
 | Okta | `groups` | ID 토큰에 *groups* 클레임 추가(예: *starts with* `patchline-` 필터) |
-| Microsoft Entra ID | `groups` 또는 `roles` | 그룹 클레임은 객체 ID라서, 앱 역할(`roles`)이 정책에 쓰기 편합니다 |
+| Microsoft Entra ID | `groups` 또는 `roles` | 그룹 클레임은 객체 ID라서, 앱 역할(`roles`)이 정책에 쓰기 편합니다. 이메일이 검증되지 않으므로 `users:`의 이메일 항목은 적용되지 않습니다 |
 | Google | — | 토큰에 그룹이 없으므로 `users:`에 이메일로 지정합니다 |
 
 ## 2. Patchline 설정
@@ -110,6 +110,7 @@ users:                                 # 이메일 또는 subject
 ```
 
 - 권한은 합쳐집니다: `default` + 해당하는 모든 그룹 + 본인 항목.
+- 이메일은 ID 토큰이 검증됐다고 할 때(`email_verified: true`)만 씁니다. 그렇지 않으면 누구나 다른 사람의 주소를 입력해 그 권한을 얻을 수 있습니다. 검증되지 않으면 subject나 그룹으로 지정하세요. Microsoft Entra ID는 `email_verified`를 보내지 않으므로 `roles`나 그룹으로 권한을 주세요.
 - 모르는 권한이나 항목이 있으면 시작하지 않습니다. 오타로 권한이 잘못 부여되거나 빠지지 않습니다.
 - 그룹은 요청마다 세션에서 읽고, 정책은 시작할 때 읽습니다. 정책을 바꾸면 재시작 후 적용되고 다시 로그인할 필요는 없습니다. IdP에서 그룹을 바꾸면 다음 로그인부터 적용됩니다.
 - 정책 파일이 없으면 로그인한 사람은 조회만 할 수 있습니다.

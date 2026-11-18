@@ -391,6 +391,14 @@ func (a *Authenticator) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email, _ := claims["email"].(string)
+	if email != "" && !emailVerified(claims) {
+		// The access policy grants permissions by email, so an address the
+		// provider has not verified (one a user may have typed in) would
+		// let them take someone else's. It is dropped; subject and groups
+		// still apply.
+		a.logger.Warn("oidc email not verified: ignored for permissions and display", "subject", idt.Subject, "email", email)
+		email = ""
+	}
 	name, _ := claims["name"].(string)
 	if name == "" {
 		name, _ = claims["preferred_username"].(string)
@@ -424,6 +432,18 @@ func (a *Authenticator) logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: cookieSession, Value: "", Path: "/", HttpOnly: true, Secure: a.secure,
 		SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	http.Redirect(w, r, "/signed-out", http.StatusSeeOther)
+}
+
+// emailVerified reports whether the ID token says its email is verified.
+// Some providers send the claim as a string ("true").
+func emailVerified(claims map[string]any) bool {
+	switch v := claims["email_verified"].(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true")
+	}
+	return false
 }
 
 // groupsFrom reads groups from the named claims. A claim may be a list of
