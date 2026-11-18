@@ -6,7 +6,7 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 
 ## 웹 UI
 
-`http://localhost:8080/`(데모는 `:18080`)으로 접속합니다. 모든 화면과 API에 로그인이 필요합니다. 처음 실행하면 `admin` / `admin`으로 로그인해 새 비밀번호를 정하세요. OIDC를 설정하면 SSO로 로그인하고, 그룹에 따라 할 수 있는 일이 정해집니다. [로그인과 권한](access-control.ko.md)을 참고하세요.
+`http://localhost:8080/`(데모는 `:18080`)으로 접속합니다. 모든 화면과 API에 로그인이 필요합니다. 처음 실행하면 `admin`과 로그에 출력된 일회용 비밀번호로 로그인해 새 비밀번호를 정하세요. OIDC를 설정하면 SSO로 로그인하고, 그룹에 따라 할 수 있는 일이 정해집니다. [로그인과 권한](access-control.ko.md)을 참고하세요.
 
 헤더에서 언어(English / 한국어)와 테마(시스템 / 라이트 / 다크)를 바꿀 수 있습니다. 선택은 쿠키에 저장되고, 저장된 값이 없으면 브라우저 언어를 따릅니다.
 
@@ -80,7 +80,8 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | `PATCHLINE_TRIVY_SCOPE` | `os` | `all`이면 언어 패키지도 Trivy로 보냄(OSV 결과와 합쳐짐) |
 | `PATCHLINE_SELF_SCAN` | `true` | Patchline 자체 빌드(Go 모듈, Go 표준 라이브러리)의 취약점 점검. [Patchline 자체 취약점](#patchline-자체-취약점) 참고. `false`면 끔 |
 | `PATCHLINE_PUBLIC_URL` | — | 사용자가 접속하는 Patchline 주소. OIDC를 쓰면 필수(Redirect URI `/auth/callback`). `https://`면 세션 쿠키에 Secure가 붙음 |
-| `PATCHLINE_LOCAL_ADMIN` | `true` | 내장 `admin` 계정(`admin` / `admin`으로 시작, 비밀번호 변경 강제). `false`로 하려면 OIDC 필요 |
+| `PATCHLINE_LOCAL_ADMIN` | `true` | 내장 `admin` 계정(로그에 출력되는 일회용 비밀번호로 시작, 비밀번호 변경 강제). `false`로 하려면 OIDC 필요 |
+| `PATCHLINE_ADMIN_PASSWORD` | — | 계정을 만들거나 재설정할 때 쓸 일회용 비밀번호. 비우면 무작위로 생성 |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | 세션 없는 요청도 조회 허용. 인증 프록시 뒤에서만 사용 |
 | `PATCHLINE_TRUSTED_PROXIES` | — | Patchline 앞의 리버스 프록시(주소 또는 CIDR, 쉼표로 구분). 이 프록시가 보낸 `X-Forwarded-For`로만 로그인 시도의 클라이언트를 구분하고, 다른 곳에서 온 값은 무시합니다 |
 | `PATCHLINE_OIDC_ISSUER` | — | OIDC Issuer URL. 비우면 로컬 관리자만 사용 |

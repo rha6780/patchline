@@ -23,19 +23,20 @@ Webhooks (`/webhooks/*`) and health checks never need a session; they authentica
 
 ## Local admin
 
-On first start Patchline creates the account `admin` with the password `admin`, and logs a warning until it is changed.
+On first start Patchline creates the account `admin` with a random one-time password and prints it once in the log (`local admin: sign in as admin with this one-time password … password=…`). Set `PATCHLINE_ADMIN_PASSWORD` to choose it instead.
 
-1. Open Patchline and sign in as `admin` / `admin`.
-2. Choose a new password: at least 12 characters, not `admin`. Until then every page leads to the password form and the API answers `403`.
+1. Find the password: `docker compose logs patchline | grep one-time` in the self-hosted setup.
+2. Open Patchline and sign in as `admin` with it.
+3. Choose a new password: at least 12 characters, not `admin`. Until then every page leads to the password form and the API answers `403`.
 
 | | |
 |---|---|
 | Lockout | 5 failed sign-ins from one address within 15 minutes block **that address** (an IPv6 /64) for 15 minutes; the account itself is never locked, so someone guessing cannot keep the admin out. Behind a reverse proxy, set `PATCHLINE_TRUSTED_PROXIES`, or every client shares the proxy's address. A few password checks run at once; the rest are asked to retry. The counts live in memory and a restart clears them |
 | Password change | Ends the admin's other sessions |
-| Lost password | `patchline reset-admin-password` (with the same `PATCHLINE_DB_PATH`) sets it back to `admin`, to be changed at the next sign-in, and ends its sessions. In the self-hosted setup: `docker compose run --rm patchline reset-admin-password` |
+| Lost password | `patchline reset-admin-password` (with the same `PATCHLINE_DB_PATH`) prints a new one-time password (or sets `PATCHLINE_ADMIN_PASSWORD`), to be changed at the next sign-in, and ends its sessions. In the self-hosted setup: `docker compose run --rm patchline reset-admin-password` |
 | Turn it off | `PATCHLINE_LOCAL_ADMIN=false` once single sign-on works; its sessions end |
 
-Change the default password **before** exposing Patchline beyond localhost: until then, anyone who can reach the sign-in page can take the account.
+Sign in and choose the password **before** exposing Patchline beyond localhost: whoever has the one-time password can take the account. An install from an older version that still has `admin` / `admin` gets a one-time password at the next start.
 
 `PATCHLINE_ALLOW_ANONYMOUS=true` lets requests without a session read (UI and API), for deployments where an authenticating proxy already guards Patchline. Changes still need a sign-in.
 

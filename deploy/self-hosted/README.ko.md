@@ -43,7 +43,7 @@ docker compose ps           # patchline이 "healthy"여야 함
 curl -s http://127.0.0.1:8080/readyz
 ```
 
-`http://localhost:8080`에 접속해 `admin` / `admin`으로 로그인하고 새 비밀번호를 정하세요. 비밀번호를 잊었다면 `docker compose run --rm patchline reset-admin-password`로 되돌립니다.
+`http://localhost:8080`에 접속해 `admin`과 로그의 일회용 비밀번호(`docker compose logs patchline | grep one-time`)로 로그인한 뒤 새 비밀번호를 정하세요. 비밀번호를 잊었다면 `docker compose run --rm patchline reset-admin-password`가 새 일회용 비밀번호를 출력합니다.
 
 처음 실행할 때 Patchline은 OSV 데이터(npm만 약 220MB)를, Trivy는 DB를 내려받습니다. 그전에 올린 SBOM은 대조만 하고 해결 판정은 하지 않습니다. Trivy 없이 쓰려면 `.env`에 `PATCHLINE_TRIVY_URL=`(빈 값)을 넣고 Patchline만 띄우세요(`docker compose up -d patchline`).
 
@@ -57,7 +57,7 @@ docker compose --profile dependency-track up -d --build
 
 | | URL |
 |---|---|
-| Patchline | http://localhost:8080 (첫 로그인 `admin` / `admin`, 바로 변경) |
+| Patchline | http://localhost:8080 (첫 로그인은 `admin`과 로그의 일회용 비밀번호) |
 | Dependency-Track UI | http://localhost:8082 (첫 로그인 `admin` / `admin`, 바로 변경하세요) |
 | Dependency-Track API | http://localhost:8081 |
 

@@ -23,19 +23,20 @@ Webhook(`/webhooks/*`)과 헬스체크에는 로그인이 필요 없습니다. �
 
 ## 로컬 관리자
 
-처음 실행하면 Patchline이 `admin` 계정을 비밀번호 `admin`으로 만들고, 바꿀 때까지 경고 로그를 남깁니다.
+처음 실행하면 Patchline이 `admin` 계정을 무작위 일회용 비밀번호로 만들고, 그 비밀번호를 로그에 한 번 출력합니다(`local admin: sign in as admin with this one-time password … password=…`). 직접 정하려면 `PATCHLINE_ADMIN_PASSWORD`를 설정하세요.
 
-1. Patchline에 접속해 `admin` / `admin`으로 로그인합니다.
-2. 새 비밀번호를 정합니다(12자 이상, `admin` 불가). 바꾸기 전까지는 모든 화면이 비밀번호 변경 화면으로 이동하고, API는 `403`을 반환합니다.
+1. 비밀번호를 확인합니다. 직접 설치용 compose에서는 `docker compose logs patchline | grep one-time`.
+2. Patchline에 접속해 `admin`과 그 비밀번호로 로그인합니다.
+3. 새 비밀번호를 정합니다(12자 이상, `admin` 불가). 바꾸기 전까지는 모든 화면이 비밀번호 변경 화면으로 이동하고, API는 `403`을 반환합니다.
 
 | | |
 |---|---|
 | 잠금 | 한 주소(IPv6는 /64)에서 15분 안에 5회 실패하면 **그 주소**를 15분 동안 막습니다. 계정 자체는 잠그지 않으므로 비밀번호를 추측하는 사람이 관리자를 막을 수 없습니다. 리버스 프록시 뒤라면 `PATCHLINE_TRUSTED_PROXIES`를 설정하세요. 설정하지 않으면 모든 사용자가 프록시 주소 하나를 공유합니다. 비밀번호 확인은 동시에 몇 개만 실행하고 나머지는 다시 시도하게 합니다. 실패 횟수는 메모리에만 있어 재시작하면 초기화됩니다 |
 | 비밀번호 변경 | 관리자의 다른 세션이 종료됨 |
-| 비밀번호 분실 | `patchline reset-admin-password`(같은 `PATCHLINE_DB_PATH`로 실행)를 실행하면 `admin`으로 돌아가고(다음 로그인 때 변경 필요) 세션이 종료됩니다. 직접 설치용 compose에서는 `docker compose run --rm patchline reset-admin-password` |
+| 비밀번호 분실 | `patchline reset-admin-password`(같은 `PATCHLINE_DB_PATH`로 실행)를 실행하면 새 일회용 비밀번호를 출력하고(`PATCHLINE_ADMIN_PASSWORD`가 있으면 그 값으로 설정, 다음 로그인 때 변경 필요) 세션을 종료합니다. 직접 설치용 compose에서는 `docker compose run --rm patchline reset-admin-password` |
 | 끄기 | SSO가 동작하면 `PATCHLINE_LOCAL_ADMIN=false`. 기존 세션도 종료됨 |
 
-localhost 밖으로 공개하기 **전에** 기본 비밀번호를 바꾸세요. 바꾸기 전에는 로그인 화면에 접속할 수 있는 누구나 이 계정을 가져갈 수 있습니다.
+localhost 밖으로 공개하기 **전에** 로그인해 비밀번호를 정하세요. 그 전에는 일회용 비밀번호를 아는 사람이면 누구나 이 계정을 가져갈 수 있습니다. 이전 버전으로 설치해 아직 `admin` / `admin`인 계정은 다음 시작 때 일회용 비밀번호로 바뀝니다.
 
 `PATCHLINE_ALLOW_ANONYMOUS=true`로 두면 세션 없는 요청도 조회(UI, API)할 수 있습니다. 인증 프록시가 이미 앞을 막고 있는 경우에만 쓰세요. 변경 작업에는 여전히 로그인이 필요합니다.
 

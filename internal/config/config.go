@@ -101,8 +101,12 @@ type Config struct {
 	// (PATCHLINE_ACCESS_POLICY_PATH). Empty lets everyone who signs in read.
 	AccessPolicyPath string
 	// LocalAdmin enables the built-in admin account (PATCHLINE_LOCAL_ADMIN,
-	// default true). It starts as admin/admin and must change the password.
+	// default true). It starts with a one-time password, printed to the log
+	// unless AdminPassword sets it, that must be changed at first sign-in.
 	LocalAdmin bool
+	// AdminPassword is the admin's one-time password when the account is
+	// created or reset (PATCHLINE_ADMIN_PASSWORD). Empty generates one.
+	AdminPassword string
 	// AllowAnonymous lets requests without a session read
 	// (PATCHLINE_ALLOW_ANONYMOUS), for use behind an authenticating proxy.
 	AllowAnonymous bool
@@ -282,6 +286,7 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	cfg.OIDCClientID, _ = lookup("PATCHLINE_OIDC_CLIENT_ID")
 	cfg.OIDCClientSecret, _ = lookup("PATCHLINE_OIDC_CLIENT_SECRET")
 	cfg.AccessPolicyPath, _ = lookup("PATCHLINE_ACCESS_POLICY_PATH")
+	cfg.AdminPassword, _ = lookup("PATCHLINE_ADMIN_PASSWORD")
 	if v, ok := lookup("PATCHLINE_OIDC_SCOPES"); ok && v != "" {
 		cfg.OIDCScopes = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
 	}

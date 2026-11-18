@@ -6,7 +6,7 @@ Patchline is configured with environment variables. Services, owners and channel
 
 ## Web UI
 
-Open `http://localhost:8080/` (`:18080` in the demo). Every page and API call needs a sign-in. On first start, sign in as `admin` / `admin` and choose a new password. With OIDC, people sign in with single sign-on and their groups decide what they can do; see [Sign-in and permissions](access-control.md).
+Open `http://localhost:8080/` (`:18080` in the demo). Every page and API call needs a sign-in. On first start, sign in as `admin` with the one-time password from the log and choose a new password. With OIDC, people sign in with single sign-on and their groups decide what they can do; see [Sign-in and permissions](access-control.md).
 
 The header switches between English and Korean and between system, light and dark themes. The choice is kept in a cookie; without one, the language follows the browser.
 
@@ -80,7 +80,8 @@ Every page has a footer with links to the integrations guide, this documentation
 | `PATCHLINE_TRIVY_SCOPE` | `os` | `all` also sends language packages (merged with the OSV matches) |
 | `PATCHLINE_SELF_SCAN` | `true` | Check Patchline's own build (its Go modules and Go standard library) for vulnerabilities; see [Patchline's own vulnerabilities](#patchlines-own-vulnerabilities). `false` turns it off |
 | `PATCHLINE_PUBLIC_URL` | — | Where users reach Patchline; required with OIDC (redirect URI `/auth/callback`). `https://` makes the session cookie Secure |
-| `PATCHLINE_LOCAL_ADMIN` | `true` | Built-in `admin` account (starts as `admin` / `admin`, password change forced). `false` needs OIDC |
+| `PATCHLINE_LOCAL_ADMIN` | `true` | Built-in `admin` account (starts with a one-time password printed in the log, password change forced). `false` needs OIDC |
+| `PATCHLINE_ADMIN_PASSWORD` | — | The admin's one-time password when the account is created or reset, instead of a random one |
 | `PATCHLINE_ALLOW_ANONYMOUS` | `false` | Let requests without a session read; only behind an authenticating proxy |
 | `PATCHLINE_TRUSTED_PROXIES` | — | Reverse proxies in front of Patchline (addresses or CIDRs, comma-separated). Their `X-Forwarded-For` tells sign-in attempts from different clients apart; it is ignored from anyone else |
 | `PATCHLINE_OIDC_ISSUER` | — | OIDC issuer URL. Unset = local admin only |

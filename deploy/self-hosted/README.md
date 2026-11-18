@@ -43,7 +43,7 @@ docker compose ps           # patchline should be "healthy"
 curl -s http://127.0.0.1:8080/readyz
 ```
 
-Open `http://localhost:8080`, sign in as `admin` / `admin` and choose a new password. If you lose it, `docker compose run --rm patchline reset-admin-password` sets it back.
+Open `http://localhost:8080` and sign in as `admin` with the one-time password from the log (`docker compose logs patchline | grep one-time`), then choose a new password. If you lose it, `docker compose run --rm patchline reset-admin-password` prints a new one-time password.
 
 On first start Patchline downloads the OSV data (npm alone is about 220 MB) and Trivy its database; uploads before that are matched but resolve nothing. To run without Trivy, set `PATCHLINE_TRIVY_URL=` (empty) in `.env` and start only Patchline (`docker compose up -d patchline`).
 
@@ -57,7 +57,7 @@ docker compose --profile dependency-track up -d --build
 
 | | URL |
 |---|---|
-| Patchline | http://localhost:8080 (first sign-in `admin` / `admin`; change it) |
+| Patchline | http://localhost:8080 (first sign-in `admin` with the one-time password from the log) |
 | Dependency-Track UI | http://localhost:8082 (first login `admin` / `admin`; change it) |
 | Dependency-Track API | http://localhost:8081 |
 

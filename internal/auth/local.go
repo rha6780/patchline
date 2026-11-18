@@ -13,11 +13,14 @@ import (
 	"github.com/rha6780/patchline/internal/store"
 )
 
-// The built-in admin account. It starts with the password "admin", which
-// must be changed at the first sign-in.
+// The built-in admin account. It starts with a one-time password (random,
+// or PATCHLINE_ADMIN_PASSWORD) that must be changed at the first sign-in.
 const (
-	AdminUser       = "admin"
-	DefaultPassword = "admin"
+	AdminUser = "admin"
+	// LegacyPassword is the fixed password the admin used to start with.
+	// It is never accepted as a new password, and an account still on it
+	// is given a random one at startup.
+	LegacyPassword = "admin"
 
 	localPrefix = "local:"
 
@@ -53,7 +56,7 @@ func CheckNewPassword(password, confirm, current string) string {
 		return "password_short"
 	case len(password) > 72: // bcrypt ignores the rest
 		return "password_long"
-	case strings.EqualFold(password, DefaultPassword), strings.EqualFold(password, AdminUser):
+	case strings.EqualFold(password, LegacyPassword), strings.EqualFold(password, AdminUser):
 		return "password_default"
 	case password == current:
 		return "password_same"

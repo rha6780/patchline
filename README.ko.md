@@ -59,7 +59,7 @@ docker build -t patchline .
 docker run -p 8080:8080 -v patchline-data:/data patchline
 ```
 
-`admin` / `admin`으로 로그인해 새 비밀번호를 정하세요. 다른 사람은 SSO로 로그인하게 연결합니다([로그인과 권한](docs/access-control.ko.md)).
+처음 실행하면 Patchline이 `admin` 계정의 일회용 비밀번호를 로그에 출력합니다(`docker compose logs patchline | grep one-time`). 이 비밀번호로 로그인해 새 비밀번호를 정한 뒤, 다른 사람은 SSO로 로그인하도록 연결하세요([로그인과 권한](docs/access-control.ko.md)).
 
 그다음 인벤토리를 만들고 도구를 연결합니다.
 

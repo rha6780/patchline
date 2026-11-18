@@ -251,8 +251,8 @@ func run() error {
 	return err
 }
 
-// newAuthenticator sets up sign-in: the local admin (created as
-// admin/admin on first start) and, when configured, OIDC.
+// newAuthenticator sets up sign-in: the local admin (created with a
+// one-time password on first start) and, when configured, OIDC.
 // notifiers returns one notifier per configured sink: Slack and the
 // webhook, or the console when neither is set.
 func notifiers(cfg config.Config, st *store.Store, inv *inventory.Inventory, sources *source.Registry, logger *slog.Logger) notify.Group {
@@ -319,21 +319,22 @@ func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, l
 			Scopes: cfg.OIDCScopes, GroupsClaims: cfg.OIDCGroupsClaims}
 	}
 	if cfg.LocalAdmin {
-		hash, err := auth.HashPassword(auth.DefaultPassword)
+		b, err := auth.EnsureAdmin(ctx, st, cfg.AdminPassword)
 		if err != nil {
 			return nil, err
 		}
-		created, err := st.EnsureLocalAccount(ctx, auth.AdminUser, hash)
-		if err != nil {
-			return nil, err
+		switch {
+		case b.Password == "":
+		case b.Generated:
+			// Shown once: only its hash is kept. It works for one sign-in,
+			// which must choose a new password.
+			logger.Warn("local admin: sign in as admin with this one-time password and choose a new one (not shown again; lost: reset-admin-password)",
+				"password", b.Password, "replaced_admin_admin", b.Rotated)
+		default:
+			logger.Warn("local admin: sign in as admin with PATCHLINE_ADMIN_PASSWORD and choose a new one", "replaced_admin_admin", b.Rotated)
 		}
-		acct, err := st.GetLocalAccount(ctx, auth.AdminUser)
-		if err != nil {
-			return nil, err
-		}
-		if created || acct.MustChange {
-			logger.Warn("local admin still has the default password: sign in as admin / admin and change it before exposing Patchline",
-				"created", created)
+		if acct, err := st.GetLocalAccount(ctx, auth.AdminUser); err == nil && acct.MustChange && b.Password == "" {
+			logger.Warn("local admin has not chosen a password yet: sign in with the one-time password before exposing Patchline (lost: reset-admin-password)")
 		}
 	}
 	a, err := auth.New(ctx, opts, policy, st, logger)
@@ -355,7 +356,7 @@ func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, l
 	return a, nil
 }
 
-// resetAdminPassword sets the local admin back to admin/admin (to be
+// resetAdminPassword gives the local admin a new one-time password (to be
 // changed at the next sign-in) and ends its sessions. It is the way back in
 // when the password is lost: it needs access to the database.
 func resetAdminPassword(cfg config.Config) error {
@@ -368,14 +369,22 @@ func resetAdminPassword(cfg config.Config) error {
 	if _, err := store.Migrate(ctx, db); err != nil {
 		return err
 	}
-	hash, err := auth.HashPassword(auth.DefaultPassword)
+	password := cfg.AdminPassword
+	if password == "" {
+		password = auth.GeneratePassword()
+	}
+	hash, err := auth.HashPassword(password)
 	if err != nil {
 		return err
 	}
 	if err := store.New(db).SetLocalPassword(ctx, auth.AdminUser, hash, true, store.Actor{Subject: "cli", Name: "reset-admin-password"}, ""); err != nil {
 		return err
 	}
-	fmt.Println("The local admin password is now \"admin\". Sign in as admin and choose a new one.")
+	if cfg.AdminPassword != "" {
+		fmt.Println("The local admin password is now PATCHLINE_ADMIN_PASSWORD. Sign in as admin and choose a new one.")
+		return nil
+	}
+	fmt.Printf("The local admin's one-time password is %s\nSign in as admin with it and choose a new one.\n", password)
 	return nil
 }
 

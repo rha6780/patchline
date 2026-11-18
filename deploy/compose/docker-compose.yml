@@ -22,8 +22,10 @@ services:
     environment:
       PATCHLINE_LOG_LEVEL: debug
       # Demo only: read without signing in, so the curl steps in README.md work.
-      # Sign in as admin / admin to change things.
+      # Sign in as admin / admin to change things (a fixed demo password;
+      # a real install gets a random one-time password).
       PATCHLINE_ALLOW_ANONYMOUS: "true"
+      PATCHLINE_ADMIN_PASSWORD: admin
       PATCHLINE_INVENTORY_PATH: /etc/patchline/inventory
       PATCHLINE_POLICY_PATH: /etc/patchline/policy/policy.yaml
       PATCHLINE_WEBHOOK_TOKEN: ${PATCHLINE_WEBHOOK_TOKEN:-change-me}

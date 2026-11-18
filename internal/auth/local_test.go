@@ -22,7 +22,7 @@ import (
 func localApp(t *testing.T, opts Options) (*httptest.Server, *store.Store) {
 	t.Helper()
 	st := newStore(t)
-	hash, err := HashPassword(DefaultPassword)
+	hash, err := HashPassword(LegacyPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestLocalAdminFirstSignIn(t *testing.T) {
 	}
 
 	// admin/admin works once, and only to change the password.
-	if _, loc := b.login(DefaultPassword); loc != "/account/password" {
+	if _, loc := b.login(LegacyPassword); loc != "/account/password" {
 		t.Fatalf("default password: %s", loc)
 	}
 	if code, loc, _ := b.do(http.MethodGet, "/findings", nil); code != http.StatusSeeOther || loc != "/account/password" {
@@ -141,7 +141,7 @@ func TestLocalAdminFirstSignIn(t *testing.T) {
 	}
 	// admin/admin no longer works; the new password does.
 	other := newBrowser(t, srv.URL)
-	if _, loc := other.login(DefaultPassword); !strings.Contains(loc, "error=login_invalid") {
+	if _, loc := other.login(LegacyPassword); !strings.Contains(loc, "error=login_invalid") {
 		t.Fatalf("old password: %s", loc)
 	}
 	if _, loc := other.login("a-long-new-password"); loc != "/findings" {
@@ -166,14 +166,14 @@ func TestLocalAdminLockout(t *testing.T) {
 	if !strings.Contains(loc, "error=login_locked") {
 		t.Fatalf("after %d failures: %s", maxFailures, loc)
 	}
-	if loc = from(attacker, "203.0.113.7", DefaultPassword); !strings.Contains(loc, "error=login_locked") {
+	if loc = from(attacker, "203.0.113.7", LegacyPassword); !strings.Contains(loc, "error=login_locked") {
 		t.Fatalf("right password from the blocked client: %s", loc)
 	}
 	// A forged hop left of the proxy's does not get the attacker out.
-	if loc = from(attacker, "198.51.100.1, 203.0.113.7", DefaultPassword); !strings.Contains(loc, "error=login_locked") {
+	if loc = from(attacker, "198.51.100.1, 203.0.113.7", LegacyPassword); !strings.Contains(loc, "error=login_locked") {
 		t.Fatalf("forged X-Forwarded-For: %s", loc)
 	}
-	if loc = from(admin, "192.0.2.10", DefaultPassword); loc != "/account/password" {
+	if loc = from(admin, "192.0.2.10", LegacyPassword); loc != "/account/password" {
 		t.Fatalf("the admin from elsewhere: %s", loc)
 	}
 }
@@ -196,7 +196,7 @@ func TestLocalAdminLockoutIgnoresForwardedFor(t *testing.T) {
 func TestLocalAdminCrossSite(t *testing.T) {
 	srv, _ := localApp(t, Options{LocalAdmin: true})
 	b := newBrowser(t, srv.URL)
-	code, _, _ := b.do(http.MethodPost, "/auth/local", url.Values{"username": {AdminUser}, "password": {DefaultPassword}},
+	code, _, _ := b.do(http.MethodPost, "/auth/local", url.Values{"username": {AdminUser}, "password": {LegacyPassword}},
 		"Origin", "https://evil.example")
 	if code != http.StatusForbidden {
 		t.Fatalf("cross-site login: %d", code)
@@ -216,14 +216,14 @@ func TestPasswordResetEndsSessions(t *testing.T) {
 		t.Fatalf("signed in: %d", code)
 	}
 	// reset-admin-password: back to admin/admin, existing sessions end.
-	reset, _ := HashPassword(DefaultPassword)
+	reset, _ := HashPassword(LegacyPassword)
 	if err := st.SetLocalPassword(ctx, AdminUser, reset, true, store.Actor{Subject: "cli"}, ""); err != nil {
 		t.Fatal(err)
 	}
 	if code, loc, _ := b.do(http.MethodGet, "/findings", nil); code != http.StatusSeeOther || !strings.HasPrefix(loc, "/login") {
 		t.Fatalf("after reset: %d %s", code, loc)
 	}
-	if _, loc := b.login(DefaultPassword); loc != "/account/password" {
+	if _, loc := b.login(LegacyPassword); loc != "/account/password" {
 		t.Fatalf("login after reset: %s", loc)
 	}
 }
@@ -248,7 +248,7 @@ func TestLocalAdminDisabled(t *testing.T) {
 	// Turning the local admin off ends its sessions and the login form.
 	srv, st := localApp(t, Options{LocalAdmin: true})
 	b := newBrowser(t, srv.URL)
-	b.login(DefaultPassword)
+	b.login(LegacyPassword)
 	a, _ := New(context.Background(), Options{AllowAnonymous: true}, DefaultPolicy(), st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -259,7 +259,7 @@ func TestLocalAdminDisabled(t *testing.T) {
 	if _, _, got := b.do(http.MethodGet, "/findings", nil); got["local"] == true {
 		t.Fatal("local session still valid with the local admin off")
 	}
-	b.login(DefaultPassword) // not routed any more: no session is created
+	b.login(LegacyPassword) // not routed any more: no session is created
 	if _, _, got := b.do(http.MethodGet, "/findings", nil); got["local"] == true {
 		t.Fatal("local login worked with the admin off")
 	}
