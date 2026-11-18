@@ -80,6 +80,36 @@
 {{end}}
 {{end}}
 
+{{with .Runtime}}
+<h2 id="runtime">{{t $L "ui.runtime"}}</h2>
+<p class="lead">{{t $L "ui.runtime_lead"}}</p>
+<h3>{{t $L "ui.runtime.sinks"}}</h3>
+<div class="scroll">
+<table class="compact">
+  <thead><tr><th>{{t $L "ui.col.sink"}}</th><th>{{t $L "ui.runtime.target"}}</th><th>{{t $L "ui.runtime.min_severity"}}</th><th>{{t $L "ui.col.service"}}</th><th>{{t $L "ui.runtime.environments"}}</th></tr></thead>
+  <tbody>
+  {{range .Sinks}}
+  <tr>
+    <td>{{t $L (print "ui.sink." .Name)}}</td>
+    <td>{{if .NeedsChannel}}{{t $L "ui.runtime.default_channel"}}: {{if .DefaultChannel}}<code>{{.DefaultChannel}}</code>{{else}}<span class="tag warn">{{t $L "ui.notify.no_channel"}}</span>{{end}}<div class="meta">{{t $L "ui.runtime.service_channel"}}</div>{{else if .Target}}<code>{{.Target}}</code>{{if .Signs}} {{if .Signed}}<span class="tag">{{t $L "ui.runtime.signed"}}</span>{{else}}<span class="tag warn">{{t $L "ui.runtime.unsigned"}}</span>{{end}}{{end}}{{else}}stdout{{end}}</td>
+    <td><span class="sev {{sevClass .Route.MinSeverity}}">{{.Route.MinSeverity}}</span></td>
+    <td>{{if .Route.Services}}{{join .Route.Services ", "}}{{else}}<span class="muted">{{t $L "ui.runtime.all"}}</span>{{end}}</td>
+    <td>{{if .Route.Environments}}{{join .Route.Environments ", "}}{{else}}<span class="muted">{{t $L "ui.runtime.all"}}</span>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+<h3>{{t $L "ui.runtime.detection"}}</h3>
+<dl class="kv">
+  <div><dt>{{t $L "ui.runtime.lang"}}</dt><dd><code>{{.NotifyLang}}</code> <span class="meta">PATCHLINE_NOTIFY_LANG</span></dd></div>
+  <div><dt>{{t $L "ui.runtime.self_scan"}}</dt><dd>{{if .SelfScan}}{{t $L "ui.runtime.on"}}{{else}}<span class="tag warn">{{t $L "ui.runtime.off"}}</span>{{end}} <span class="meta">PATCHLINE_SELF_SCAN</span></dd></div>
+  <div><dt>OSV</dt><dd>{{if .OSVEcosystems}}{{join .OSVEcosystems ", "}} · {{t $L "ui.runtime.every" (dur .OSVRefresh)}}{{else}}<span class="tag warn">{{t $L "ui.runtime.off"}}</span>{{end}} <span class="meta">PATCHLINE_OSV_ECOSYSTEMS, PATCHLINE_OSV_REFRESH</span></dd></div>
+  <div><dt>Trivy</dt><dd>{{if .Trivy}}<code>{{.Trivy}}</code>{{else}}<span class="muted">{{t $L "ui.runtime.off"}}</span>{{end}} <span class="meta">PATCHLINE_TRIVY_URL</span></dd></div>
+  <div><dt>CISA KEV</dt><dd>{{if .KEV}}{{t $L "ui.runtime.on"}}{{else}}<span class="muted">{{t $L "ui.runtime.off"}}</span>{{end}} <span class="meta">PATCHLINE_KEV_URL</span></dd></div>
+  <div><dt>Dependency-Track</dt><dd>{{if .DependencyTrack}}{{t $L "ui.runtime.on"}}{{else}}<span class="muted">{{t $L "ui.runtime.off"}}</span>{{end}} <span class="meta">PATCHLINE_DT_URL</span></dd></div>
+</dl>
+{{end}}
 {{if .Audit}}
 <h2>{{t $L "ui.audit"}}</h2>
 <div class="scroll">

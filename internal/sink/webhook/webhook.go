@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -126,6 +127,19 @@ func New(url, secret string, httpClient *http.Client) *Sink {
 
 func (s *Sink) Name() string       { return "webhook" }
 func (s *Sink) NeedsChannel() bool { return false }
+
+// Target is the scheme and host of the URL: its path or query may hold a
+// secret (as Slack incoming webhook URLs do), so they are left out.
+func (s *Sink) Target() string {
+	u, err := url.Parse(s.url)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// Signed reports whether requests carry an HMAC signature.
+func (s *Sink) Signed() bool { return len(s.secret) > 0 }
 
 // Post sends "finding.opened".
 func (s *Sink) Post(ctx context.Context, _ string, m notify.Message) (notify.Ref, error) {

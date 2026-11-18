@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -197,7 +198,8 @@ func run() error {
 	ui, err := web.New(web.Options{Store: st, Inventory: inv, DTUIURL: cfg.DependencyTrackUIURL, Version: version, Logger: logger,
 		App: svc, Sources: sources, PublicURL: cfg.PublicURL,
 		EnvWebhookToken: cfg.WebhookToken, EnvGiteaSecret: cfg.GiteaWebhookSecret,
-		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local(), Impact: st})
+		Actions: st, AuthEnabled: true, SSO: authn.SSO(), LocalAdmin: authn.Local(), Impact: st,
+		Notifications: notifier, Runtime: runtimeSummary(cfg, notifier)})
 	if err != nil {
 		return err
 	}
@@ -287,6 +289,22 @@ func notifiers(cfg config.Config, st *store.Store, inv *inventory.Inventory, sou
 		g = append(g, newNotifier(console.New(os.Stdout), config.NotifyRoute{}))
 	}
 	return g
+}
+
+// runtimeSummary is what the settings page shows of the notification and
+// detection settings. URLs are reduced to scheme and host.
+func runtimeSummary(cfg config.Config, g notify.Group) *web.Runtime {
+	return &web.Runtime{Sinks: g.Sinks(), NotifyLang: cfg.NotifyLang, SelfScan: cfg.SelfScan,
+		OSVEcosystems: cfg.OSVEcosystems, OSVRefresh: cfg.OSVRefresh, Trivy: hostOf(cfg.TrivyURL),
+		KEV: cfg.KEVURL != "", DependencyTrack: cfg.DependencyTrackEnabled()}
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 func newAuthenticator(ctx context.Context, cfg config.Config, st *store.Store, logger *slog.Logger) (*auth.Authenticator, error) {

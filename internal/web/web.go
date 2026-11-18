@@ -33,6 +33,7 @@ import (
 	"github.com/rha6780/patchline/internal/impact"
 	"github.com/rha6780/patchline/internal/inventory"
 	"github.com/rha6780/patchline/internal/notify"
+	"github.com/rha6780/patchline/internal/selfscan"
 	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/store"
 )
@@ -97,6 +98,37 @@ type Options struct {
 	// them.
 	EnvWebhookToken string
 	EnvGiteaSecret  string
+
+	// Notifications says where each project's findings are sent, for the
+	// integrations page. Nil leaves the column out.
+	Notifications Notifications
+	// Runtime summarizes the settings that come from the environment, for
+	// the settings page. Nil leaves the section out.
+	Runtime *Runtime
+}
+
+// Notifications explains the notification routing (notify.Group).
+type Notifications interface {
+	Destinations(service string, registered bool, environment string) []notify.Destination
+}
+
+// Runtime is a read-only summary of the notification and detection
+// settings, which are set with PATCHLINE_* variables. It holds no secrets.
+type Runtime struct {
+	Sinks []notify.SinkSummary
+	// NotifyLang is the language of messages.
+	NotifyLang string
+	// SelfScan reports whether Patchline checks its own build.
+	SelfScan bool
+	// OSVEcosystems are matched against uploads; empty means OSV is off.
+	OSVEcosystems []string
+	OSVRefresh    time.Duration
+	// Trivy is the Trivy server's scheme and host; empty when it is off.
+	Trivy string
+	// KEV reports whether the CISA KEV catalog is used.
+	KEV bool
+	// DependencyTrack reports whether findings are read from Dependency-Track.
+	DependencyTrack bool
 }
 
 // UI is the web handler.
@@ -719,8 +751,19 @@ func (u *UI) integrations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	seen := map[string]bool{}
+	rows := make([]projectRow, 0, len(projects))
 	for _, p := range projects {
 		seen[p.Name] = true
+		row := projectRow{SourceProjectStatus: p,
+			Self: p.Source == finding.SourcePatchline && p.Name == selfscan.Project && p.Version == ""}
+		if u.o.Notifications != nil {
+			env := p.Version
+			if env == "" {
+				env = finding.DefaultEnvironment
+			}
+			row.Notify = u.o.Notifications.Destinations(p.Service, p.Registered, env)
+		}
+		rows = append(rows, row)
 	}
 	var missing []missingProject
 	for _, s := range u.o.Inventory.Services() {
@@ -733,9 +776,18 @@ func (u *UI) integrations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	u.render(w, r, "integrations", "ui.integrations", map[string]any{
-		"Projects": projects, "Missing": missing, "Inbox": inbox, "Notifications": notes,
+		"Projects": rows, "Notify": u.o.Notifications != nil, "Missing": missing, "Inbox": inbox, "Notifications": notes,
 		"Stale": staleBefore(u.o.Now()),
 	})
+}
+
+// projectRow is a project on the integrations page with where its
+// findings are sent.
+type projectRow struct {
+	store.SourceProjectStatus
+	Notify []notify.Destination
+	// Self marks Patchline's own build.
+	Self bool
 }
 
 // docsURL is where the Markdown documentation is published.
@@ -766,6 +818,18 @@ func (u *UI) guide(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- helpers ----------------------------------------------------------
+
+// shortDuration writes 30m, 6h or 1h30m instead of 30m0s, 6h0m0s, 1h30m0s.
+func shortDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
 
 var severities = []string{finding.SeverityCritical, finding.SeverityHigh, finding.SeverityMedium, finding.SeverityLow, finding.SeverityInfo, finding.SeverityUnassigned}
 
@@ -812,6 +876,7 @@ func (u *UI) funcs() template.FuncMap {
 			}
 			return dateOnly(*s)
 		},
+		"dur":       shortDuration,
 		"staleBOM":  func(lastBOM, before string) bool { return lastBOM == "" || lastBOM < before },
 		"dtProject": func(uuid string) string { return u.dtProjectLink(uuid) },
 		"rich":      rich,

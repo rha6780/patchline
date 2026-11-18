@@ -17,6 +17,7 @@ import (
 	"github.com/rha6780/patchline/internal/auth"
 	"github.com/rha6780/patchline/internal/finding"
 	"github.com/rha6780/patchline/internal/inventory"
+	"github.com/rha6780/patchline/internal/notify"
 	"github.com/rha6780/patchline/internal/source"
 	"github.com/rha6780/patchline/internal/source/dependencytrack"
 	"github.com/rha6780/patchline/internal/store"
@@ -439,5 +440,48 @@ func TestServiceFilters(t *testing.T) {
 	if code, body := get(t, u, "/findings?q=CVE-2021-44228&branch=main"); code != 200 || !strings.Contains(body, `value="CVE-2021-44228"`) ||
 		!strings.Contains(body, "Branch") {
 		t.Errorf("findings search: %d", code)
+	}
+}
+
+type destinations []notify.Destination
+
+func (d destinations) Destinations(string, bool, string) []notify.Destination { return d }
+
+func TestNotificationRouting(t *testing.T) {
+	_, st := setup(t)
+	ctx := context.Background()
+	if err := st.TouchSourceProject(ctx, store.SourceProject{Source: finding.SourcePatchline, ProjectID: "patchline@",
+		Name: "patchline", Service: "patchline"}, true); err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{NotifyLang: "en", SelfScan: true, OSVEcosystems: []string{"Go"}, OSVRefresh: 30 * time.Minute, KEV: true,
+		Sinks: []notify.SinkSummary{
+			{Name: "slack", NeedsChannel: true, DefaultChannel: "#security", Route: notify.Route{MinSeverity: "medium"}},
+			{Name: "webhook", Target: "https://hooks.example", Signs: true, Route: notify.Route{MinSeverity: "high", Environments: []string{"prod"}}},
+		}}
+	u, err := New(Options{Store: st, Actions: st, AuthEnabled: true, Runtime: rt, Notifications: destinations{
+		{Sink: "slack", Channel: "#security", MinSeverity: "medium"},
+		{Sink: "webhook", MinSeverity: "high", Skipped: notify.SkipRoute},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body := get(t, as(person("dev"), u), "/integrations")
+	for _, want := range []string{"Notifications</th>", "Patchline itself", "<code>#security</code>", "≥ medium", "Webhook · filtered out"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("integrations page lacks %q", want)
+		}
+	}
+
+	// The summary is for people who manage settings.
+	if _, body := get(t, as(person("auditor", auth.AuditRead), u), "/settings"); strings.Contains(body, "Notifications and detection") {
+		t.Error("settings summary shown without settings.webhooks")
+	}
+	_, body = get(t, as(person("admin", auth.SettingsWebhooks), u), "/settings")
+	for _, want := range []string{"Notifications and detection", "default channel: <code>#security</code>", "<code>https://hooks.example</code>",
+		"unsigned", "prod", "every 30m", "PATCHLINE_SELF_SCAN"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("settings page lacks %q", want)
+		}
 	}
 }

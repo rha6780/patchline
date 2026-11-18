@@ -16,10 +16,10 @@ The header switches between English and Korean and between system, light and dar
 | Findings with quick filters (open, overdue, due within 7 days, open critical, awaiting verification) and filters by service, environment, state and severity | `/findings` |
 | Finding: facts, fix pull requests, evidence timeline | `/findings/{id}` |
 | Service: owners, repositories, projects with their branch and commit, findings per environment (highlights fixed-on-`main`-but-open-in-`prod`), filtered by search, severity, environment, branch and repository | `/services/{name}` |
-| Integrations: projects (SBOM uploads, and Dependency-Track when connected) with last SBOM and commit, inventory projects without one, processing and notification failures | `/integrations` |
+| Integrations: projects (SBOM uploads, and Dependency-Track when connected) with last SBOM and commit and where their new findings are notified (Slack channel, webhook, stdout, or why a sink sends nothing), inventory projects without one, processing and notification failures | `/integrations` |
 | Components: where packages are used, and what a vulnerability affects | `/components`, `/vulnerabilities/{id}` |
 | Approvals: pending risk acceptances and due date extensions, recent decisions (`exceptions.request` or `exceptions.approve`) | `/approvals` |
-| Settings: webhook token and secret rotation (`settings.webhooks`), audit log (`audit.read`) | `/settings` |
+| Settings: webhook token and secret rotation and a read-only summary of the notification and detection settings (`settings.webhooks`), API tokens (`tokens.manage`), audit log (`audit.read`) | `/settings` |
 | Integrations guide: where findings come from (built-in detection; Dependency-Track optional; OpenCVE planned), how to connect the tools, and links to the guides in `docs/integrations` | `/docs/integrations` |
 
 Every page has a footer with links to the integrations guide, this documentation, the upstream tools and the project.

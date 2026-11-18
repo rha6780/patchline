@@ -16,10 +16,10 @@ Patchline은 환경변수로 설정합니다. 서비스, 담당자, 채널은 [�
 | Finding 목록: 빠른 필터(열림, 기한 초과, 7일 내 기한, 열린 critical, 검증대기)와 서비스·환경·상태·심각도 필터 | `/findings` |
 | Finding 상세: 정보, 수정 PR, 근거 타임라인 | `/findings/{id}` |
 | 서비스: 담당자, 저장소, 프로젝트별 브랜치·커밋, 환경별 Finding(`main`에서는 해결됐지만 `prod`에 남은 건 강조). 검색, 심각도, 환경, 브랜치, 저장소로 필터 | `/services/{name}` |
-| 연동 상태: 프로젝트(SBOM 업로드, 연결했다면 Dependency-Track)별 마지막 SBOM·커밋, SBOM이 없는 인벤토리 프로젝트, 처리·알림 실패 | `/integrations` |
+| 연동 상태: 프로젝트(SBOM 업로드, 연결했다면 Dependency-Track)별 마지막 SBOM·커밋과 새 Finding 알림이 가는 곳(Slack 채널, 웹훅, stdout, 또는 보내지 않는 이유), SBOM이 없는 인벤토리 프로젝트, 처리·알림 실패 | `/integrations` |
 | 구성요소: 패키지 사용처 검색, 취약점 영향 분석 | `/components`, `/vulnerabilities/{id}` |
 | 승인: 대기 중인 위험 수용·기한 연장 요청, 최근 결정(`exceptions.request` 또는 `exceptions.approve`) | `/approvals` |
-| 설정: Webhook 토큰·Secret 교체(`settings.webhooks`), 감사 로그(`audit.read`) | `/settings` |
+| 설정: Webhook 토큰·Secret 교체와 알림·탐지 설정 요약(읽기 전용, `settings.webhooks`), API 토큰(`tokens.manage`), 감사 로그(`audit.read`) | `/settings` |
 | 연동 가이드: Finding의 출처(자체 탐지, 선택 사항인 Dependency-Track, 예정인 OpenCVE), 도구 연결 방법, `docs/integrations` 가이드 링크 | `/docs/integrations` |
 
 모든 화면 하단의 푸터에 연동 가이드, 이 문서, 연동 도구, 프로젝트 링크가 있습니다.

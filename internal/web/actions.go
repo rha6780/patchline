@@ -220,6 +220,9 @@ func (u *UI) settings(w http.ResponseWriter, r *http.Request) {
 		}
 		data["Audit"] = entries
 	}
+	if p.Can(auth.SettingsWebhooks) && u.o.Runtime != nil {
+		data["Runtime"] = u.o.Runtime
+	}
 	data["PublicURL"] = strings.TrimRight(u.o.PublicURL, "/")
 	u.render(w, r, "settings", "ui.settings", data)
 }
